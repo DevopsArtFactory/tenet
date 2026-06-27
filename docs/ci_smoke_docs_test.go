@@ -544,6 +544,29 @@ func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditC
 	}
 }
 
+func TestAccountDetailReadRouteCopyDocsContract(t *testing.T) {
+	overviewDashboardText := readTextFile(t, "features/overview-dashboard.md")
+	quickLinksSection := markdownSection(t, overviewDashboardText, "## Quick links")
+	for _, fragment := range []string{
+		"account detail page: `Account JSON` / `Copy account read route`, `Group JSON` / `Copy group read route`, `_self` `Open application`",
+		"`Applications overview` plus `Account JSON` / `Copy account read route` recovery handoffs",
+	} {
+		if !strings.Contains(quickLinksSection, fragment) {
+			t.Fatalf("expected overview dashboard quick links docs to include account copy-route contract %q", fragment)
+		}
+	}
+
+	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
+	for _, fragment := range []string{
+		"`Applications overview` plus `Account JSON` / `Copy account read route` recovery handoffs",
+		"operators can open or copy the exact scoped read route",
+	} {
+		if !strings.Contains(operatorContractsText, fragment) {
+			t.Fatalf("expected operator contracts docs to include account empty-state copy-route contract %q", fragment)
+		}
+	}
+}
+
 func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{

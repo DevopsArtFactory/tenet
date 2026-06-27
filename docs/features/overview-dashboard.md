@@ -415,7 +415,7 @@ Current plan/apply workspace behavior:
 
 The dashboard now exposes the following navigation affordances across the current drill-down flow:
 - landing page: `_self` `Open audit log`, expanded-row deployment-scoped `_self` `Drift view` and `Audit log`, `_self` `Open account`, `_self` `Open application`
-- account detail page: `Account JSON`, `Group JSON`, `_self` `Open application`; when the selected account has no deployment groups, the page keeps the account summary visible and renders an explicit empty state with `_self` `Applications overview` plus `Account JSON` recovery links instead of leaving a blank body
+- account detail page: `Account JSON` / `Copy account read route`, `Group JSON` / `Copy group read route`, `_self` `Open application`; when the selected account has no deployment groups, the page keeps the account summary visible and renders an explicit empty state with `_self` `Applications overview` plus `Account JSON` / `Copy account read route` recovery handoffs instead of leaving a blank body
 - application detail page: `_self` `Drift view`, `_self` `Plan/apply`, `_self` `Audit log`, `Open resource`, `Open live inspection`, `Open recent logs`
 - application detail `Audit log` now routes to `/?page=audit&deployment={deploymentName}` so the selected deployment stays visible in the bookmarkable audit slice
 - audit page: unscoped `_self` `Back to applications`, deployment-scoped `_self` `Back to application`, `_self` `Open application drill-down`, `_self` `Open drift view`, `_self` `Open plan/apply workspace`
