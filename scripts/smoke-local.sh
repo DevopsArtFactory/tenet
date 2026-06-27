@@ -1790,6 +1790,11 @@ assert 'Live inspection is unavailable for this resource.' in ui, ui
 assert 'Refresh live inspection' in ui, ui
 assert 'Copy live inspection route' in ui, ui
 assert "createCopyReadRouteButton(readRoute, 'Copy live inspection route')" in ui, ui
+assert "const markResourcePanelStatusNode = (node) => {" in ui, ui
+assert "markResourcePanelStatusNode(stateNode);" in ui, ui
+assert "node.setAttribute('role', 'status');" in ui, ui
+assert "node.setAttribute('aria-live', 'polite');" in ui, ui
+assert "node.setAttribute('aria-atomic', 'true');" in ui, ui
 assert 'Inspection path ·' in ui, ui
 assert 'Provider lookup context' in ui, ui
 assert 'createResourceInspectionLookupContextNodes(result?.lookupContext)' in ui, ui

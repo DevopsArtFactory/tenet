@@ -4956,9 +4956,17 @@
         if (className) stateNode.classList.add(className);
         container.replaceChildren(stateNode);
       };
+      const markResourcePanelStatusNode = (node) => {
+        if (!node) return node;
+        node.setAttribute('role', 'status');
+        node.setAttribute('aria-live', 'polite');
+        node.setAttribute('aria-atomic', 'true');
+        return node;
+      };
       const renderResourceLogsState = (container, text, className = '', beforeNodes = [], afterNodes = [], actions = []) => {
         const heading = createDetailSectionHeader('Recent logs', actions);
         const stateNode = createElement('div', 'detail-state', text);
+        markResourcePanelStatusNode(stateNode);
         if (className) stateNode.classList.add(className);
         container.replaceChildren(heading, ...beforeNodes, stateNode, ...afterNodes);
         decorateResourceDetailSection(container);
@@ -5448,6 +5456,7 @@
       const renderResourceInspectionState = (container, text, className = '', beforeNodes = [], afterNodes = [], actions = []) => {
         const heading = createDetailSectionHeader('Live inspection', actions);
         const stateNode = createElement('div', 'detail-state', text);
+        markResourcePanelStatusNode(stateNode);
         if (className) stateNode.classList.add(className);
         container.replaceChildren(heading, ...beforeNodes, stateNode, ...afterNodes);
         decorateResourceDetailSection(container);
