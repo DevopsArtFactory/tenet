@@ -374,6 +374,11 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 		"`Deployment controller`",
 		"`Deployment circuit breaker`",
 		"`Deployment alarms`",
+		"ECS service deployment rollout-state rows are exposed as",
+		"`ecsService.deployments[]` from `DescribeServices`",
+		"`status`, `rolloutState`, `rolloutStateReason`, `desiredCount`,",
+		"`runningCount`, `pendingCount`, `taskDefinition`, `createdAt`, `updatedAt`,",
+		"`primary`, and `active`.",
 	} {
 		if !strings.Contains(featureText, fragment) {
 			t.Fatalf("expected resource inspection guide to include %q", fragment)
@@ -401,6 +406,9 @@ func TestResourceEvidenceDocsLockOperatorFieldFamilies(t *testing.T) {
 		"operator-facing ECS service",
 		"`Deployment controller`",
 		"`Deployment circuit breaker`",
+		"`Service deployments`",
+		"`ecsService.deployments[]` from `DescribeServices`",
+		"`primary`, and `active`.",
 		"operator-facing ECS task/container labels include",
 		"`Container {name} image digest`, `Container {name} runtime ID`,",
 		"`Container {name} exit`, `Container {name} awslogs`, and",
