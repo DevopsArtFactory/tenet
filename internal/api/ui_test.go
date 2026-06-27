@@ -3058,9 +3058,13 @@ func TestSmokeScriptsLockControllerRefreshFilesystemNoopReleaseGuard(t *testing.
 		text := string(body)
 		for _, fragment := range []string{
 			"/v1/controller/refresh",
+			"/v1/controller/refresh/status",
 			"CONTROLLER_REFRESH_STATUS",
+			"CONTROLLER_REFRESH_READ_STATUS",
 			"assert controller_refresh[",
+			"assert controller_refresh_read[",
 			"filesystem_noop",
+			"latestReceipt",
 			"controllerRefresh",
 			"desiredStateSource",
 			"const operatorContextControllerRefreshWriteRoute = () => 'POST /v1/controller/refresh';",

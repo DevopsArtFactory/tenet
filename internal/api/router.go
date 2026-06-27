@@ -793,6 +793,33 @@ type controllerRefreshResponse struct {
 	ControllerRefresh  *githubwebhook.ControllerRefresh  `json:"controllerRefresh,omitempty"`
 }
 
+type controllerRefreshStatusResponse struct {
+	Status        string                          `json:"status"`
+	Available     bool                            `json:"available"`
+	HasHistory    bool                            `json:"hasHistory"`
+	ReadOnly      bool                            `json:"readOnly"`
+	Route         string                          `json:"route"`
+	Reason        string                          `json:"reason"`
+	LatestReceipt *controllerRefreshStatusReceipt `json:"latestReceipt"`
+	ResultScope   auditlog.ResultScope            `json:"resultScope"`
+}
+
+type controllerRefreshStatusReceipt struct {
+	EntryID        string             `json:"entryId"`
+	RequestedAt    string             `json:"requestedAt"`
+	Status         string             `json:"status"`
+	Result         string             `json:"result"`
+	Route          string             `json:"route"`
+	RequestID      string             `json:"requestId,omitempty"`
+	DeliveryID     string             `json:"deliveryId,omitempty"`
+	Backend        string             `json:"backend,omitempty"`
+	Channel        string             `json:"channel,omitempty"`
+	NoopReason     string             `json:"noopReason,omitempty"`
+	FailureReason  string             `json:"failureReason,omitempty"`
+	HTTPStatusCode int                `json:"httpStatusCode,omitempty"`
+	Actor          requestactor.Actor `json:"actor"`
+}
+
 type operatorContextTrustedHeaders struct {
 	Enabled                             bool `json:"enabled"`
 	AuthenticatedIdentityRequired       bool `json:"authenticatedIdentityRequired"`
@@ -1118,6 +1145,62 @@ func buildControllerRefreshResponse(ctx context.Context, logger *slog.Logger, op
 	default:
 		return response, http.StatusServiceUnavailable
 	}
+}
+
+func controllerRefreshStatusUnavailableResponse() controllerRefreshStatusResponse {
+	return controllerRefreshStatusResponse{
+		Status:     "unavailable",
+		Available:  false,
+		HasHistory: false,
+		ReadOnly:   true,
+		Route:      "GET /v1/controller/refresh/status",
+		Reason:     "controller refresh receipt status is unavailable because the audit read model is not configured for this API instance",
+		ResultScope: auditlog.BuildResultScope(auditlog.Query{
+			Action: auditlog.ActionControllerRefresh,
+			Limit:  1,
+		}, 0, 0),
+	}
+}
+
+func buildControllerRefreshStatusResponse(result auditlog.Result) controllerRefreshStatusResponse {
+	response := controllerRefreshStatusResponse{
+		Status:      "no_history",
+		Available:   true,
+		HasHistory:  false,
+		ReadOnly:    true,
+		Route:       "GET /v1/controller/refresh/status",
+		Reason:      "No manual controller refresh receipt history is available yet; POST /v1/controller/refresh has not persisted a receipt for this API instance",
+		ResultScope: result.ResultScope,
+	}
+	if len(result.Entries) == 0 {
+		return response
+	}
+
+	entry := result.Entries[0]
+	metadata := entry.Metadata
+	status := strings.TrimSpace(metadata.Status)
+	if status == "" {
+		status = "history_available"
+	}
+	response.Status = status
+	response.HasHistory = true
+	response.Reason = "Latest manual controller refresh receipt is available from the audit read model"
+	response.LatestReceipt = &controllerRefreshStatusReceipt{
+		EntryID:        entry.EntryID,
+		RequestedAt:    entry.Timestamp,
+		Status:         metadata.Status,
+		Result:         metadata.Result,
+		Route:          metadata.Route,
+		RequestID:      metadata.RequestID,
+		DeliveryID:     metadata.DeliveryID,
+		Backend:        metadata.Backend,
+		Channel:        metadata.Channel,
+		NoopReason:     metadata.NoopReason,
+		FailureReason:  metadata.FailureReason,
+		HTTPStatusCode: metadata.HTTPStatusCode,
+		Actor:          entry.Actor,
+	}
+	return response
 }
 
 func recordControllerRefreshAudit(ctx context.Context, logger *slog.Logger, options Options, response controllerRefreshResponse, statusCode int, httpRequestID string, requestedAt time.Time) error {
@@ -2324,6 +2407,30 @@ func NewRouter(options Options) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(statusCode)
 		_ = json.NewEncoder(w).Encode(response)
+	})
+	mux.HandleFunc("/v1/controller/refresh/status", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+			return
+		}
+		if options.AuditLogs == nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(controllerRefreshStatusUnavailableResponse())
+			return
+		}
+		query := auditlog.Query{Action: auditlog.ActionControllerRefresh, Limit: 1}
+		result, err := options.AuditLogs(r.Context(), query)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(controllerRefreshStatusUnavailableResponse())
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(buildControllerRefreshStatusResponse(result))
 	})
 	mux.HandleFunc("/v1/catalog/summary", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {
