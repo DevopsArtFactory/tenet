@@ -160,15 +160,21 @@ func TestSmokeHelpersCleanUpEveryTempPath(t *testing.T) {
 	for _, path := range []string{
 		"../scripts/smoke-local.sh",
 		"../scripts/smoke-docker.sh",
+		"../scripts/ci-smoke-runner-evidence.sh",
 	} {
 		text := readTextFile(t, path)
+		assignments := assignmentRE.FindAllStringSubmatch(text, -1)
+		if len(assignments) == 0 {
+			continue
+		}
+
 		cleanupMatch := cleanupRE.FindStringSubmatch(text)
 		if cleanupMatch == nil {
-			t.Fatalf("expected %s to define a cleanup function", path)
+			t.Fatalf("expected %s to define a cleanup function when it creates mktemp-backed paths", path)
 		}
 		cleanupBody := cleanupMatch[1]
 
-		for _, match := range assignmentRE.FindAllStringSubmatch(text, -1) {
+		for _, match := range assignments {
 			variable := match[1]
 			mktempArgs := strings.TrimSpace(match[2])
 			if mktempUnderPayloadDir(mktempArgs) {
