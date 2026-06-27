@@ -1183,12 +1183,15 @@ func TestBuildRuntimeEventSourceSummaryCountsSourcesDeterministically(t *testing
 		{Source: "controller"},
 		{Source: "github"},
 		{Source: "deployment-controller"},
+		{Source: ""},
+		{Source: "  "},
 	})
 
 	want := []RuntimeEventSourceSummary{
 		{Source: "controller", Count: 1},
 		{Source: "deployment-controller", Count: 1},
 		{Source: "github", Count: 2},
+		{Source: "unknown", Count: 2},
 	}
 	if !reflect.DeepEqual(summary, want) {
 		t.Fatalf("expected deterministic retained-window source summary %+v, got %+v", want, summary)

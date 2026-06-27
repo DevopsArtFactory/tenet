@@ -3444,6 +3444,70 @@ func TestDeploymentOverviewEventsRouteFiltersBySourceBeforeApplyingLimit(t *test
 	}
 }
 
+func TestDeploymentOverviewEventsRouteFiltersBlankSourcesAsUnknown(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			return catalog.DeploymentOverviewEvents{
+				DeploymentName: name,
+				Events: []domain.StatusHistoryEntry{
+					{Timestamp: "2026-05-06T04:00:00Z", Source: "controller", Summary: "controller reconcile"},
+					{Timestamp: "2026-05-06T03:00:00Z", Source: "", Summary: "legacy status import", ManagedDrift: []domain.ManagedDriftItem{{Field: "artifact", Severity: domain.ManagedDriftSeverityLow}}},
+					{Timestamp: "2026-05-06T02:00:00Z", Source: "  ", Summary: "whitespace source import"},
+				},
+				ManagedDriftSummary: catalog.ManagedDriftSummary{Total: 1, Low: 1},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events?source=unknown&limit=1", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode deployment events payload: %v", err)
+	}
+	events, ok := payload["events"].([]any)
+	if !ok || len(events) != 1 {
+		t.Fatalf("expected one source-filtered unknown event, got %#v", payload["events"])
+	}
+	event, ok := events[0].(map[string]any)
+	if !ok || event["summary"] != "legacy status import" || event["source"] != "" {
+		t.Fatalf("expected newest blank-source event to be selected without mutating event payload, got %#v", events[0])
+	}
+	sourceSummary, ok := payload["sourceSummary"].([]any)
+	if !ok || len(sourceSummary) != 2 {
+		t.Fatalf("expected sourceSummary to include controller and unknown buckets, got %#v", payload["sourceSummary"])
+	}
+	wantSources := []map[string]any{
+		{"source": "controller", "count": float64(1)},
+		{"source": "unknown", "count": float64(2)},
+	}
+	for i, want := range wantSources {
+		got, ok := sourceSummary[i].(map[string]any)
+		if !ok {
+			t.Fatalf("expected sourceSummary[%d] object, got %#v", i, sourceSummary[i])
+		}
+		for key, wantValue := range want {
+			if got[key] != wantValue {
+				t.Fatalf("expected sourceSummary[%d][%q]=%#v, got %#v in %#v", i, key, wantValue, got[key], sourceSummary)
+			}
+		}
+	}
+	summary, ok := payload["managedDriftSummary"].(map[string]any)
+	if !ok || summary["total"] != float64(1) || summary["low"] != float64(1) {
+		t.Fatalf("expected managedDriftSummary to describe returned unknown-source events, got %#v", payload["managedDriftSummary"])
+	}
+	scope, ok := payload["resultScope"].(map[string]any)
+	if !ok || scope["sourceFilter"] != "unknown" || scope["totalEventCount"] != float64(2) || scope["returnedEventCount"] != float64(1) || scope["retainedEventCount"] != float64(3) || scope["limited"] != true || scope["truncationStatus"] != "truncated" {
+		t.Fatalf("expected resultScope to describe unknown-source filtered window, got %#v", payload["resultScope"])
+	}
+}
+
 func TestDeploymentOverviewEventsRouteReturnsEmptySourceFilterWindow(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},

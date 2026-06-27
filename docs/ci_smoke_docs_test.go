@@ -231,7 +231,7 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 		"the selector offers `All sources`, `controller`, `deployment-controller`, and `github`",
 		"exact bookmarked custom source values remain visible instead of being discarded",
 		"`retention.limit` may still be non-zero",
-		"`sourceSummary` array of `{source, count}` entries computed from the retained window before optional source filtering and before positive limit truncation",
+		"`sourceSummary` array of `{source, count}` entries computed from the retained window before optional source filtering and before positive limit truncation (blank persisted sources are bucketed as `unknown`, and `?source=unknown` selects those legacy entries)",
 		"`returnedCount` as a compact alias for `returnedEventCount`",
 	} {
 		if !strings.Contains(readmeText, fragment) {
@@ -243,7 +243,8 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 		"`GET /v1/overview/deployments/{deploymentName}/events?source={source}&limit={n}` for exact source-filtered windows, with source filtering applied before limit",
 		"It is a controller-history timeline for operator drill-down and timeline rendering, not the immutable audit log",
 		"Invalid source filters fail before a controller-history read with `400 Bad Request` and `invalid source query`",
-		"`sourceSummary` array of `{source, count}` entries derived from the retained controller-history window before optional source filtering and before positive limit truncation",
+		"`sourceSummary` array of `{source, count}` entries derived from the retained controller-history window before optional source filtering and before positive limit truncation, normalizing blank persisted sources into an explicit `unknown` bucket",
+		"`source=unknown` selects retained legacy events whose persisted source is blank or whitespace",
 		"compact alias `returnedCount`",
 		"compact boolean alias `truncated`",
 		"keeps selected source state in `eventSource`",
@@ -258,7 +259,7 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 
 	for _, fragment := range []string{
 		"Invalid source filters return `400 Bad Request` with `invalid source query`.",
-		"additive `sourceSummary` entries with `source` and `count` computed from the retained runtime window before optional source filtering and before positive limit truncation",
+		"additive `sourceSummary` entries with `source` and `count` computed from the retained runtime window before optional source filtering and before positive limit truncation, including the `unknown` bucket for blank persisted sources",
 		"calls the fixture-empty deployment-events route with `?limit=1` and `?source=controller&limit=1`",
 		"direct-process smoke owns retention metadata, exact `?source=controller&limit=1`, and invalid-source `400` coverage",
 	} {

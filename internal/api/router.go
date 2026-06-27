@@ -235,7 +235,7 @@ func applyDeploymentEventsQuery(result catalog.DeploymentOverviewEvents, limit i
 	if sourceFilter != "" {
 		filtered := make([]domain.StatusHistoryEntry, 0, len(result.Events))
 		for _, event := range result.Events {
-			if event.Source == sourceFilter {
+			if catalog.NormalizeRuntimeEventSource(event.Source) == sourceFilter {
 				filtered = append(filtered, event)
 			}
 		}
