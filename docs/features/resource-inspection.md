@@ -146,6 +146,7 @@ ECS service deployment rollout-state rows are exposed as
 
 Those fields are optional. Fixture-backed, local, no-AWS, and older provider
 payloads omit them rather than emitting empty placeholders.
+Smoke treats `ecsService.deployments[]` as optional, but validates row field types whenever AWS returns deployment rows.
 
 When present, the embedded Live inspection card renders the same evidence with
 the operator-facing labels `Deployment controller`, `Deployment circuit breaker`,

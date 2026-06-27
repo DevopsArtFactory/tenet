@@ -379,6 +379,7 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 		"`status`, `rolloutState`, `rolloutStateReason`, `desiredCount`,",
 		"`runningCount`, `pendingCount`, `taskDefinition`, `createdAt`, `updatedAt`,",
 		"`primary`, and `active`.",
+		"Smoke treats `ecsService.deployments[]` as optional, but validates row field types whenever AWS returns deployment rows.",
 	} {
 		if !strings.Contains(featureText, fragment) {
 			t.Fatalf("expected resource inspection guide to include %q", fragment)
