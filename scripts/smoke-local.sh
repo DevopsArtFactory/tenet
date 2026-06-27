@@ -2285,6 +2285,12 @@ assert "buildPageSectionURL('audit', sectionID, {" in audit_ui, audit_ui
 assert "createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`)" in audit_ui, audit_ui
 assert 'Immutable plan preview and apply-request activity for deployment ${deploymentName} rendered from GET /v1/audit-logs.' in audit_ui, audit_ui
 assert 'Current audit read: ${buildEmbeddedPageReadRoute(currentPageState)}' in audit_ui, audit_ui
+assert 'toolbar-chip' in audit_ui, audit_ui
+assert "chips.setAttribute('aria-label', 'Active audit controls');" in audit_ui, audit_ui
+assert 'Clear deployment filter ${currentPageState.deployment}' in audit_ui, audit_ui
+assert 'Clear action filter ${auditActionLabel(currentPageState.auditAction)}' in audit_ui, audit_ui
+assert 'Clear limit cap latest ${currentPageState.auditLimit}' in audit_ui, audit_ui
+assert 'const clearAuditControl = (control) => {' in audit_ui, audit_ui
 assert 'Source record · ${entry.source.recordRoute}' in audit_ui, audit_ui
 assert 'Source detail · ${entry.source.sourceRoute}' in audit_ui, audit_ui
 assert "createNavLink(entry.source.recordRoute, 'Open source record')" in audit_ui, audit_ui
