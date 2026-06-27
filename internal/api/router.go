@@ -20,6 +20,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
+	"github.com/DevopsArtFactory/tenet/internal/controllerrefreshaudit"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/githubwebhook"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
@@ -1060,7 +1061,7 @@ func buildOperatorContextDesiredStateSource(options Options) operatorContextDesi
 	return diagnostic
 }
 
-func buildControllerRefreshResponse(ctx context.Context, logger *slog.Logger, options Options, requestID string) (controllerRefreshResponse, int) {
+func buildControllerRefreshResponse(ctx context.Context, logger *slog.Logger, options Options, requestID string, requestedAt time.Time) (controllerRefreshResponse, int) {
 	desiredStateSource := buildOperatorContextDesiredStateSource(options)
 	response := controllerRefreshResponse{
 		Status:             desiredStateSource.ControllerRefresh.Status,
@@ -1089,13 +1090,13 @@ func buildControllerRefreshResponse(ctx context.Context, logger *slog.Logger, op
 			correlationID = newRequestID()
 		}
 		publishRequestID := "api-controller-refresh:" + correlationID
-		requestedAt := githubWebhookNow().UTC().Format(time.RFC3339)
+		requestedAtText := requestedAt.UTC().Format(time.RFC3339)
 		request := controllerrefresh.Request{
 			RequestID:   publishRequestID,
 			DeliveryID:  correlationID,
 			Repository:  repository,
 			Ref:         ref,
-			RequestedAt: requestedAt,
+			RequestedAt: requestedAtText,
 		}
 		receipt, err := options.GitHubWebhookRefreshPublisher.Publish(ctx, request)
 		if err != nil {
@@ -1111,12 +1112,67 @@ func buildControllerRefreshResponse(ctx context.Context, logger *slog.Logger, op
 			Backend:     receipt.Backend,
 			Channel:     receipt.Channel,
 			RequestID:   receipt.RequestID,
-			PublishedAt: requestedAt,
+			PublishedAt: requestedAtText,
 		}
 		return response, http.StatusAccepted
 	default:
 		return response, http.StatusServiceUnavailable
 	}
+}
+
+func recordControllerRefreshAudit(ctx context.Context, logger *slog.Logger, options Options, response controllerRefreshResponse, statusCode int, httpRequestID string, requestedAt time.Time) error {
+	if options.RecordControllerRefreshAudit == nil {
+		return nil
+	}
+	record := controllerRefreshAuditRecord(ctx, response, statusCode, httpRequestID, requestedAt)
+	if err := options.RecordControllerRefreshAudit(ctx, record); err != nil {
+		logger.Error("manual controller refresh audit persistence failed", "request_id", record.RequestID, "delivery_id", record.DeliveryID, "status", record.Status, "error", err)
+		return err
+	}
+	return nil
+}
+
+func controllerRefreshAuditRecord(ctx context.Context, response controllerRefreshResponse, statusCode int, httpRequestID string, requestedAt time.Time) controllerrefreshaudit.Record {
+	httpRequestID = strings.TrimSpace(httpRequestID)
+	record := controllerrefreshaudit.Record{
+		ID:             httpRequestID,
+		Route:          "POST /v1/controller/refresh",
+		Status:         response.Status,
+		Result:         controllerRefreshAuditResult(response),
+		RequestedAt:    requestedAt.UTC().Format(time.RFC3339),
+		Actor:          requestactor.FromContext(ctx),
+		RequestID:      httpRequestID,
+		NoopReason:     controllerRefreshNoopReason(response),
+		HTTPStatusCode: statusCode,
+	}
+	if response.ControllerRefresh != nil {
+		if response.ControllerRefresh.RequestID != "" {
+			record.ID = response.ControllerRefresh.RequestID
+			record.RequestID = response.ControllerRefresh.RequestID
+		}
+		record.DeliveryID = httpRequestID
+		record.Backend = response.ControllerRefresh.Backend
+		record.Channel = response.ControllerRefresh.Channel
+		record.NoopReason = ""
+	}
+	if record.ID == "" {
+		record.ID = "manual-controller-refresh"
+	}
+	return record
+}
+
+func controllerRefreshAuditResult(response controllerRefreshResponse) string {
+	if response.Processed {
+		return "published"
+	}
+	return "noop"
+}
+
+func controllerRefreshNoopReason(response controllerRefreshResponse) string {
+	if response.Processed {
+		return ""
+	}
+	return response.Reason
 }
 
 func buildOperatorContextRepositoryPolicy(ctx context.Context, options Options, identity requestactor.AuthenticatedIdentity, groups requestactor.AuthenticatedGroups) operatorContextRepositoryPolicy {
@@ -2102,6 +2158,7 @@ type Options struct {
 	RepositoryPolicy                     func(context.Context, requestactor.AuthenticatedIdentity, requestactor.AuthenticatedGroups) (rbacpolicy.Evaluation, error)
 	GitHubWebhookDesiredStateSource      githubwebhook.DesiredStateSourceConfig
 	GitHubWebhookRefreshPublisher        controllerrefresh.Publisher
+	RecordControllerRefreshAudit         func(context.Context, controllerrefreshaudit.Record) error
 	CatalogSummary                       func(context.Context) (catalog.Summary, error)
 	CatalogDeployments                   func(context.Context) ([]catalog.DeploymentView, error)
 	CatalogEnvironments                  func(context.Context) ([]catalog.EnvironmentView, error)
@@ -2256,7 +2313,14 @@ func NewRouter(options Options) http.Handler {
 		if !requireOperatorRoleForWrite(w, r, options.RequireOperatorRoleForWrite) {
 			return
 		}
-		response, statusCode := buildControllerRefreshResponse(r.Context(), logger, options, RequestIDFromContext(r.Context()))
+		requestedAt := githubWebhookNow()
+		response, statusCode := buildControllerRefreshResponse(r.Context(), logger, options, RequestIDFromContext(r.Context()), requestedAt)
+		if statusCode >= http.StatusOK && statusCode < http.StatusMultipleChoices {
+			if err := recordControllerRefreshAudit(r.Context(), logger, options, response, statusCode, RequestIDFromContext(r.Context()), requestedAt); err != nil {
+				respondInternalError(w)
+				return
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(statusCode)
 		_ = json.NewEncoder(w).Encode(response)

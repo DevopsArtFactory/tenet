@@ -16,19 +16,20 @@ Tenet now exposes a small read-only audit timeline derived from the immutable op
 `/v1/audit-logs` is the preferred v1 route shape for this slice because the rest of the API already favors direct collection nouns such as `/v1/plans`, `/v1/applies`, and `/v1/catalog/...` instead of introducing an extra `/v1/audit/logs` hierarchy.
 
 `limit` is optional and must be a positive integer when present.
-`action` is optional and must be exactly `plan.created`, `apply.requested`, or `apply.transitioned` when present.
+`action` is optional and must be exactly `plan.created`, `apply.requested`, `apply.transitioned`, or `controller.refresh.requested` when present.
 `deployment` is optional and must name exactly one deployment when present.
 The response is always newest-first. When trusted front-door deployment-read authorization is enabled on an unscoped collection request, Tenet applies action filtering first, filters entries through the caller's authorized deployment set, and only then applies `limit`; this preserves `limit={n}` as a window over entries the operator is allowed to see instead of over hidden deployments.
 
-The compose-backed smoke keeps this operator contract grounded by fetching the full `GET /v1/audit-logs` collection, asserting the expected `plan.created`, `apply.requested`, and lifecycle `apply.transitioned` action support is present without depending on a two-entry window, then fetching `GET /v1/audit-logs?action=apply.requested&limit=2` to verify exact-action filtering and rejecting `action=invalid.action` with `400 Bad Request` instead of silently widening the query. When a trusted front-door collection filter legitimately removes every row, Tenet still returns `entries: []` with `resultScope.action`, count, limit, and truncation metadata so operators can distinguish an empty authorized view from a route failure. Under trusted front-door auth, the same read surface documents `401 Unauthorized` plus `unauthenticated: authenticated identity is required for this operator read route` for missing trusted identity and the existing deployment/role-aware `403` cases for authenticated-but-disallowed callers. Only enable that trust when a front door authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*`, `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, `X-Tenet-Authorized-Environments`, and trusted-alias `X-User-*` headers before forwarding trusted values. A directly exposed header-trusting API instance is not a safe deployment shape. `X-Tenet-Actor-*` values still win over `X-User-*` aliases for local actor context. Tenet projects that authenticated identity into the persisted actor fields for immutable plan/apply records and therefore into their projected audit entries.
+The compose-backed smoke keeps this operator contract grounded by fetching the full `GET /v1/audit-logs` collection, asserting the expected `plan.created`, `apply.requested`, lifecycle `apply.transitioned`, and manual `controller.refresh.requested` action support is present without depending on a two-entry window, then fetching exact-action filters such as `GET /v1/audit-logs?action=apply.requested&limit=2` and `GET /v1/audit-logs?action=controller.refresh.requested` while rejecting `action=invalid.action` with `400 Bad Request` instead of silently widening the query. When a trusted front-door collection filter legitimately removes every row, Tenet still returns `entries: []` with `resultScope.action`, count, limit, and truncation metadata so operators can distinguish an empty authorized view from a route failure. Under trusted front-door auth, the same read surface documents `401 Unauthorized` plus `unauthenticated: authenticated identity is required for this operator read route` for missing trusted identity and the existing deployment/role-aware `403` cases for authenticated-but-disallowed callers. Only enable that trust when a front door authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*`, `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, `X-Tenet-Authorized-Environments`, and trusted-alias `X-User-*` headers before forwarding trusted values. A directly exposed header-trusting API instance is not a safe deployment shape. `X-Tenet-Actor-*` values still win over `X-User-*` aliases for local actor context. Tenet projects that authenticated identity into the persisted actor fields for immutable plan/apply/controller-refresh audit records and therefore into their projected audit entries.
 
 ## Source of truth
 
-This route is additive and read-only. It does not invent a new store.
+This route is additive and read-only. It projects only small immutable operator-action stores and does not include controller secrets, Redis connection strings, webhook secrets, or provider tokens.
 
 The timeline is projected from:
 - immutable plan preview records persisted to `TENET_PLAN_STORE_PATH`
 - immutable apply request records persisted to `TENET_APPLY_STORE_PATH`
+- immutable manual controller refresh request records persisted to `TENET_CONTROLLER_REFRESH_AUDIT_STORE_PATH`
 
 When the local repository catalog is available, the projection also enriches entries with `appRef` and `environmentRef` by matching the persisted `deploymentName` against the compiled deployment listing.
 
@@ -92,8 +93,9 @@ The response shape is:
 Important details:
 - `resultScope` is server-authored bounded-read metadata for the exact response: `returnedEntryCount` is the number of rows in `entries`, `returnedCount` is its compact alias, `totalEntryCount` is the number of matching rows after deployment/action/authorization filtering but before the requested `limit`, `limited` is true only when the returned window is capped, legacy `limit` and additive `requestedLimit` echo the positive requested cap when present, `effectiveLimit` is the cap Tenet applied (or `0` for uncapped reads), `truncationStatus` is `truncated` or `not_truncated` for known-complete local reads, `truncated` is the boolean alias for that status, and `deploymentName` / `action` echo the normalized filters that Tenet applied
 - `entryId` is a backend-authored opaque stable row identifier derived from the immutable plan/apply source identity; it is unique across `plan.created`, `apply.requested`, and `apply.transitioned` rows and remains stable across filtering, sorting, and `limit` windows so UI anchors can prefer it over client-derived fallbacks
-- `action` is stable and action-oriented (`plan.created`, `apply.requested`, `apply.transitioned`)
-- the optional query `action` filter only supports those three exact values and rejects anything else with `400 Bad Request`
+- `action` is stable and action-oriented (`plan.created`, `apply.requested`, `apply.transitioned`, `controller.refresh.requested`)
+- `controller.refresh.requested` rows are global, not deployment-scoped; their `metadata` includes safe manual-refresh evidence such as `route`, `status`, `result`, `requestId`, `deliveryId`, `backend`, `channel`, `noopReason`, and `httpStatusCode`, but never secrets, repository tokens, Redis connection strings, or webhook signatures
+- the optional query `action` filter only supports those four exact values and rejects anything else with `400 Bad Request`
 - `timestamp` is copied from the persisted immutable record; for `apply.transitioned` rows it is copied from the persisted apply transition entry
 - `deploymentName`, `appRef`, and `environmentRef` help local operators and a future UI group related rows without reopening every record
 - `planId` / `applyId` link the timeline back to the immutable read models Tenet already exposes
@@ -111,7 +113,7 @@ When request-scoped operator context is available, Tenet persists it additively 
 - `X-Tenet-Actor-Email`
 - compatible aliases `X-User-ID`, `X-User-Name`, and `X-User-Email`
 
-These fields appear unchanged on the immutable `plan` / `apply` records and on their projected `GET /v1/audit-logs` entries. When both header families are present, Tenet prefers the explicit `X-Tenet-Actor-*` values over `X-User-*` aliases. When no authenticated request context was present, Tenet keeps the contract explicit by returning `actor.available=false` plus an unavailable reason instead of inventing an identity.
+These fields appear unchanged on the immutable `plan`, `apply`, and manual controller-refresh audit records and on their projected `GET /v1/audit-logs` entries. When both header families are present, Tenet prefers the explicit `X-Tenet-Actor-*` values over `X-User-*` aliases. When no authenticated request context was present, Tenet keeps the contract explicit by returning `actor.available=false` plus an unavailable reason instead of inventing an identity.
 
 `X-Tenet-Actor-*` values still win over `X-User-*` aliases for local actor context.
 

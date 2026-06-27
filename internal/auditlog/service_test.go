@@ -7,6 +7,7 @@ import (
 
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
+	"github.com/DevopsArtFactory/tenet/internal/controllerrefreshaudit"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
@@ -398,5 +399,59 @@ func TestServiceListProjectsApplyTransitionsForAuditTimeline(t *testing.T) {
 	}
 	if result.ResultScope.Action != string(ActionApplyTransitioned) || result.ResultScope.TotalEntryCount != 1 {
 		t.Fatalf("expected filtered result scope for transition action, got %+v", result.ResultScope)
+	}
+}
+
+func TestServiceListProjectsManualControllerRefreshAuditRows(t *testing.T) {
+	service := Service{
+		ListPlanPreviews:  func() ([]planpreview.Record, error) { return nil, nil },
+		ListApplyRequests: func() ([]applyrequest.Record, error) { return nil, nil },
+		ListControllerRefreshAuditRows: func() ([]controllerrefreshaudit.Record, error) {
+			return []controllerrefreshaudit.Record{{
+				ID:             "api-controller-refresh:manual-refresh-123",
+				Route:          "POST /v1/controller/refresh",
+				Status:         "published",
+				Result:         "published",
+				RequestedAt:    "2026-04-20T10:45:00Z",
+				RequestID:      "api-controller-refresh:manual-refresh-123",
+				DeliveryID:     "manual-refresh-123",
+				Backend:        "redis",
+				Channel:        "tenet:test:controller-refresh",
+				HTTPStatusCode: 202,
+				Actor: requestactor.Actor{
+					Available: true,
+					ID:        "operator-123",
+					Name:      "Release Operator",
+					Email:     "release@example.com",
+				},
+			}}, nil
+		},
+	}
+
+	result, err := service.List(context.Background(), Query{Action: ActionControllerRefresh})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("expected one controller refresh audit entry, got %+v", result.Entries)
+	}
+	entry := result.Entries[0]
+	if entry.Action != string(ActionControllerRefresh) || entry.Timestamp != "2026-04-20T10:45:00Z" {
+		t.Fatalf("unexpected controller refresh audit identity: %+v", entry)
+	}
+	if entry.DeploymentName != "" || entry.AppRef != "" || entry.EnvironmentRef != "" {
+		t.Fatalf("controller refresh audit rows should remain global, got %+v", entry)
+	}
+	if entry.Metadata.Route != "POST /v1/controller/refresh" || entry.Metadata.Status != "published" || entry.Metadata.Result != "published" || entry.Metadata.RequestID != "api-controller-refresh:manual-refresh-123" || entry.Metadata.DeliveryID != "manual-refresh-123" || entry.Metadata.Backend != "redis" || entry.Metadata.Channel != "tenet:test:controller-refresh" || entry.Metadata.HTTPStatusCode != 202 {
+		t.Fatalf("unexpected controller refresh audit metadata: %+v", entry.Metadata)
+	}
+	if entry.Source.Kind != "controllerRefreshRequest" || entry.Source.Store != "controllerRefreshAuditStore" || entry.Source.RecordRoute != "POST /v1/controller/refresh" {
+		t.Fatalf("unexpected controller refresh audit source: %+v", entry.Source)
+	}
+	if !entry.Actor.Available || entry.Actor.ID != "operator-123" {
+		t.Fatalf("expected controller refresh audit actor projection, got %+v", entry.Actor)
+	}
+	if result.ResultScope.Action != string(ActionControllerRefresh) || result.ResultScope.TotalEntryCount != 1 {
+		t.Fatalf("expected controller refresh filtered result scope, got %+v", result.ResultScope)
 	}
 }

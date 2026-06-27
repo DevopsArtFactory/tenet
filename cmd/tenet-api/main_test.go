@@ -17,6 +17,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
+	"github.com/DevopsArtFactory/tenet/internal/controllerrefreshaudit"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/githubcontents"
 	"github.com/DevopsArtFactory/tenet/internal/githubwebhook"
@@ -1066,6 +1067,55 @@ func TestAPIOptionsAuditLogsProjectAuthenticatedIdentityIntoActorWhenExplicitAct
 	}
 	if !applyEntry.Actor.Available || applyEntry.Actor.ID != "front-door-123" || applyEntry.Actor.Name != "Front Door Operator" || applyEntry.Actor.Email != "frontdoor@example.com" {
 		t.Fatalf("expected projected actor from authenticated identity, got %+v", applyEntry.Actor)
+	}
+}
+
+func TestAPIOptionsAuditLogsProjectPersistedControllerRefreshRequests(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	t.Setenv("TENET_PLAN_STORE_PATH", filepath.Join(t.TempDir(), "plan-previews.json"))
+	t.Setenv("TENET_APPLY_STORE_PATH", filepath.Join(t.TempDir(), "apply-requests.json"))
+	t.Setenv("TENET_CONTROLLER_REFRESH_AUDIT_STORE_PATH", filepath.Join(t.TempDir(), "controller-refresh-requests.json"))
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	if options.RecordControllerRefreshAudit == nil || options.AuditLogs == nil {
+		t.Fatalf("expected controller refresh audit dependencies to be wired")
+	}
+
+	ctx := requestactor.WithAuthenticatedIdentityContext(context.Background(), requestactor.AuthenticatedIdentity{
+		Authenticated: true,
+		ID:            "front-door-123",
+		Name:          "Front Door Operator",
+		Email:         "frontdoor@example.com",
+	})
+	if err := options.RecordControllerRefreshAudit(ctx, controllerrefreshaudit.Record{
+		ID:             "api-controller-refresh:manual-refresh-123",
+		Route:          "POST /v1/controller/refresh",
+		Status:         "published",
+		Result:         "published",
+		RequestedAt:    "2026-04-20T10:45:00Z",
+		Actor:          requestactor.FromContext(ctx),
+		RequestID:      "api-controller-refresh:manual-refresh-123",
+		DeliveryID:     "manual-refresh-123",
+		Backend:        controllerrefresh.BackendRedis,
+		Channel:        "tenet:test:controller-refresh",
+		HTTPStatusCode: 202,
+	}); err != nil {
+		t.Fatalf("RecordControllerRefreshAudit returned error: %v", err)
+	}
+
+	result, err := options.AuditLogs(context.Background(), auditlog.Query{Action: auditlog.ActionControllerRefresh})
+	if err != nil {
+		t.Fatalf("AuditLogs returned error: %v", err)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("expected one controller refresh audit entry, got %+v", result.Entries)
+	}
+	entry := result.Entries[0]
+	if entry.Action != string(auditlog.ActionControllerRefresh) || entry.Metadata.Route != "POST /v1/controller/refresh" || entry.Metadata.Result != "published" || entry.Metadata.RequestID != "api-controller-refresh:manual-refresh-123" || entry.Metadata.DeliveryID != "manual-refresh-123" || entry.Metadata.Channel != "tenet:test:controller-refresh" {
+		t.Fatalf("unexpected controller refresh audit entry: %+v", entry)
+	}
+	if !entry.Actor.Available || entry.Actor.ID != "front-door-123" || entry.Actor.Name != "Front Door Operator" || entry.Actor.Email != "frontdoor@example.com" {
+		t.Fatalf("expected projected authenticated identity actor, got %+v", entry.Actor)
 	}
 }
 
