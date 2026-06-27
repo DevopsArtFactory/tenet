@@ -1937,6 +1937,16 @@ assert 'CodeDeploy ECS service bindings' in ui, ui
 assert 'Latest CodeDeploy deployment' in ui, ui
 assert 'CodeDeploy target groups' in ui, ui
 assert 'Service deployments' in ui, ui
+assert 'Deployment ID' in ui, ui
+assert 'Deployment status' in ui, ui
+assert 'Rollout state' in ui, ui
+assert 'Rollout reason' in ui, ui
+assert 'Desired/running/pending' in ui, ui
+assert 'Task definition' in ui, ui
+assert 'Created at' in ui, ui
+assert 'Updated at' in ui, ui
+assert 'Primary deployment' in ui, ui
+assert 'Active deployment' in ui, ui
 assert 'Container instance' in ui, ui
 assert 'EC2 instance' in ui, ui
 assert 'Capacity provider' in ui, ui

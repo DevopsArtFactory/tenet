@@ -2820,6 +2820,36 @@ func TestEmbeddedUIRendersECSServiceDeploymentRolloutRowsSafely(t *testing.T) {
 	}
 }
 
+func TestSmokeScriptsLockECSServiceDeploymentRolloutUILabels(t *testing.T) {
+	labels := []string{
+		"Service deployments",
+		"Deployment ID",
+		"Deployment status",
+		"Rollout state",
+		"Rollout reason",
+		"Desired/running/pending",
+		"Task definition",
+		"Created at",
+		"Updated at",
+		"Primary deployment",
+		"Active deployment",
+	}
+
+	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
+		body, err := os.ReadFile("../../scripts/" + script)
+		if err != nil {
+			t.Fatalf("read %s: %v", script, err)
+		}
+
+		text := string(body)
+		for _, label := range labels {
+			if !strings.Contains(text, label) {
+				t.Fatalf("expected %s to lock ECS service deployment UI label %q", script, label)
+			}
+		}
+	}
+}
+
 func TestEmbeddedUIIncludesRuntimeAndHistoryChangeDetailsRendering(t *testing.T) {
 	body := string(indexHTML)
 
