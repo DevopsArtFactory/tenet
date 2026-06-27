@@ -1278,6 +1278,15 @@
         const refresh = operatorContextDesiredStateSource(context)?.controllerRefresh || null;
         return Boolean(refresh && refresh.available === true && refresh.status === 'available');
       };
+      const operatorContextManualControllerRefreshFields = (result) => {
+        const refresh = result?.controllerRefresh || {};
+        const fields = [];
+        if (refresh.requestId) fields.push(`request ${refresh.requestId}`);
+        if (refresh.deliveryId) fields.push(`delivery ${refresh.deliveryId}`);
+        if (refresh.channel) fields.push(`channel ${refresh.channel}`);
+        if (refresh.requestedAt) fields.push(`requested ${refresh.requestedAt}`);
+        return fields;
+      };
       const operatorContextManualControllerRefreshResultLabel = (result) => {
         const status = String(result?.status || '').trim();
         const reason = String(result?.reason || '').trim();
@@ -1285,15 +1294,33 @@
           return `Controller refresh skipped: ${operatorContextControllerRefreshStatusLabel(status)}.${reason ? ` ${reason}` : ''}`;
         }
         if (result?.processed || result?.controllerRefresh) {
-          const refresh = result.controllerRefresh || {};
-          const fields = [];
-          if (refresh.requestId) fields.push(`Request ${refresh.requestId}`);
-          if (refresh.deliveryId) fields.push(`delivery ${refresh.deliveryId}`);
-          if (refresh.channel) fields.push(`channel ${refresh.channel}`);
+          const fields = operatorContextManualControllerRefreshFields(result);
           return `Controller refresh requested: ${status || 'published'}.${fields.length ? ` ${fields.join('; ')}.` : ''}`;
         }
         const label = operatorContextControllerRefreshStatusLabel(status);
         return `Controller refresh unavailable: ${label}.${reason ? ` ${reason}` : ''}`;
+      };
+      const activeDeploymentForControllerRefreshAudit = () => {
+        const page = String(currentPageState?.page || '');
+        const deployment = String(currentPageState?.deployment || '').trim();
+        return deployment && ['application', 'resource', 'drift', 'plan', 'audit'].includes(page) ? deployment : '';
+      };
+      const controllerRefreshAuditURL = () => buildPageURL('audit', {
+        deployment: activeDeploymentForControllerRefreshAudit(),
+        action: 'controller.refresh.requested',
+      });
+      const controllerRefreshAuditHandoffLabel = () => {
+        const deployment = activeDeploymentForControllerRefreshAudit();
+        return deployment
+          ? `Open deployment refresh audit for ${deployment}`
+          : 'Open controller refresh audit';
+      };
+      const controllerRefreshRequestedAtLabel = (state) => {
+        const requestedAt = state?.requestedAt || state?.result?.controllerRefresh?.requestedAt;
+        if (!requestedAt) return '';
+        const timestamp = requestedAt instanceof Date ? requestedAt : new Date(requestedAt);
+        if (Number.isNaN(timestamp.getTime())) return String(requestedAt);
+        return timestamp.toLocaleString();
       };
       const operatorContextControllerRefreshLabel = (context) => {
         const refresh = operatorContextDesiredStateSource(context)?.controllerRefresh || null;
@@ -1633,6 +1660,7 @@
                 status: result?.status === 'filesystem_noop' ? 'filesystem_noop' : 'success',
                 message,
                 result,
+                requestedAt: new Date(),
               },
             };
             renderOperatorContextBanner();
@@ -1741,6 +1769,11 @@
             }
             statusAnnouncement = manualRefreshState.heading ? `${manualRefreshState.heading}: ${manualRefreshState.message}` : manualRefreshState.message;
             meta.append(createElement('span', isManualRefreshProblem ? 'operator-context-warning' : '', manualRefreshState.message));
+            const requestedAtLabel = controllerRefreshRequestedAtLabel(manualRefreshState);
+            if (manualRefreshState.status === 'success') {
+              meta.append(createElement('span', '', requestedAtLabel ? `Last refresh requested · ${requestedAtLabel}` : 'Last refresh requested'));
+              meta.append(createNavLink(controllerRefreshAuditURL(), controllerRefreshAuditHandoffLabel(), '_self'));
+            }
           }
           const detailsMeta = createElement('div', 'operator-context-meta');
           if (lastCheckedLabel) {
