@@ -873,7 +873,11 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"toolbar.replaceChildren(toolbarActions);",
 		"Account deployment overview",
 		"Account JSON",
+		"Copy account read route",
+		"accountLinks.append(createCopyReadRouteButton(accountDetailReadRoute(account.awsAccountId), 'Copy account read route'));",
 		"Group JSON",
+		"Copy group read route",
+		"accountGroupDetailReadRoute(account.awsAccountId, group)",
 		"Open application",
 		"Back to applications",
 		"const groupResourceSections = (detail) => {",
@@ -3349,6 +3353,18 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Refresh account detail' in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh account detail")
 	}
+	if !strings.Contains(text, "assert 'Copy account read route' in account_ui, account_ui") || !strings.Contains(text, "assert 'Copy group read route' in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account page copyable read-route controls")
+	}
+	if !strings.Contains(text, "assert \"accountLinks.append(createCopyReadRouteButton(accountDetailReadRoute(account.awsAccountId), 'Copy account read route'));\" in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account read-route copy control placement")
+	}
+	if !strings.Contains(text, "assert \"groupLinks.append(createCopyReadRouteButton(accountGroupDetailReadRoute(account.awsAccountId, group), 'Copy group read route'));\" in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert group read-route copy control placement")
+	}
+	if !strings.Contains(text, "assert \"const accountGroupDetailReadRoute = (accountID, group) => {\" in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert group read-route helper contract")
+	}
 	if !strings.Contains(text, "assert \"createAccountDetailActions(accountState).forEach((action) => {\" in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert account refresh toolbar action wiring")
 	}
@@ -4579,6 +4595,11 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"On this page\",",
 		"\"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')\",",
 		"\"createQuickNavChip('Account detail', 'Current destination: Account detail')\",",
+		"\"Copy account read route\",",
+		"\"Copy group read route\",",
+		"\"accountLinks.append(createCopyReadRouteButton(accountDetailReadRoute(account.awsAccountId), 'Copy account read route'));\",",
+		"\"groupLinks.append(createCopyReadRouteButton(accountGroupDetailReadRoute(account.awsAccountId, group), 'Copy group read route'));\",",
+		"\"const accountGroupDetailReadRoute = (accountID, group) => {\",",
 		"\"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)\",",
 		"\"detailSummary.id = 'account-summary';\",",
 		"\"const accountGroupSectionLabel = (group) => {\",",

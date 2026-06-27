@@ -6768,6 +6768,12 @@
         failure: 'account detail request failed',
       }).then(withAccountDetailFetchedAt);
       const accountDetailReadRoute = (accountID) => `GET /v1/overview/accounts/${accountID || '{awsAccountId}'}`;
+      const accountGroupDetailReadRoute = (accountID, group) => {
+        const encodedAccountID = accountID ? encodeURIComponent(accountID) : '{awsAccountId}';
+        const appRef = group?.appRef ? encodeURIComponent(group.appRef) : '{appRef}';
+        const environmentRef = group?.environmentRef ? encodeURIComponent(group.environmentRef) : '{environmentRef}';
+        return `GET /v1/overview/accounts/${encodedAccountID}/projects/${appRef}/environments/${environmentRef}`;
+      };
       const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {
         unavailable: 'application detail unavailable',
         failure: 'application detail request failed',
@@ -9449,6 +9455,7 @@
           accountLinks.classList.add('account-links');
           if (account.awsAccountId) {
             accountLinks.append(createNavLink(`/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}`, 'Account JSON'));
+            accountLinks.append(createCopyReadRouteButton(accountDetailReadRoute(account.awsAccountId), 'Copy account read route'));
           }
           const pills = createElement('div', 'pills');
           const fallbackCounts = deriveAccountCounts(account);
@@ -9471,6 +9478,7 @@
             emptyStateActions.append(createNavLink(buildPageURL('applications'), 'Applications overview', '_self'));
             if (account.awsAccountId) {
               emptyStateActions.append(createNavLink(`/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}`, 'Account JSON'));
+              emptyStateActions.append(createCopyReadRouteButton(accountDetailReadRoute(account.awsAccountId), 'Copy account read route'));
             }
             rows.append(emptyState, emptyStateActions);
           }
@@ -9488,6 +9496,7 @@
             groupLinks.classList.add('group-links');
             if (account.awsAccountId && group.appRef && group.environmentRef) {
               groupLinks.append(createNavLink(`/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}/projects/${encodeURIComponent(group.appRef)}/environments/${encodeURIComponent(group.environmentRef)}`, 'Group JSON'));
+              groupLinks.append(createCopyReadRouteButton(accountGroupDetailReadRoute(account.awsAccountId, group), 'Copy group read route'));
             }
             const groupPills = createElement('div', 'pills');
             const groupCount = group.deployments.length;

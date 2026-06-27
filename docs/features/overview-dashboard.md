@@ -98,7 +98,7 @@ The account drill-down page consumes `GET /v1/overview/accounts/{awsAccountId}` 
 - the current account detail remains visible with explicit loading/error copy while that refresh is running or fails
 - `Account deployment overview` summary/header with account and topology context
 - grouped project/environment sections derived from the account payload
-- sibling `Account JSON`, `Group JSON`, and `_self` `Open application` links outside the expandable row toggle
+- sibling `Account JSON` / `Copy account read route`, `Group JSON` / `Copy group read route`, and `_self` `Open application` links outside the expandable row toggle, so operators can open or copy the exact account/group `GET /v1/overview/accounts/...` read route without manually rebuilding scoped URLs
 - expandable deployment rows that still lazy-load `GET /v1/overview/deployments/{deploymentName}` for deep detail
 - initial `GET /v1/overview/accounts/{awsAccountId}` auth failures are status-aware on the bookmarkable `/?page=account&accountId={awsAccountId}` route: `401` tells operators to reopen the same page through the trusted front door so authenticated identity can be provided, read-role `403` points at `#operator-context-access-details-panel` / `Show access details` for role provenance, `roles.canRead`, and forwarded `X-Tenet-Authenticated-Roles`, and deployment-access `403` points at `deploymentAccess.summary`, access verdicts, unmatched grants, and the matching deployment/project/environment scope
 - refresh-time `401` / `403` responses reuse that same trusted-front-door / access-denied guidance instead of generic fetch-error copy
