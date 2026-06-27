@@ -2235,6 +2235,12 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (accountsText.includes('Plan/apply')) throw new Error('expected account page to stop exposing plan workspace shortcut');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
   const refreshButton = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Refresh account detail');
+  const rowToggles = collectNodes(document.getElementById('accounts'), (node) => node.getAttribute && node.getAttribute('role') === 'button' && node.className === 'row-toggle');
+  const detailPanels = collectNodes(document.getElementById('accounts'), (node) => node.className === 'detail-panel');
+  if (rowToggles.length !== 2 || detailPanels.length !== 2) throw new Error('expected two account deployment expanders and detail panels');
+  const expectedPanelID = 'account-deployment-detail-210987654321-payments-api-staging';
+  if (detailPanels[0].id !== expectedPanelID || detailPanels[0].getAttribute('id') !== expectedPanelID) throw new Error('expected deterministic account detail panel id');
+  if (rowToggles[0].getAttribute('aria-controls') !== expectedPanelID) throw new Error('expected account row toggle to control its lazy detail panel');
   const quickNavChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   if (!refreshButton || refreshButton.disabled) throw new Error('expected enabled account refresh button after initial render');
   if (!links.find((node) => node.href === '/v1/overview/accounts/210987654321' && node.textContent === 'Account JSON')) throw new Error('expected account json href');
