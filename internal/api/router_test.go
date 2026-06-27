@@ -8884,13 +8884,18 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				},
 				TaskDefinition: "payments-api:42",
 				Deployments: []resourceinspection.ECSDeploymentSummary{{
-					ID:             "ecs-svc/123",
-					Status:         "PRIMARY",
-					RolloutState:   "COMPLETED",
-					TaskDefinition: "payments-api:42",
-					DesiredCount:   2,
-					RunningCount:   2,
-					PendingCount:   0,
+					ID:                 "ecs-svc/123",
+					Status:             "PRIMARY",
+					RolloutState:       "COMPLETED",
+					RolloutStateReason: "service reached steady state",
+					TaskDefinition:     "payments-api:42",
+					DesiredCount:       2,
+					RunningCount:       2,
+					PendingCount:       0,
+					CreatedAt:          "2026-04-18T00:10:00Z",
+					UpdatedAt:          "2026-04-18T00:11:00Z",
+					Primary:            aws.Bool(true),
+					Active:             aws.Bool(true),
 				}},
 				Events: []resourceinspection.ECSServiceEvent{{
 					CreatedAt: "2026-04-18T00:12:00Z",
@@ -9013,6 +9018,32 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 		if ecsService["deploymentControllerType"] != "ECS" {
 			t.Fatalf("expected ECS service deploymentControllerType in raw payload, got %#v", ecsService)
+		}
+		deployments, ok := ecsService["deployments"].([]any)
+		if !ok || len(deployments) != 1 {
+			t.Fatalf("expected ECS service deployments array in raw payload, got %#v", ecsService["deployments"])
+		}
+		deployment, ok := deployments[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected ECS service deployment object in raw payload, got %#v", deployments[0])
+		}
+		for key, want := range map[string]any{
+			"id":                 "ecs-svc/123",
+			"status":             "PRIMARY",
+			"rolloutState":       "COMPLETED",
+			"rolloutStateReason": "service reached steady state",
+			"taskDefinition":     "payments-api:42",
+			"desiredCount":       float64(2),
+			"runningCount":       float64(2),
+			"pendingCount":       float64(0),
+			"createdAt":          "2026-04-18T00:10:00Z",
+			"updatedAt":          "2026-04-18T00:11:00Z",
+			"primary":            true,
+			"active":             true,
+		} {
+			if !reflect.DeepEqual(deployment[key], want) {
+				t.Fatalf("expected deployment.%s=%#v, got %#v in %#v", key, want, deployment[key], deployment)
+			}
 		}
 		circuitBreaker, ok := ecsService["deploymentCircuitBreaker"].(map[string]any)
 		if !ok {

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -1729,6 +1730,102 @@ func TestECSInspectionFromServiceSortsDeploymentsAndEvents(t *testing.T) {
 	}
 	if got.TasksScope == nil || !got.TasksScope.Available || got.TasksScope.EffectiveLimit != maxECSServiceTaskSummaries || got.TasksScope.ReturnedTaskCount != 1 || got.TasksScope.TruncationStatus != "not_truncated" {
 		t.Fatalf("expected ECS service task scope metadata to pass through, got %+v", got.TasksScope)
+	}
+}
+
+func TestECSInspectionFromServiceBoundsDeploymentRolloutStateEvidence(t *testing.T) {
+	deployments := make([]ecstypes.Deployment, 0, maxECSServiceDeploymentSummaries+2)
+	for i := 0; i < maxECSServiceDeploymentSummaries+2; i++ {
+		created := time.Date(2026, 6, 1, 2, i, 0, 0, time.UTC)
+		deployments = append(deployments, ecstypes.Deployment{
+			Id:        stringPtr(fmt.Sprintf("deployment-%02d", i)),
+			Status:    stringPtr("ACTIVE"),
+			CreatedAt: timePtr(created),
+		})
+	}
+
+	got := ecsInspectionFromService(ecstypes.Service{Deployments: deployments}, "arn:cluster", "", nil, nil)
+	if len(got.Deployments) != maxECSServiceDeploymentSummaries {
+		t.Fatalf("expected bounded deployment summaries, got %d entries: %+v", len(got.Deployments), got.Deployments)
+	}
+	if got.Deployments[0].ID != "deployment-11" || got.Deployments[len(got.Deployments)-1].ID != "deployment-02" {
+		t.Fatalf("expected newest deployment summaries after bounding, got %+v", got.Deployments)
+	}
+}
+
+func TestECSInspectionFromServiceIncludesDeploymentRolloutStateEvidence(t *testing.T) {
+	created := time.Date(2026, 6, 1, 2, 3, 4, 0, time.UTC)
+	updated := time.Date(2026, 6, 1, 2, 5, 6, 0, time.UTC)
+	service := ecstypes.Service{
+		ServiceArn:     stringPtr("arn:service"),
+		ServiceName:    stringPtr("worker-prod-service"),
+		Status:         stringPtr("ACTIVE"),
+		TaskDefinition: stringPtr("worker:42"),
+		Deployments: []ecstypes.Deployment{{
+			Id:                 stringPtr("ecs-svc/primary"),
+			Status:             stringPtr("PRIMARY"),
+			RolloutState:       ecstypes.DeploymentRolloutStateCompleted,
+			RolloutStateReason: stringPtr("service reached steady state"),
+			DesiredCount:       4,
+			RunningCount:       3,
+			PendingCount:       1,
+			TaskDefinition:     stringPtr("worker:42"),
+			CreatedAt:          timePtr(created),
+			UpdatedAt:          timePtr(updated),
+		}, {
+			Id:     stringPtr("ecs-svc/active"),
+			Status: stringPtr("ACTIVE"),
+		}},
+	}
+
+	got := ecsInspectionFromService(service, "arn:cluster", "", nil, nil)
+	if len(got.Deployments) != 2 {
+		t.Fatalf("expected two deployment summaries, got %+v", got.Deployments)
+	}
+	primary := got.Deployments[0]
+	if primary.ID != "ecs-svc/primary" || primary.Status != "PRIMARY" || primary.RolloutState != "COMPLETED" || primary.RolloutStateReason != "service reached steady state" || primary.TaskDefinition != "worker:42" {
+		t.Fatalf("expected rollout-state identity evidence, got %+v", primary)
+	}
+	if primary.DesiredCount != 4 || primary.RunningCount != 3 || primary.PendingCount != 1 || primary.CreatedAt != "2026-06-01T02:03:04Z" || primary.UpdatedAt != "2026-06-01T02:05:06Z" {
+		t.Fatalf("expected rollout-state count/time evidence, got %+v", primary)
+	}
+	if primary.Primary == nil || !*primary.Primary || primary.Active == nil || !*primary.Active {
+		t.Fatalf("expected PRIMARY deployment to be marked primary and active, got %+v", primary)
+	}
+	active := got.Deployments[1]
+	if active.Primary == nil || *active.Primary || active.Active == nil || !*active.Active {
+		t.Fatalf("expected ACTIVE deployment to expose false primary and true active indicators, got %+v", active)
+	}
+
+	raw, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal ECS inspection: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("decode ECS inspection JSON: %v", err)
+	}
+	deployments, ok := payload["deployments"].([]any)
+	if !ok || len(deployments) != 2 {
+		t.Fatalf("expected deployments array in JSON payload, got %#v", payload["deployments"])
+	}
+	rawPrimary, ok := deployments[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected deployment object in JSON payload, got %#v", deployments[0])
+	}
+	for _, key := range []string{"id", "status", "rolloutState", "rolloutStateReason", "desiredCount", "runningCount", "pendingCount", "taskDefinition", "createdAt", "updatedAt", "primary", "active"} {
+		if _, ok := rawPrimary[key]; !ok {
+			t.Fatalf("expected deployment JSON field %q in %#v", key, rawPrimary)
+		}
+	}
+	rawActive, ok := deployments[1].(map[string]any)
+	if !ok {
+		t.Fatalf("expected deployment object in JSON payload, got %#v", deployments[1])
+	}
+	for _, absent := range []string{"rolloutState", "rolloutStateReason", "taskDefinition", "createdAt", "updatedAt"} {
+		if _, ok := rawActive[absent]; ok {
+			t.Fatalf("expected absent AWS field %q to be omitted from %#v", absent, rawActive)
+		}
 	}
 }
 

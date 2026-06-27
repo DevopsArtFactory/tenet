@@ -138,6 +138,12 @@ from `DescribeServices` when AWS returns it:
 - `ecsService.deploymentAlarmConfiguration.rollback`
 - `ecsService.deploymentAlarmConfiguration.alarmNames[]`
 
+ECS service deployment rollout-state rows are exposed as
+`ecsService.deployments[]` from `DescribeServices` and can include `id`,
+`status`, `rolloutState`, `rolloutStateReason`, `desiredCount`,
+`runningCount`, `pendingCount`, `taskDefinition`, `createdAt`, `updatedAt`,
+`primary`, and `active`.
+
 Those fields are optional. Fixture-backed, local, no-AWS, and older provider
 payloads omit them rather than emitting empty placeholders.
 
