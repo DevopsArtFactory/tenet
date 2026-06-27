@@ -108,7 +108,7 @@ func TestSmokeHelperScriptsRemainDirectlyRunnable(t *testing.T) {
 }
 
 func TestSmokeHelpersCleanUpEveryTempPath(t *testing.T) {
-	assignmentRE := regexp.MustCompile(`(?m)^([A-Z0-9_]+)=\$\(mktemp(?: -d)?\)$`)
+	assignmentRE := regexp.MustCompile(`(?m)^\s*(?:local\s+)?([A-Za-z_][A-Za-z0-9_]*)=\$\(mktemp(?:\s+([^)]*))?\)$`)
 	cleanupRE := regexp.MustCompile(`(?s)cleanup\(\) \{(.*?)\n\}`)
 
 	for _, path := range []string{
@@ -124,11 +124,20 @@ func TestSmokeHelpersCleanUpEveryTempPath(t *testing.T) {
 
 		for _, match := range assignmentRE.FindAllStringSubmatch(text, -1) {
 			variable := match[1]
+			mktempArgs := strings.TrimSpace(match[2])
+			if mktempUnderPayloadDir(mktempArgs) {
+				continue
+			}
 			if !strings.Contains(cleanupBody, "$"+variable) {
-				t.Fatalf("expected %s cleanup to remove %s", path, variable)
+				t.Fatalf("expected %s mktemp assignment for %s to be under PAYLOAD_DIR or removed by cleanup", path, variable)
 			}
 		}
 	}
+}
+
+func mktempUnderPayloadDir(args string) bool {
+	args = strings.Trim(args, `"'`)
+	return args == "$PAYLOAD_DIR" || strings.HasPrefix(args, "$PAYLOAD_DIR/")
 }
 
 func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
