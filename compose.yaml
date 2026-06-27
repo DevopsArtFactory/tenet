@@ -16,6 +16,7 @@ services:
     command: ["/usr/local/bin/tenet-api"]
     environment:
       TENET_API_ADDR: ":8080"
+      TENET_CATALOG_SOURCE: filesystem
       TENET_REPO_ROOT: /workspace/examples/local-repo
       TENET_STATUS_BACKEND: redis
       TENET_REDIS_ADDR: redis:6379
@@ -62,6 +63,7 @@ services:
       dockerfile: Dockerfile
     command: ["/usr/local/bin/tenet-controller"]
     environment:
+      TENET_CATALOG_SOURCE: filesystem
       TENET_REPO_ROOT: /workspace/examples/local-repo
       TENET_STATUS_BACKEND: redis
       TENET_REDIS_ADDR: redis:6379
