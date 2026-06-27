@@ -33,7 +33,7 @@ func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
 		"The Docker smoke lane remains separate",
 		"In hosted PRs it is path-scoped",
 		"docs-only changes normally stay on the fast lane",
-		"changes under Docker/Compose, API/controller, local fixtures, runtime read models, RBAC policy diagnostics, resource evidence, webhook, plan/apply, or audit smoke surfaces run the full Docker stack before merge",
+		"changes under Docker/Compose, front-door auth, API/controller, local fixtures, runtime read models, RBAC policy diagnostics, resource evidence, webhook, plan/apply, or audit smoke surfaces run the full Docker stack before merge",
 		"make smoke-docker",
 	} {
 		if !strings.Contains(readmeText, fragment) {
