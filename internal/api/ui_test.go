@@ -19,6 +19,7 @@ func TestEmbeddedUITopLevelEmptyStatesAreStatusRegions(t *testing.T) {
 	body := string(indexHTML)
 
 	contracts := []string{
+		`<div class="loading" role="status" aria-live="polite" aria-atomic="true">Loading deployment overview…</div>`,
 		`const renderApplicationsEmptyState = \(visibleApplications, sourceApplications\) => \{[\s\S]*?const empty = createElement\('div', 'empty'\);[\s\S]*?empty\.setAttribute\('role', 'status'\);[\s\S]*?empty\.setAttribute\('aria-live', 'polite'\);[\s\S]*?empty\.setAttribute\('aria-atomic', 'true'\);[\s\S]*?createElement\('h2', 'account-name', 'Filters hid every application'\)[\s\S]*?createElement\('h2', 'account-name', 'No visible applications'\)`,
 		`const renderEmptyState = \(message\) => \{[\s\S]*?const empty = createElement\('div', 'empty', message\);[\s\S]*?empty\.setAttribute\('role', 'status'\);[\s\S]*?empty\.setAttribute\('aria-live', 'polite'\);[\s\S]*?empty\.setAttribute\('aria-atomic', 'true'\);[\s\S]*?document\.getElementById\('accounts'\)\.replaceChildren\(empty\);`,
 	}
