@@ -2135,7 +2135,10 @@ async function render(search, fetchImpl) {
   const emptyAccountLinks = collectNodes(emptyAccountDocument.getElementById('accounts'), (node) => node.tagName === 'A');
   if (!emptyAccountLinks.find((node) => node.href === '/?page=applications&q=sandbox&sync=Synced&account=333333333333' && node.textContent === 'Applications overview' && node.target === '_self')) throw new Error('expected empty account applications overview handoff');
   if (!emptyAccountLinks.find((node) => node.href === '/v1/overview/accounts/333333333333' && node.textContent === 'Account JSON')) throw new Error('expected empty account JSON handoff');
+  const emptyAccountButtons = collectNodes(emptyAccountDocument.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  if (!emptyAccountButtons.find((node) => node.textContent === 'Copy account read route' && node.getAttribute('aria-label') === 'Copy GET /v1/overview/accounts/333333333333')) throw new Error('expected empty account copyable read route');
   if (emptyAccountText.includes('Group JSON')) throw new Error('expected empty account page not to render group links');
+  if (emptyAccountText.includes('Copy group read route')) throw new Error('expected empty account page not to render group copy controls');
 })();
 `
 
@@ -2229,7 +2232,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('payments · staging-apne2')) throw new Error('expected grouped project/environment heading');
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected account page deployment row');
   if (!accountsText.includes('Account JSON')) throw new Error('expected account page account json link');
+  if (!accountsText.includes('Copy account read route')) throw new Error('expected account page copyable account read route');
   if (!accountsText.includes('Group JSON')) throw new Error('expected account page group json link');
+  if (!accountsText.includes('Copy group read route')) throw new Error('expected account page copyable group read route');
   if (!accountsText.includes('Open application')) throw new Error('expected account page application drill-down links');
   if (accountsText.includes('Drift view')) throw new Error('expected account page to stop exposing drift workspace shortcut');
   if (accountsText.includes('Plan/apply')) throw new Error('expected account page to stop exposing plan workspace shortcut');
@@ -2245,6 +2250,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!refreshButton || refreshButton.disabled) throw new Error('expected enabled account refresh button after initial render');
   if (!links.find((node) => node.href === '/v1/overview/accounts/210987654321' && node.textContent === 'Account JSON')) throw new Error('expected account json href');
   if (!links.find((node) => node.href === '/v1/overview/accounts/210987654321/projects/payments/environments/staging-apne2' && node.textContent === 'Group JSON')) throw new Error('expected group json href');
+  const copyButtons = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && String(node.className || '').includes('copy-read-route'));
+  if (!copyButtons.find((node) => node.textContent === 'Copy account read route' && node.getAttribute('aria-label') === 'Copy GET /v1/overview/accounts/210987654321')) throw new Error('expected account read-route copy button');
+  if (!copyButtons.find((node) => node.textContent === 'Copy group read route' && node.getAttribute('aria-label') === 'Copy GET /v1/overview/accounts/210987654321/projects/payments/environments/staging-apne2')) throw new Error('expected group read-route copy button');
   const applicationsOverviewLink = links.find((node) => node.href === '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.textContent === 'Applications overview' && node.target === '_self');
   if (!applicationsOverviewLink || applicationsOverviewLink.rel) throw new Error('expected account page overview quick-nav self link');
   const accountDetailChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current destination: Account detail');

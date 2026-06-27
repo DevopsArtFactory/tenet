@@ -2069,6 +2069,13 @@ assert "const createAccountQuickNav = (account, sectionLinks = []) => {" in acco
 assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in account_ui, account_ui
 assert "createQuickNavChip('Account detail', 'Current destination: Account detail')" in account_ui, account_ui
 assert 'Refresh account detail' in account_ui, account_ui
+assert 'Copy account read route' in account_ui, account_ui
+assert 'Copy group read route' in account_ui, account_ui
+assert "accountLinks.append(createCopyReadRouteButton(accountDetailReadRoute(account.awsAccountId), 'Copy account read route'));" in account_ui, account_ui
+assert "emptyStateActions.append(createCopyReadRouteButton(accountDetailReadRoute(account.awsAccountId), 'Copy account read route'));" in account_ui, account_ui
+assert "const accountGroupDetailReadRoute = (accountID, group) => {" in account_ui, account_ui
+assert "groupLinks.append(createCopyReadRouteButton(accountGroupDetailReadRoute(account.awsAccountId, group), 'Copy group read route'));" in account_ui, account_ui
+assert "return `GET /v1/overview/accounts/${encodedAccountID}/projects/${appRef}/environments/${environmentRef}`;" in account_ui, account_ui
 assert "createAccountDetailActions(accountState).forEach((action) => {" in account_ui, account_ui
 assert "toolbar.replaceChildren(toolbarActions);" in account_ui, account_ui
 assert 'Account detail read refreshed ·' in account_ui, account_ui
