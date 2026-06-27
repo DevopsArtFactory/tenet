@@ -27,7 +27,7 @@ Enterprise SSO should extend the second family as provider-neutral managed-login
 
 ## Provider-neutral configuration shape
 
-Provider work is disabled by default. GitHub OAuth, Google Workspace OIDC, and Okta OIDC become active Tenet-managed login providers only when their configured provider mode and required non-secret state, identity, and session settings are complete. GitHub OAuth uses `TENET_AUTH_PROVIDER=github`, Google Workspace OIDC uses `TENET_AUTH_PROVIDER=google_oidc` (the legacy `google` alias is accepted), Okta OIDC uses `TENET_AUTH_PROVIDER=okta_oidc`, and Okta SAML uses `TENET_AUTH_PROVIDER=okta_saml` for diagnostic-only preflight. Configure the diagnostic/runtime with settings such as:
+Provider work is disabled by default. GitHub OAuth, Google Workspace OIDC, and Okta OIDC become active Tenet-managed login providers only when their configured provider mode and required non-secret state, identity, and session settings are complete. Use concrete non-secret provider mode examples in docs and runbooks: `TENET_AUTH_PROVIDER=github`, `TENET_AUTH_PROVIDER=google_oidc`, `TENET_AUTH_PROVIDER=okta_oidc`, or `TENET_AUTH_PROVIDER=okta_saml`. GitHub OAuth uses `TENET_AUTH_PROVIDER=github`, Google Workspace OIDC uses `TENET_AUTH_PROVIDER=google_oidc` (the legacy `google` alias is accepted), Okta OIDC uses `TENET_AUTH_PROVIDER=okta_oidc`, and Okta SAML uses `TENET_AUTH_PROVIDER=okta_saml` for diagnostic-only preflight. Configure the diagnostic/runtime with settings such as:
 
 ```text
 TENET_AUTH_PROVIDER=google_oidc # use okta_oidc for Okta OIDC, okta_saml for Okta SAML diagnostics, or github for GitHub OAuth
@@ -112,7 +112,7 @@ Enterprise SSO must not weaken existing fail-safe behavior.
 
 `GET /v1/operator/context` should remain the first troubleshooting stop. Enterprise SSO additions should be additive and non-secret, for example:
 
-- configured provider type (`google` for active Google Workspace OIDC, `okta_saml`, `okta_oidc`)
+- configured provider type (`google_oidc` for active Google Workspace OIDC, `okta_saml`, `okta_oidc`)
 - human-readable provider labels in operator-facing UI (`Google Workspace OIDC`, `Okta SAML`, `Okta OIDC`) so operators do not need to decode raw enum values during 401/403 recovery
 - provider-boundary copy in the embedded Operator context details that keeps Google Workspace identity separate from Gmail/API access and keeps Okta SSO identity separate from Tenet role/deployment authorization
 - whether managed enterprise SSO is configured and active
