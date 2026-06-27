@@ -629,6 +629,7 @@ var (
 		"POST /v1/plans/deployments/{deploymentName}",
 		"POST /v1/applies/plans/{planId}",
 		"POST /v1/applies/{applyId}/transitions",
+		"POST /v1/controller/refresh",
 	}
 	operatorContextDeploymentScopedReadExampleRoutes = []string{
 		"GET /v1/overview/deployments/{deploymentName}",
@@ -781,6 +782,14 @@ type operatorContextControllerRefresh struct {
 	Status         string `json:"status"`
 	Reason         string `json:"reason"`
 	DiagnosticOnly bool   `json:"diagnosticOnly"`
+}
+
+type controllerRefreshResponse struct {
+	Status             string                            `json:"status"`
+	Processed          bool                              `json:"processed"`
+	Reason             string                            `json:"reason"`
+	DesiredStateSource operatorContextDesiredStateSource `json:"desiredStateSource"`
+	ControllerRefresh  *githubwebhook.ControllerRefresh  `json:"controllerRefresh,omitempty"`
 }
 
 type operatorContextTrustedHeaders struct {
@@ -1049,6 +1058,65 @@ func buildOperatorContextDesiredStateSource(options Options) operatorContextDesi
 		diagnostic.ControllerRefresh.Reason = "desired-state source kind is unsupported, so webhook refresh relevance is unavailable"
 	}
 	return diagnostic
+}
+
+func buildControllerRefreshResponse(ctx context.Context, logger *slog.Logger, options Options, requestID string) (controllerRefreshResponse, int) {
+	desiredStateSource := buildOperatorContextDesiredStateSource(options)
+	response := controllerRefreshResponse{
+		Status:             desiredStateSource.ControllerRefresh.Status,
+		Processed:          false,
+		Reason:             desiredStateSource.ControllerRefresh.Reason,
+		DesiredStateSource: desiredStateSource,
+	}
+
+	source := options.GitHubWebhookDesiredStateSource
+	switch strings.TrimSpace(source.Kind) {
+	case githubwebhook.DesiredStateSourceKindFilesystem:
+		return response, http.StatusOK
+	case githubwebhook.DesiredStateSourceKindGitHub:
+		if options.GitHubWebhookRefreshPublisher == nil {
+			return response, http.StatusServiceUnavailable
+		}
+		repository := strings.TrimSpace(source.Repository)
+		ref := strings.TrimSpace(source.Ref)
+		if repository == "" || ref == "" {
+			response.Status = "source_not_configured"
+			response.Reason = "GitHub desired-state source is missing repository or ref, so controller refresh handoff cannot be published"
+			return response, http.StatusServiceUnavailable
+		}
+		correlationID := strings.TrimSpace(requestID)
+		if correlationID == "" {
+			correlationID = newRequestID()
+		}
+		publishRequestID := "api-controller-refresh:" + correlationID
+		requestedAt := githubWebhookNow().UTC().Format(time.RFC3339)
+		request := controllerrefresh.Request{
+			RequestID:   publishRequestID,
+			DeliveryID:  correlationID,
+			Repository:  repository,
+			Ref:         ref,
+			RequestedAt: requestedAt,
+		}
+		receipt, err := options.GitHubWebhookRefreshPublisher.Publish(ctx, request)
+		if err != nil {
+			logger.Error("manual controller refresh handoff failed", "request_id", publishRequestID, "repository", repository, "ref", ref, "error", err)
+			response.Status = "publish_failed"
+			response.Reason = "manual controller refresh handoff failed because the redis publisher is unavailable"
+			return response, http.StatusServiceUnavailable
+		}
+		response.Status = "published"
+		response.Processed = true
+		response.Reason = "manual controller refresh handoff published"
+		response.ControllerRefresh = &githubwebhook.ControllerRefresh{
+			Backend:     receipt.Backend,
+			Channel:     receipt.Channel,
+			RequestID:   receipt.RequestID,
+			PublishedAt: requestedAt,
+		}
+		return response, http.StatusAccepted
+	default:
+		return response, http.StatusServiceUnavailable
+	}
 }
 
 func buildOperatorContextRepositoryPolicy(ctx context.Context, options Options, identity requestactor.AuthenticatedIdentity, groups requestactor.AuthenticatedGroups) operatorContextRepositoryPolicy {
@@ -2176,6 +2244,21 @@ func NewRouter(options Options) http.Handler {
 		if response.Status == githubwebhook.StatusAccepted {
 			w.WriteHeader(http.StatusAccepted)
 		}
+		_ = json.NewEncoder(w).Encode(response)
+	})
+	mux.HandleFunc("/v1/controller/refresh", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodPost) {
+			return
+		}
+		if options.RequireAuthenticatedIdentity && !requireAuthenticatedIdentity(w, r) {
+			return
+		}
+		if !requireOperatorRoleForWrite(w, r, options.RequireOperatorRoleForWrite) {
+			return
+		}
+		response, statusCode := buildControllerRefreshResponse(r.Context(), logger, options, RequestIDFromContext(r.Context()))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
 		_ = json.NewEncoder(w).Encode(response)
 	})
 	mux.HandleFunc("/v1/catalog/summary", func(w http.ResponseWriter, r *http.Request) {
