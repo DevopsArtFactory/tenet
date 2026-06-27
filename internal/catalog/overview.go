@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/manifest"
@@ -586,6 +587,16 @@ func BuildDeploymentOverviewEvents(c manifest.Catalog, snapshots []statusstore.S
 	}, nil
 }
 
+const RuntimeEventSourceUnknown = "unknown"
+
+func NormalizeRuntimeEventSource(source string) string {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return RuntimeEventSourceUnknown
+	}
+	return source
+}
+
 func BuildRuntimeEventSourceSummary(events []domain.StatusHistoryEntry) []RuntimeEventSourceSummary {
 	if len(events) == 0 {
 		return []RuntimeEventSourceSummary{}
@@ -593,7 +604,7 @@ func BuildRuntimeEventSourceSummary(events []domain.StatusHistoryEntry) []Runtim
 
 	counts := make(map[string]int)
 	for _, event := range events {
-		counts[event.Source]++
+		counts[NormalizeRuntimeEventSource(event.Source)]++
 	}
 
 	sources := make([]string, 0, len(counts))
