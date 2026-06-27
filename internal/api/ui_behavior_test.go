@@ -12515,6 +12515,90 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 		runNodeHarness(t, nodeProgram)
 	})
 
+	t.Run("audit toolbar filter chips clear one control at a time", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const filteredAuditLogs = { entries: [] };
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/console', search: '?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&action=apply.requested&limit=2', hash: '#audit-entry-apply-failed' } };
+const history = { replaceState(_state, _title, url) {
+  const [pathAndQuery, nextHash = ''] = String(url).split('#');
+  const [pathname, query = ''] = pathAndQuery.split('?');
+  window.location.pathname = pathname || '/console';
+  window.location.search = query ? '?' + query : '';
+  window.location.hash = nextHash ? '#' + nextHash : '';
+} };
+const expectedRoutes = [
+  '/v1/audit-logs?deployment=payments-api-prod&action=apply.requested&limit=2',
+  '/v1/audit-logs?action=apply.requested&limit=2',
+  '/v1/audit-logs?limit=2',
+  '/v1/audit-logs',
+];
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (!expectedRoutes.includes(String(url))) throw new Error('unexpected fetch url: ' + url);
+  return Promise.resolve({ ok: true, json: () => Promise.resolve(filteredAuditLogs) });
+};
+const activeChipClear = (label) => collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON' && node.getAttribute?.('aria-label') === label)[0];
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  let toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
+  if (!toolbarText.includes('Deployment: payments-api-prod')) throw new Error('expected deployment chip label');
+  if (!toolbarText.includes('Action: Apply requested (apply.requested)')) throw new Error('expected action chip label');
+  if (!toolbarText.includes('Limit: latest 2')) throw new Error('expected limit chip label');
+  const chips = collectNodes(document.getElementById('toolbar'), (node) => node.className === 'toolbar-chips');
+  if (chips.length !== 1 || chips[0].getAttribute('aria-label') !== 'Active audit controls') throw new Error('expected active audit controls chip group');
+
+  const clearDeployment = activeChipClear('Clear deployment filter payments-api-prod');
+  if (!clearDeployment) throw new Error('expected accessible deployment chip clear button');
+  clearDeployment.dispatch('click');
+  await settle();
+  await settle();
+  if (fetchCalls[1] !== '/v1/audit-logs?action=apply.requested&limit=2') throw new Error('expected deployment chip clear to preserve action and limit fetch');
+  if (window.location.search !== '?page=audit&q=payments&sync=OutOfSync&account=210987654321&action=apply.requested&limit=2') throw new Error('expected deployment chip clear to preserve q/sync/account/action/limit, got ' + window.location.search);
+  if (window.location.hash !== '') throw new Error('expected deployment chip clear to remove stale audit hash');
+  if (window.location.pathname !== '/console') throw new Error('expected deployment chip clear to preserve pathname');
+  toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
+  if (toolbarText.includes('Deployment: payments-api-prod')) throw new Error('did not expect deployment chip after clearing deployment');
+  if (!toolbarText.includes('Action: Apply requested (apply.requested)') || !toolbarText.includes('Limit: latest 2')) throw new Error('expected action and limit chips after clearing deployment');
+
+  window.location.hash = '#audit-entry-apply-failed';
+  const clearAction = activeChipClear('Clear action filter Apply requested (apply.requested)');
+  if (!clearAction) throw new Error('expected accessible action chip clear button');
+  clearAction.dispatch('click');
+  await settle();
+  await settle();
+  if (fetchCalls[2] !== '/v1/audit-logs?limit=2') throw new Error('expected action chip clear to preserve limit fetch');
+  if (window.location.search !== '?page=audit&q=payments&sync=OutOfSync&account=210987654321&limit=2') throw new Error('expected action chip clear to preserve q/sync/account/limit, got ' + window.location.search);
+  if (window.location.hash !== '') throw new Error('expected action chip clear to remove stale audit hash');
+  toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
+  if (toolbarText.includes('Action: Apply requested (apply.requested)')) throw new Error('did not expect action chip after clearing action');
+  if (!toolbarText.includes('Limit: latest 2')) throw new Error('expected limit chip after clearing action');
+
+  window.location.hash = '#audit-timeline';
+  const clearLimit = activeChipClear('Clear limit cap latest 2');
+  if (!clearLimit) throw new Error('expected accessible limit chip clear button');
+  clearLimit.dispatch('click');
+  await settle();
+  await settle();
+  if (fetchCalls[3] !== '/v1/audit-logs') throw new Error('expected limit chip clear to reload unbounded audit fetch');
+  if (window.location.search !== '?page=audit&q=payments&sync=OutOfSync&account=210987654321') throw new Error('expected limit chip clear to preserve q/sync/account only, got ' + window.location.search);
+  if (window.location.hash !== '') throw new Error('expected limit chip clear to remove stale audit hash');
+  toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
+  if (toolbarText.includes('Limit: latest 2')) throw new Error('did not expect limit chip after clearing limit');
+  if (collectNodes(document.getElementById('toolbar'), (node) => node.className === 'toolbar-chip').length !== 0) throw new Error('did not expect active audit chips after clearing all controls');
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
 	t.Run("audit page renders explicit fetch states", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;

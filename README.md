@@ -250,11 +250,11 @@ routes do not regress to `aws_unavailable`.
 - `GET /v1/operator/context`
 
 The bookmarkable audit timeline (`/?page=audit`) keeps a manual `Refresh audit
-log` action and an accessible `Last refreshed` status region so screen-reader
-and keyboard users get the same freshness signal as visual operators. When the
-API reports a capped audit window through `resultScope`, the timeline also shows
-inline actions to expand to the next preset limit or clear the cap while
-preserving the current deployment/action and applications-shell query state.
+log`, an accessible `Last refreshed` cue, and clearable deployment/action/limit
+chips that remove only their own control while preserving the shell path,
+`q`/`sync`/`account`, and stripping stale `#audit-*` anchors. Capped audit
+windows from `resultScope` still expose inline expand/clear actions that keep the
+current deployment/action and applications-shell query state.
 
 The bookmarkable resource page (`/?page=resource...`) keeps the top-level deployment-detail read visible in the selected-resource body callout as `Current resource read: GET /v1/overview/deployments/{deploymentName}` and exposes `Resource JSON` / `Copy read route` toolbar handoffs to that same read model. Resource-detail rendered sections also include low-noise same-page `Section link` and `Copy section link` troubleshooting handoffs that preserve the current pathname and query state, including `containerName`, `instanceId`, `resourceLogLimit`, and `resourceInspectionLimit`, while changing only the hash. The same page now adds a compact `Troubleshooting summary` derived from the selected deployment/resource plus any selected lookup scope (`containerName`, `clusterArn`, or `instanceId`) and the latest lazy Recent logs and Live inspection panel states, including an Evidence freshness row for completed reads plus empty-log and unavailable-provider next-step guidance.
 

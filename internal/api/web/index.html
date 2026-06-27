@@ -62,6 +62,12 @@
       .toolbar-button { border: 1px solid rgba(103,183,255,.24); background: rgba(103,183,255,.12); color: var(--blue); border-radius: 999px; padding: 10px 14px; font: inherit; font-weight: 700; cursor: pointer; }
       .toolbar-button:hover:not(:disabled) { background: rgba(103,183,255,.18); }
       .toolbar-button:disabled { cursor: not-allowed; opacity: .58; }
+      .toolbar-chips { display:flex; flex-wrap:wrap; gap: 8px; align-items:center; }
+      .toolbar-chip { display:inline-flex; align-items:center; gap: 8px; max-width: 100%; padding: 6px 8px 6px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.10); background: rgba(255,255,255,.055); color: var(--text); font-size: 13px; font-weight: 700; }
+      .toolbar-chip-label { overflow-wrap:anywhere; }
+      .toolbar-chip-clear { appearance:none; border: 1px solid rgba(103,183,255,.24); background: rgba(103,183,255,.12); color: var(--blue); border-radius: 999px; padding: 3px 7px; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+      .toolbar-chip-clear:hover, .toolbar-chip-clear:focus-visible { background: rgba(103,183,255,.20); }
+      .toolbar-chip-clear:focus-visible { outline: 2px solid rgba(103,183,255,.45); outline-offset: 2px; }
       .copy-read-route { color: var(--text); border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.06); }
       .copy-read-route:hover:not(:disabled) { background: rgba(255,255,255,.1); }
       .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
@@ -2551,6 +2557,25 @@
           auditAction: '',
           auditLimit: 0,
         };
+        syncAuditPageState({ clearAuditHash: true });
+        loadAuditLogsPage().catch(() => {});
+      };
+      const clearAuditControl = (control) => {
+        const nextState = { ...currentPageState, page: 'audit' };
+        switch (control) {
+          case 'deployment':
+            nextState.deployment = '';
+            break;
+          case 'action':
+            nextState.auditAction = '';
+            break;
+          case 'limit':
+            nextState.auditLimit = 0;
+            break;
+          default:
+            return;
+        }
+        currentPageState = nextState;
         syncAuditPageState({ clearAuditHash: true });
         loadAuditLogsPage().catch(() => {});
       };
@@ -7279,6 +7304,42 @@
         if (currentPageState.auditLimit > 0) labels.push(auditLimitLabel());
         return labels;
       };
+      const createAuditFilterChip = ({ label, clearLabel, clearControl }) => {
+        const chip = createElement('span', 'toolbar-chip');
+        chip.append(createElement('span', 'toolbar-chip-label', label));
+        const clearButton = createElement('button', 'toolbar-chip-clear', 'Clear');
+        clearButton.type = 'button';
+        clearButton.setAttribute('aria-label', clearLabel);
+        clearButton.addEventListener('click', () => clearAuditControl(clearControl));
+        chip.append(clearButton);
+        return chip;
+      };
+      const createAuditFilterChips = () => {
+        const chips = createElement('div', 'toolbar-chips');
+        chips.setAttribute('aria-label', 'Active audit controls');
+        if (currentPageState.deployment) {
+          chips.append(createAuditFilterChip({
+            label: `Deployment: ${currentPageState.deployment}`,
+            clearLabel: `Clear deployment filter ${currentPageState.deployment}`,
+            clearControl: 'deployment',
+          }));
+        }
+        if (currentPageState.auditAction) {
+          chips.append(createAuditFilterChip({
+            label: `Action: ${auditActionLabel(currentPageState.auditAction)}`,
+            clearLabel: `Clear action filter ${auditActionLabel(currentPageState.auditAction)}`,
+            clearControl: 'action',
+          }));
+        }
+        if (currentPageState.auditLimit > 0) {
+          chips.append(createAuditFilterChip({
+            label: `Limit: latest ${currentPageState.auditLimit}`,
+            clearLabel: `Clear limit cap latest ${currentPageState.auditLimit}`,
+            clearControl: 'limit',
+          }));
+        }
+        return chips.children.length ? chips : null;
+      };
       const auditEmptyStateText = () => {
         const filters = auditFilterLabels();
         const hasLimit = currentPageState.auditLimit > 0;
@@ -7471,6 +7532,10 @@
           backLink,
           createElement('div', 'toolbar-active', `${activeFilters.length ? `Audit filters: ${activeFilters.join(' · ')}` : 'Audit filters: none'} · ${auditLimitLabel()}`),
         );
+        const activeChips = createAuditFilterChips();
+        if (activeChips) {
+          toolbarActions.append(activeChips);
+        }
         if (activeControls.length) {
           const auditHasNonDeploymentControls = Boolean(currentPageState.auditAction || currentPageState.auditLimit > 0);
           if (currentPageState.deployment && auditHasNonDeploymentControls) {
