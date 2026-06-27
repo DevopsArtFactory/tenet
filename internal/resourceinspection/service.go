@@ -31,6 +31,7 @@ const (
 	ecsServiceHintCacheCap               = 256
 	trafficRoutingCacheCap               = 128
 	maxECSServiceTaskSummaries           = 10
+	maxECSServiceDeploymentSummaries     = 10
 	maxAutoScalingGroupInstanceSummaries = maxECSServiceTaskSummaries
 	maxAutoScalingGroupScalingActivities = 10
 	ecsServiceTaskListPageLimit          = 10
@@ -385,6 +386,8 @@ type ECSDeploymentSummary struct {
 	PendingCount       int32  `json:"pendingCount"`
 	CreatedAt          string `json:"createdAt,omitempty"`
 	UpdatedAt          string `json:"updatedAt,omitempty"`
+	Primary            *bool  `json:"primary,omitempty"`
+	Active             *bool  `json:"active,omitempty"`
 }
 
 type ECSServiceEvent struct {
@@ -1887,11 +1890,15 @@ func ecsInspectionFromService(service ecstypes.Service, clusterARN string, taskD
 		}
 		return left.After(right)
 	})
+	if len(deployments) > maxECSServiceDeploymentSummaries {
+		deployments = deployments[:maxECSServiceDeploymentSummaries]
+	}
 	deploymentSummaries := make([]ECSDeploymentSummary, 0, len(deployments))
 	for _, deployment := range deployments {
+		status := strings.TrimSpace(aws.ToString(deployment.Status))
 		deploymentSummaries = append(deploymentSummaries, ECSDeploymentSummary{
 			ID:                 aws.ToString(deployment.Id),
-			Status:             aws.ToString(deployment.Status),
+			Status:             status,
 			RolloutState:       string(deployment.RolloutState),
 			RolloutStateReason: aws.ToString(deployment.RolloutStateReason),
 			TaskDefinition:     aws.ToString(deployment.TaskDefinition),
@@ -1900,6 +1907,8 @@ func ecsInspectionFromService(service ecstypes.Service, clusterARN string, taskD
 			PendingCount:       deployment.PendingCount,
 			CreatedAt:          formatTime(aws.ToTime(deployment.CreatedAt)),
 			UpdatedAt:          formatTime(aws.ToTime(deployment.UpdatedAt)),
+			Primary:            ecsDeploymentPrimary(status),
+			Active:             ecsDeploymentActive(status),
 		})
 	}
 
@@ -1959,6 +1968,24 @@ func ecsDeploymentCircuitBreaker(circuitBreaker *ecstypes.DeploymentCircuitBreak
 		Enabled:  circuitBreaker.Enable,
 		Rollback: circuitBreaker.Rollback,
 	}
+}
+
+func ecsDeploymentPrimary(status string) *bool {
+	status = strings.TrimSpace(status)
+	if status == "" {
+		return nil
+	}
+	primary := status == "PRIMARY"
+	return &primary
+}
+
+func ecsDeploymentActive(status string) *bool {
+	status = strings.TrimSpace(status)
+	if status == "" {
+		return nil
+	}
+	active := status == "PRIMARY" || status == "ACTIVE"
+	return &active
 }
 
 func ecsDeploymentAlarmConfiguration(alarms *ecstypes.DeploymentAlarms) *ECSDeploymentAlarmConfiguration {
