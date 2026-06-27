@@ -573,7 +573,7 @@ const findFirst = (node, predicate) => {
   }
   return null;
 };
-async function render(operatorResponses, initialHash = '') {
+async function render(operatorResponses, initialHash = '', controllerRefreshResponses = []) {
   const initialLocation = typeof initialHash === 'object' && initialHash !== null ? initialHash : { hash: initialHash };
   const document = new Document();
   document.byID.set('operator-context', document.createElement('section'));
@@ -581,7 +581,9 @@ async function render(operatorResponses, initialHash = '') {
   document.byID.set('summary', document.createElement('section'));
   document.byID.set('accounts', document.createElement('section'));
   const fetchCalls = [];
+  const fetchRequests = [];
   const responses = Array.isArray(operatorResponses) ? operatorResponses.slice() : [operatorResponses];
+  const controllerResponses = Array.isArray(controllerRefreshResponses) ? controllerRefreshResponses.slice() : [controllerRefreshResponses];
   const window = {
     location: { pathname: initialLocation.pathname || '/', search: initialLocation.search || '', hash: initialLocation.hash || '' },
     listeners: {},
@@ -589,10 +591,15 @@ async function render(operatorResponses, initialHash = '') {
     dispatchHashChange() { if (this.listeners.hashchange) this.listeners.hashchange({ type: 'hashchange' }); },
   };
   const history = { replaceState(_state, _title, url) { const [pathAndQuery, hash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
-  const fetch = (url) => {
+  const fetch = (url, options = {}) => {
+    const method = String(options?.method || 'GET').toUpperCase();
     fetchCalls.push(String(url));
+    fetchRequests.push({ url: String(url), method });
     if (url === '/v1/operator/context') return Promise.resolve(responses.shift());
+    if (url === '/v1/controller/refresh' && method === 'POST') return Promise.resolve(controllerResponses.shift());
     if (url === '/v1/overview/applications') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleApplications) });
+    if (url === '/v1/overview/applications/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve({ ...sampleApplications[0], rollout: { execution: [] }, conditions: [], history: [] }) });
+    if (url === '/v1/overview/deployments/payments-api-prod/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-prod', events: [] }) });
     throw new Error('unexpected fetch url: ' + url);
   };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -603,8 +610,9 @@ async function render(operatorResponses, initialHash = '') {
   const detailsText = () => collectText(details()).join(' | ');
   const liveStatus = () => findFirst(document.getElementById('operator-context'), (node) => node.getAttribute && node.getAttribute('id') === 'operator-context-status');
   const liveStatusText = () => collectText(liveStatus()).join(' | ');
-  const refresh = () => findFirst(document.getElementById('operator-context'), (node) => node.tagName === 'BUTTON' && node.textContent.includes('Refresh'));
-  return { document, window, text, compactText, details, detailsText, liveStatus, liveStatusText, fetchCalls, refresh };
+  const refresh = () => findFirst(document.getElementById('operator-context'), (node) => node.tagName === 'BUTTON' && (node.textContent.includes('Refresh context') || node.textContent.includes('Refreshing…')));
+  const controllerRefresh = () => findFirst(document.getElementById('operator-context'), (node) => node.tagName === 'BUTTON' && (node.textContent.includes('Refresh controller') || node.textContent.includes('Requesting refresh…')));
+  return { document, window, text, compactText, details, detailsText, liveStatus, liveStatusText, fetchCalls, fetchRequests, refresh, controllerRefresh };
 }
 (async () => {
   const firstContext = { trustedHeaders: { enabled: true }, enforcement: { mode: 'trusted_front_door_read_write', summary: 'trusted front-door identity, roles, and deployment allowlists are enforcing guarded operator read/write routes' }, identity: { authenticated: true, name: 'Front Door Operator', email: 'frontdoor@example.com' }, identityHeaderSupport: { canonical: ['X-Tenet-Authenticated-Id', 'X-Tenet-Authenticated-Name', 'X-Tenet-Authenticated-Email'], aliases: ['X-User-ID', 'X-User-Name', 'X-User-Email'] }, identityProvenance: { idSource: 'canonical', nameSource: 'alias', emailSource: 'absent' }, actor: { available: true, id: 'actor-123', name: 'Release Operator', email: 'release@example.com' }, actorHeaderSupport: { canonical: ['X-Tenet-Actor-Id', 'X-Tenet-Actor-Name', 'X-Tenet-Actor-Email'], aliases: ['X-User-ID', 'X-User-Name', 'X-User-Email'] }, actorProvenance: { idSource: 'canonical', nameSource: 'alias', emailSource: 'absent' }, actorAttribution: { available: true, source: 'explicit_actor_headers', summary: 'persisted plan/apply/audit actor fields will use explicit X-Tenet-Actor-* headers, with X-User-* actor aliases only filling missing actor fields' }, roles: { names: ['viewer', 'operator'], supportedNames: ['viewer', 'operator', 'admin'], supportedHeaderNames: ['X-Tenet-Authenticated-Roles'], recognizedNames: ['viewer', 'operator'], unrecognizedNames: [], canRead: true, canWrite: true, provenance: { source: 'canonical' } }, deploymentAccess: { enforced: true, forwarded: true, supportedHeaderNames: ['X-Tenet-Authorized-Deployments', 'X-Tenet-Authorized-Projects', 'X-Tenet-Authorized-Environments'], names: ['payments-api-prod', 'worker-prod'], scopes: { forwarded: true, projects: ['payments', 'worker'], environments: ['prod'] }, summary: { available: true, forwardedCount: 2, matchedCount: 2, accountCount: 1, projectCount: 1, environmentCount: 2, unmatchedNames: [], projectEnvironmentExamples: [{ appRef: 'payments', environmentRef: 'prod', region: 'us-west-2', awsAccountId: '123456789012', deploymentCount: 1, exampleDeployments: ['payments-api-prod'] }, { appRef: 'worker', environmentRef: 'prod', region: 'us-west-2', awsAccountId: '123456789012', deploymentCount: 1, exampleDeployments: ['worker-prod'] }] } }, authRuntime: { tenetManagedLogin: { configured: true, active: false, provider: 'github', requiredSettings: ['TENET_AUTH_PROVIDER', 'TENET_GITHUB_OAUTH_CLIENT_ID', 'TENET_GITHUB_OAUTH_CLIENT_SECRET', 'TENET_AUTH_STATE_STORE_PATH', 'TENET_AUTH_IDENTITY_STORE_PATH', 'TENET_AUTH_SESSION_SECRET'], missingSettings: [], loginRoute: '/auth/login', callbackRoute: '/auth/callback', sessionCookieName: 'tenet_session', sessionCookiePath: '/', sessionCookieHttpOnly: true, sessionCookieSameSite: 'Lax', sessionCookieSecureOverride: false, sessionCookieSecureForRequest: false, sessionCookieSecureSources: [], oauthStateTtlSeconds: 600, sessionTtlSeconds: 43200, sessionExpiryEnforced: true, providerAccessTokenStored: false, providerAccessTokenReturned: false, providerTokenRefreshSupported: false, providerTokenRevocationSupported: false, logoutClearsSessionCookie: false, logoutRevokesProviderToken: false, stateStoreConfigured: true, identityStoreConfigured: true, sessionSecretConfigured: true, unavailableReason: 'login/callback/session routes are not wired yet' } }, desiredStateSource: { configured: true, kind: 'github', github: { repository: 'DevopsArtFactory/tenet', ref: 'refs/heads/main', path: 'catalog', baseUrl: 'https://api.github.com' }, controllerRefresh: { configured: true, available: true, backend: 'redis', channel: 'tenet:controller-refresh', status: 'available', reason: 'GitHub desired-state source can publish accepted matching push webhooks to the Redis controller-refresh handoff', diagnosticOnly: true }, webhookMatchStatuses: ['matched', 'repository_mismatch', 'ref_mismatch', 'path_untouched', 'filesystem_source', 'not_configured'], webhookProcessedFalseReasons: ['deleted_ref_ignored', 'repository_mismatch', 'ref_mismatch', 'path_untouched', 'filesystem_source', 'controller_refresh_unavailable'] }, accessVerdicts: { operatorRead: { allowed: true, reason: 'guarded operator read prerequisites are satisfied for this request', requiresAuthenticatedIdentity: true, requiresViewerCapableRole: true, exampleRoutes: ['GET /v1/overview/applications', 'GET /v1/status/deployments', 'GET /v1/catalog/deployments', 'GET /v1/audit-logs'], requiredTrustedHeaders: ['X-Tenet-Authenticated-Id', 'X-User-ID', 'X-Tenet-Authenticated-Roles'] }, operatorWrite: { allowed: true, reason: 'guarded operator write prerequisites are satisfied for this request', requiresAuthenticatedIdentity: true, requiresOperatorRole: true, exampleRoutes: ['POST /v1/plans/deployments/{deploymentName}', 'POST /v1/applies/plans/{planId}', 'POST /v1/applies/{applyId}/transitions'], requiredTrustedHeaders: ['X-Tenet-Authenticated-Id', 'X-User-ID', 'X-Tenet-Authenticated-Roles'] }, deploymentScopedRead: { allowed: true, reason: 'deployment-scoped reads can pass for deployments named in X-Tenet-Authorized-Deployments or matched by X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments', requiresAuthenticatedIdentity: true, requiresViewerCapableRole: true, requiresExactDeploymentAllowlistMatch: true, acceptsProjectEnvironmentScopes: true, exampleRoutes: ['GET /v1/overview/deployments/{deploymentName}', 'GET /v1/status/deployments/{deploymentName}', 'GET /v1/audit-logs?deployment={deploymentName}'], requiredTrustedHeaders: ['X-Tenet-Authenticated-Id', 'X-User-ID', 'X-Tenet-Authenticated-Roles', 'X-Tenet-Authorized-Deployments', 'X-Tenet-Authorized-Projects', 'X-Tenet-Authorized-Environments'] }, deploymentScopedWrite: { allowed: true, reason: 'deployment-scoped writes can pass for deployments named in X-Tenet-Authorized-Deployments or matched by X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments', requiresAuthenticatedIdentity: true, requiresOperatorRole: true, requiresExactDeploymentAllowlistMatch: true, acceptsProjectEnvironmentScopes: true, exampleRoutes: ['POST /v1/plans/deployments/{deploymentName}', 'POST /v1/applies/plans/{planId}'], requiredTrustedHeaders: ['X-Tenet-Authenticated-Id', 'X-User-ID', 'X-Tenet-Authenticated-Roles', 'X-Tenet-Authorized-Deployments', 'X-Tenet-Authorized-Projects', 'X-Tenet-Authorized-Environments'] }, collectionRead: { allowed: true, reason: 'collection reads are filtered to the union of exact deployment grants and project/environment-scoped catalog matches', requiresAuthenticatedIdentity: true, requiresViewerCapableRole: true, filtersCollectionsByDeploymentAccess: true, exampleRoutes: ['GET /v1/overview/applications', 'GET /v1/status/deployments', 'GET /v1/catalog/deployments', 'GET /v1/overview/accounts', 'GET /v1/audit-logs'], requiredTrustedHeaders: ['X-Tenet-Authenticated-Id', 'X-User-ID', 'X-Tenet-Authenticated-Roles', 'X-Tenet-Authorized-Deployments', 'X-Tenet-Authorized-Projects', 'X-Tenet-Authorized-Environments'] }, catalogRead: { allowed: true, reason: 'raw catalog reads are filtered to deployment-visible desired-state metadata before returning catalog collections or summaries', requiresAuthenticatedIdentity: true, requiresViewerCapableRole: true, filtersCollectionsByDeploymentAccess: true, exampleRoutes: ['GET /v1/catalog/deployments', 'GET /v1/catalog/accounts', 'GET /v1/catalog/placements', 'GET /v1/catalog/topology', 'GET /v1/catalog/summary'], requiredTrustedHeaders: ['X-Tenet-Authenticated-Id', 'X-User-ID', 'X-Tenet-Authenticated-Roles', 'X-Tenet-Authorized-Deployments', 'X-Tenet-Authorized-Projects', 'X-Tenet-Authorized-Environments'] } } };
@@ -854,6 +862,79 @@ async function render(operatorResponses, initialHash = '') {
   if (!unavailableGitHubSource.detailsText().includes('Controller refresh: GitHub source configured; Redis controller-refresh handoff unavailable. Diagnostic only; no webhook is sent from this page. — desired-state source uses GitHub, but Redis controller-refresh handoff is not configured for this API instance')) throw new Error('expected GitHub Redis-unavailable controller-refresh diagnostic');
   const unavailableRefreshPill = findFirst(unavailableGitHubSource.document.getElementById('operator-context'), (node) => String(node.className || '').includes('operator-context-warning') && node.textContent.includes('Redis controller-refresh handoff unavailable'));
   if (!unavailableRefreshPill) throw new Error('expected unavailable GitHub refresh warning pill');
+
+  if (!ready.controllerRefresh() || ready.controllerRefresh().disabled) throw new Error('expected available GitHub Redis handoff to enable manual controller refresh');
+  if (!ready.detailsText().includes('POST /v1/controller/refresh')) throw new Error('expected expanded diagnostics to expose manual controller refresh route');
+  if (!filesystemSource.controllerRefresh() || !filesystemSource.controllerRefresh().disabled) throw new Error('filesystem controller-refresh no-op should disable the manual controller refresh button');
+  filesystemSource.controllerRefresh().dispatch('click');
+  await settle();
+  if (filesystemSource.fetchRequests.some((request) => request.method === 'POST' && request.url === '/v1/controller/refresh')) throw new Error('filesystem source must not POST manual controller refresh');
+  if (!unavailableGitHubSource.controllerRefresh() || !unavailableGitHubSource.controllerRefresh().disabled) throw new Error('unavailable Redis handoff should disable the manual controller refresh button');
+  unavailableGitHubSource.controllerRefresh().dispatch('click');
+  await settle();
+  if (unavailableGitHubSource.fetchRequests.some((request) => request.method === 'POST' && request.url === '/v1/controller/refresh')) throw new Error('unavailable controller-refresh handoff must not POST manual refresh');
+
+  const manualSuccess = await render(
+    { ok: true, json: () => Promise.resolve(firstContext) },
+    { pathname: '/embedded', search: '?page=application&deployment=payments-api-prod', hash: '#operator-context-access-details-panel' },
+    { ok: true, status: 202, json: () => Promise.resolve({ status: 'published', controllerRefresh: { requestId: 'manual-refresh-123', deliveryId: 'manual-delivery-456' } }) },
+  );
+  manualSuccess.controllerRefresh().dispatch('click');
+  if (!manualSuccess.controllerRefresh().disabled) throw new Error('manual controller refresh button should disable while POST is in flight');
+  await settle();
+  const manualSuccessPosts = manualSuccess.fetchRequests.filter((request) => request.method === 'POST' && request.url === '/v1/controller/refresh');
+  if (manualSuccessPosts.length !== 1) throw new Error('expected exactly one manual controller refresh POST, got ' + JSON.stringify(manualSuccess.fetchRequests));
+  if (manualSuccess.window.location.pathname !== '/embedded' || manualSuccess.window.location.search !== '?page=application&deployment=payments-api-prod' || manualSuccess.window.location.hash !== '#operator-context-access-details-panel') throw new Error('manual controller refresh should preserve bookmarkable URL state');
+  if (!manualSuccess.text().includes('Controller refresh requested: published. Request manual-refresh-123; delivery manual-delivery-456.')) throw new Error('expected published manual controller refresh success copy: ' + manualSuccess.text());
+  if (!manualSuccess.liveStatusText().includes('Controller refresh requested: published. Request manual-refresh-123; delivery manual-delivery-456.')) throw new Error('expected compact live region to announce manual controller refresh success');
+
+  const manualFilesystemNoop = await render(
+    { ok: true, json: () => Promise.resolve(firstContext) },
+    '',
+    { ok: true, status: 200, json: () => Promise.resolve({ status: 'filesystem_noop', reason: 'desired-state source uses the filesystem catalog' }) },
+  );
+  manualFilesystemNoop.controllerRefresh().dispatch('click');
+  await settle();
+  if (!manualFilesystemNoop.text().includes('Controller refresh skipped: filesystem source; webhook refresh handoff is a no-op. desired-state source uses the filesystem catalog')) throw new Error('expected filesystem_noop manual refresh copy');
+
+  const manualUnavailable = await render(
+    { ok: true, json: () => Promise.resolve(firstContext) },
+    '',
+    { ok: false, status: 503, text: () => Promise.resolve('controller refresh handoff unavailable') },
+  );
+  manualUnavailable.controllerRefresh().dispatch('click');
+  await settle();
+  if (!manualUnavailable.text().includes('Controller refresh unavailable: controller refresh unavailable (503): controller refresh handoff unavailable')) throw new Error('expected unavailable manual refresh copy');
+
+  const manualAuthRequired = await render(
+    { ok: true, json: () => Promise.resolve(firstContext) },
+    { pathname: '/', search: '?q=payments', hash: '#operator-context-access-details-panel' },
+    { ok: false, status: 401, text: () => Promise.resolve('unauthenticated: authenticated identity is required for this operator write route') },
+  );
+  manualAuthRequired.controllerRefresh().dispatch('click');
+  await settle();
+  if (!manualAuthRequired.text().includes('Authenticated operator required')) throw new Error('expected auth-required heading on manual controller refresh');
+  if (!manualAuthRequired.text().includes('Tenet rejected POST /v1/controller/refresh because authenticated identity is required on operator write routes. Tenet does not start a built-in GitHub OAuth login, enterprise SSO login, or Tenet-managed browser session from this page; retry Refresh controller for this same bookmarkable workspace through the trusted front door')) throw new Error('expected write auth guidance for manual controller refresh');
+  if (manualAuthRequired.window.location.search !== '?q=payments' || manualAuthRequired.window.location.hash !== '#operator-context-access-details-panel') throw new Error('manual auth failure should preserve bookmarkable URL state');
+
+  const manualRoleRequired = await render(
+    { ok: true, json: () => Promise.resolve(firstContext) },
+    '',
+    { ok: false, status: 403, text: () => Promise.resolve('forbidden: authenticated operator role is required for this operator write route') },
+  );
+  manualRoleRequired.controllerRefresh().dispatch('click');
+  await settle();
+  if (!manualRoleRequired.text().includes('Operator role required')) throw new Error('expected role-required heading on manual controller refresh');
+  if (!manualRoleRequired.text().includes("Tenet rejected POST /v1/controller/refresh after recognizing the caller's identity because this operator write route requires a trusted forwarded operator/admin role. Retry Refresh controller through the trusted front door")) throw new Error('expected write role guidance for manual controller refresh');
+
+  const manualGenericError = await render(
+    { ok: true, json: () => Promise.resolve(firstContext) },
+    '',
+    { ok: false, status: 500, text: () => Promise.resolve('redis publish failed') },
+  );
+  manualGenericError.controllerRefresh().dispatch('click');
+  await settle();
+  if (!manualGenericError.text().includes('Controller refresh failed: controller refresh request failed (500): redis publish failed')) throw new Error('expected generic manual controller refresh failure copy');
 
   const noActorContext = { ...firstContext, actor: { available: false, reason: 'actor information is unavailable because no authenticated request context was available for this local request' }, actorProvenance: { idSource: 'absent', nameSource: 'absent', emailSource: 'absent' }, actorAttribution: { available: false, source: 'unavailable', summary: 'persisted plan/apply/audit actor fields will remain unavailable until explicit actor headers or trusted authenticated identity are supplied; actor attribution does not authorize routes' } };
   const noActor = await render({ ok: true, json: () => Promise.resolve(noActorContext) });

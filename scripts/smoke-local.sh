@@ -1579,6 +1579,12 @@ assert "via project/environment scope" in ui, ui
 assert "const operatorContextDesiredStateSourceEntries = (context) => {" in ui, ui
 assert "Desired-state source:" in ui, ui
 assert "Controller refresh:" in ui, ui
+assert "const operatorContextControllerRefreshRoute = () => '/v1/controller/refresh';" in ui, ui
+assert "const operatorContextControllerRefreshWriteRoute = () => 'POST /v1/controller/refresh';" in ui, ui
+assert "const operatorContextManualControllerRefreshAvailable = (context) => {" in ui, ui
+assert "const operatorContextManualControllerRefreshResultLabel = (result) => {" in ui, ui
+assert "Manual controller refresh route:" in ui, ui
+assert "const requestManualControllerRefresh = () => fetch(operatorContextControllerRefreshRoute(), { method: 'POST' })" in ui, ui
 assert "const operatorContextDesiredStateReadinessLabel = (context) => {" in ui, ui
 assert "Desired state:" in ui, ui
 assert "operatorContextDesiredStateReadinessLabel(context)" in ui, ui
@@ -1623,7 +1629,13 @@ assert 'forwarded match catalog' in ui, ui
 assert 'unmatched' in ui, ui
 assert "loadOperatorContextBanner().catch(() => {});" in ui, ui
 assert "loadOperatorContextBanner({ refresh: true });" in ui, ui
+assert "const handleManualControllerRefresh = () => {" in ui, ui
+assert "operatorWriteAuthRequiredMessage(operatorContextControllerRefreshWriteRoute(), 'Refresh controller')" in ui, ui
+assert "operatorWriteRoleRequiredMessage(operatorContextControllerRefreshWriteRoute(), 'Refresh controller')" in ui, ui
+assert "operatorWriteForbiddenMessage(operatorContextControllerRefreshWriteRoute(), 'Refresh controller')" in ui, ui
 assert 'Refresh context' in ui, ui
+assert 'Refresh controller' in ui, ui
+assert 'Requesting refresh…' in ui, ui
 assert 'Last checked ${timestamp.toLocaleString()}' in ui, ui
 assert 'lastCheckedAt: new Date()' in ui, ui
 assert 'id="operator-context-status" role="status" aria-live="polite" aria-atomic="true"' in ui, ui
