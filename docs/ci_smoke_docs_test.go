@@ -478,10 +478,20 @@ func TestAuthToggleDocsUseReadableBooleanExamples(t *testing.T) {
 		}
 	}
 
+	overviewUIDoc := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
+	for _, fragment := range []string{
+		"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` is also enabled, those same write routes require",
+	} {
+		if !strings.Contains(overviewUIDoc, fragment) {
+			t.Fatalf("expected overview UI docs to keep balanced inline-code boolean auth-toggle example %q", fragment)
+		}
+	}
+
 	redactedPlaceholder := strings.Repeat("*", 3)
 	for docName, docText := range map[string]string{
 		"overview dashboard docs": overviewText,
 		"local runtime docs":      localRuntimeText,
+		"overview UI docs":        overviewUIDoc,
 	} {
 		for _, toggle := range []string{
 			"TENET_API_TRUST_AUTHENTICATED_HEADERS",
