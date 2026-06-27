@@ -171,8 +171,26 @@ func TestLocalRuntimeDocsDescribeComposeRedisStatusStore(t *testing.T) {
 func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	redactedProviderSetting := redactedAuthProviderPlaceholder()
-	if strings.Contains(operatorContractsDoc, redactedProviderSetting) {
-		t.Fatalf("expected operator contracts doc to use concrete non-secret provider modes instead of placeholder %q", redactedProviderSetting)
+	for _, source := range []struct {
+		name string
+		body string
+	}{
+		{name: "docs/architecture/tenet-v1-operator-contracts.md", body: operatorContractsDoc},
+		{name: "docs/architecture/tenet-v1-enterprise-sso.md", body: readRepoFile(t, "docs/architecture/tenet-v1-enterprise-sso.md")},
+	} {
+		if strings.Contains(source.body, redactedProviderSetting) {
+			t.Fatalf("expected %s to use concrete non-secret auth provider examples instead of placeholder %q", source.name, redactedProviderSetting)
+		}
+		for _, providerExample := range []string{
+			"`TENET_AUTH_PROVIDER=github`",
+			"`TENET_AUTH_PROVIDER=google_oidc`",
+			"`TENET_AUTH_PROVIDER=okta_oidc`",
+			"`TENET_AUTH_PROVIDER=okta_saml`",
+		} {
+			if !strings.Contains(source.body, providerExample) {
+				t.Fatalf("expected %s enterprise SSO docs to include concrete provider example %q", source.name, providerExample)
+			}
+		}
 	}
 	for _, fragment := range []string{
 		"`docs/architecture/tenet-v1-enterprise-sso.md`",
@@ -185,6 +203,8 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		"`TENET_AUTH_PROVIDER=google_oidc`",
 		"`TENET_AUTH_PROVIDER=okta_oidc`",
 		"`TENET_AUTH_PROVIDER=okta_saml`",
+		"When the runtime variables are complete for Google (`TENET_AUTH_PROVIDER=google_oidc`",
+		`"provider": "google_oidc"`,
 	} {
 		if !strings.Contains(operatorContractsDoc, fragment) {
 			t.Fatalf("expected operator contracts doc enterprise SSO boundary to include %q", fragment)
