@@ -103,10 +103,10 @@ go run ./cmd/tenet-api
 ```
 
 Useful local probes:
-
 ```bash
 curl -fsS http://localhost:18083/v1/catalog/summary
 curl -fsS http://localhost:18083/v1/overview/applications
+curl -fsS http://localhost:18083/v1/status/deployments
 curl -fsS http://localhost:18083/v1/operator/context
 ```
 
@@ -180,9 +180,9 @@ Common bookmarkable routes:
 - `/?page=audit`
 
 Primary operator APIs:
-
 - `GET /v1/overview/applications`
 - `GET /v1/overview/deployments/{deploymentName}`
+- `GET /v1/status/deployments` and `GET /v1/status/deployments/{deploymentName}` for raw persisted runtime snapshots
 - `GET /v1/overview/deployments/{deploymentName}/events` (or `GET /v1/overview/deployments/{deploymentName}/events?source={source}&limit={positiveInteger}` for exact source-filtered, bounded controller-history reads)
 - `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}][&containerName={container}][&instanceId={ec2InstanceId}][&clusterArn={ecsClusterArn}]`
   (recent-log responses expose `resultScope.limit`, `resultScope.returned`,
