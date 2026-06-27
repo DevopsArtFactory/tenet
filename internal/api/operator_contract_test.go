@@ -1996,6 +1996,7 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`POST /api/v1/github/webhook`",
 		"`TENET_GITHUB_WEBHOOK_SECRET`",
+		"`TENET_GITHUB_WEBHOOK_SECRET=smoke-webhook-secret`",
 		"`smoke-webhook-secret`",
 		"`X-GitHub-Delivery`",
 		"`X-GitHub-Event`",
@@ -2015,6 +2016,18 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 	} {
 		if !strings.Contains(operatorContractsDoc, fragment) {
 			t.Fatalf("expected operator contracts doc github webhook contract to include %q", fragment)
+		}
+	}
+	for _, source := range []struct {
+		name string
+		body string
+	}{
+		{name: "README.md", body: readRepoFile(t, "README.md")},
+		{name: "docs/architecture/tenet-v1-local-runtime.md", body: readRepoFile(t, "docs/architecture/tenet-v1-local-runtime.md")},
+		{name: "docs/architecture/tenet-v1-operator-contracts.md", body: operatorContractsDoc},
+	} {
+		if strings.Contains(source.body, "TENET_GITHUB_WEBHOOK_SECRET=*** so") {
+			t.Fatalf("expected %s to close the local webhook secret inline-code example", source.name)
 		}
 	}
 
