@@ -1656,6 +1656,9 @@ assert "operatorWriteForbiddenMessage(operatorContextControllerRefreshWriteRoute
 assert 'Refresh context' in ui, ui
 assert 'Refresh controller' in ui, ui
 assert 'Requesting refresh…' in ui, ui
+assert 'Last refresh requested ·' in ui, ui
+assert "const controllerRefreshAuditURL = () => buildPageURL('audit', {" in ui, ui
+assert "action: 'controller.refresh.requested'" in ui, ui
 assert 'Last checked ${timestamp.toLocaleString()}' in ui, ui
 assert 'lastCheckedAt: new Date()' in ui, ui
 assert 'id="operator-context-status" role="status" aria-live="polite" aria-atomic="true"' in ui, ui
