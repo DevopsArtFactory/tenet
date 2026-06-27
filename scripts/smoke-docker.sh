@@ -791,6 +791,27 @@ def assert_fragments(label, body, fragments):
     for fragment in fragments:
         assert fragment in body, {"label": label, "missing": fragment}
 
+def assert_ecs_service_deployments_contract(label, payload):
+    service = payload.get("ecsService") or {}
+    deployments = service.get("deployments")
+    if deployments is None:
+        return
+    assert isinstance(deployments, list), {label: payload}
+    string_fields = ("id", "status", "rolloutState", "rolloutStateReason", "taskDefinition", "createdAt", "updatedAt")
+    count_fields = ("desiredCount", "runningCount", "pendingCount")
+    bool_fields = ("primary", "active")
+    for deployment in deployments:
+        assert isinstance(deployment, dict), {label: payload}
+        for field in string_fields:
+            if field in deployment:
+                assert isinstance(deployment.get(field), str) and deployment[field].strip(), {label: payload}
+        for field in count_fields:
+            if field in deployment:
+                assert type(deployment.get(field)) is int and deployment[field] >= 0, {label: payload}
+        for field in bool_fields:
+            if field in deployment:
+                assert isinstance(deployment.get(field), bool), {label: payload}
+
 
 summary = read_json("SUMMARY_PATH")
 applications = read_json("APPLICATIONS_PATH")
@@ -1332,6 +1353,7 @@ if worker_resource_inspection["available"]:
     assert maximum_percent is None or isinstance(maximum_percent, int), worker_resource_inspection
     assert health_check_grace_period_seconds is None or isinstance(health_check_grace_period_seconds, int), worker_resource_inspection
     assert isinstance(worker_resource_inspection["ecsService"].get("deployments", []), list), worker_resource_inspection
+    assert_ecs_service_deployments_contract("worker_resource_inspection", worker_resource_inspection)
     assert isinstance(worker_resource_inspection["ecsService"].get("events", []), list), worker_resource_inspection
 else:
     assert isinstance(worker_resource_inspection.get("unavailableReason"), str) and worker_resource_inspection["unavailableReason"], worker_resource_inspection
@@ -1345,6 +1367,7 @@ assert isinstance(selected_worker_resource_inspection.get("lookupContext"), dict
 if selected_worker_resource_inspection["available"]:
     assert selected_worker_resource_inspection.get("source") == "ecs_service", selected_worker_resource_inspection
     assert isinstance(selected_worker_resource_inspection.get("ecsService"), dict), selected_worker_resource_inspection
+    assert_ecs_service_deployments_contract("selected_worker_resource_inspection", selected_worker_resource_inspection)
     worker_inspection_scope = selected_worker_resource_inspection.get("resultScope")
     assert isinstance(worker_inspection_scope, dict), selected_worker_resource_inspection
     assert worker_inspection_scope.get("sampleType") == "ecsTasks", selected_worker_resource_inspection
