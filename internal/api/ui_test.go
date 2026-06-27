@@ -29,6 +29,24 @@ func TestEmbeddedUITopLevelEmptyStatesAreStatusRegions(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIRendersDeploymentEventSourceSummaryChipsSafely(t *testing.T) {
+	script := embeddedUIScriptForTest(t)
+	for _, want := range []string{
+		"const deploymentEventsSourceSummaryEntries = (result) => {",
+		"const createDeploymentEventsSourceSummaryChips = (result) => {",
+		"deployment-events-source-summary",
+		"deployment-events-source-chip",
+		"Runtime event source summary",
+		"`Source mix · ${source} · ${deploymentEventsCountText(count)}`",
+		"const sourceSummaryChips = createDeploymentEventsSourceSummaryChips(result);",
+		"...(sourceSummaryChips ? [sourceSummaryChips] : [])",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("expected embedded UI source-summary chip contract %q", want)
+		}
+	}
+}
+
 func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 	body := string(indexHTML)
 

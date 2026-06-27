@@ -4091,6 +4091,7 @@ func TestApplicationDetailPageDeploymentEventsTimelineStatesWithNodeHarness(t *t
 		"managedDriftSummary": map[string]any{"total": 2, "high": 1, "medium": 1, "low": 0},
 		"retention":           map[string]any{"limit": 10, "retainedEventCount": 10, "status": "at_retention_limit"},
 		"resultScope":         map[string]any{"requestedLimit": 10, "effectiveLimit": 10, "returnedEventCount": 2, "totalEventCount": 10, "retentionLimit": 10, "retainedEventCount": 10, "retentionStatus": "at_retention_limit", "newestEventTimestamp": "2026-04-16T07:10:00Z", "oldestEventTimestamp": "2026-04-16T07:05:00Z", "truncationStatus": "truncated"},
+		"sourceSummary":       []map[string]any{{"source": "controller", "count": 7}, {"source": "github", "count": 3}},
 		"events": []map[string]any{
 			{
 				"timestamp":     "2026-04-16T07:05:00Z",
@@ -4267,6 +4268,9 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   if (!readyText.includes('2 events in latest 10-event window · newest controller event first')) throw new Error('expected event ordering guidance');
   if (!readyText.includes('Last refreshed ·')) throw new Error('expected successful runtime-events read to render a freshness cue');
   if (!readyText.includes('Requested window · 10 events') || !readyText.includes('Effective window · 10 events') || !readyText.includes('Returned events · 2 events') || !readyText.includes('Total retained events · 10 events') || !readyText.includes('Retention limit · 10 events') || !readyText.includes('Retention retained · 10 retained events') || !readyText.includes('Retention status · Controller retention cap reached; older runtime history may have been dropped') || !readyText.includes('Newest event · 2026-04-16T07:10:00Z') || !readyText.includes('Oldest event · 2026-04-16T07:05:00Z') || !readyText.includes('Window status · Query-limited response; increase Event window to inspect older returned history')) throw new Error('expected runtime-events resultScope and retention summary from bounded deployment events payload');
+  if (!readyText.includes('Source mix · controller · 7 events') || !readyText.includes('Source mix · github · 3 events')) throw new Error('expected runtime-events sourceSummary chips for unfiltered payload');
+  let sourceSummaryChips = collectNodes(loadingView.document.getElementById('accounts'), (node) => String(node.className || '').includes('deployment-events-source-chip'));
+  if (sourceSummaryChips.length !== 2) throw new Error('expected two sourceSummary chips for unfiltered payload, got ' + sourceSummaryChips.length);
   if (!readyText.includes('Managed drift summary · 2 total · 1 high · 1 medium · 0 low')) throw new Error('expected managed drift severity summary from deployment events payload');
   if (!readyText.includes('Shifted 50 percent of traffic')) throw new Error('expected newest controller event summary');
   if (!readyText.includes('Time · 2026-04-16T07:10:00Z')) throw new Error('expected newest controller event timestamp');
@@ -4361,6 +4365,7 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   const selectedSourceText = collectText(selectedSourceView.document.getElementById('accounts')).join(' | ');
   if (!selectedSourceText.includes('Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=25&source=controller.')) throw new Error('expected runtime-events intro to show the selected source route');
   if (!selectedSourceText.includes('Source filter · controller')) throw new Error('expected runtime-events scope summary to show the selected source filter');
+  if (!selectedSourceText.includes('Source mix · controller · 7 events') || !selectedSourceText.includes('Source mix · github · 3 events')) throw new Error('expected source-filtered runtime-events payload to keep retained sourceSummary chips');
   const eventSourceSelect = collectNodes(selectedSourceView.document.getElementById('accounts'), (node) => node.tagName === 'SELECT').find((node) => node.dataset.toolbarField === 'Event source');
   if (!eventSourceSelect) throw new Error('expected Event source selector on application runtime-events section');
   if (eventSourceSelect.disabled) throw new Error('expected Event source selector enabled after runtime-events load');
@@ -4389,17 +4394,20 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
 
   const filteredEmptyView = await render((url) => {
     if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === defaultSourceURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', retention: { limit: 10, retainedEventCount: 10, status: 'within_retention_limit' }, resultScope: { sourceFilter: 'controller', requestedLimit: 10, effectiveLimit: 10, returnedEventCount: 0, totalEventCount: 0, retentionLimit: 10, retainedEventCount: 10, retentionStatus: 'within_retention_limit', truncationStatus: 'not_truncated' }, events: [] }) });
+    if (url === defaultSourceURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', sourceSummary: [{ source: 'deployment-controller', count: 6 }, { source: 'github', count: 4 }], retention: { limit: 10, retainedEventCount: 10, status: 'within_retention_limit' }, resultScope: { sourceFilter: 'controller', requestedLimit: 10, effectiveLimit: 10, returnedEventCount: 0, totalEventCount: 0, retentionLimit: 10, retainedEventCount: 10, retentionStatus: 'within_retention_limit', truncationStatus: 'not_truncated' }, events: [] }) });
     throw new Error('unexpected filtered-empty fetch url: ' + url);
   }, '?page=application&deployment=payments-api-staging&eventSource=controller');
   const filteredEmptyText = collectText(filteredEmptyView.document.getElementById('accounts')).join(' | ');
   if (!filteredEmptyText.includes('No controller runtime events match source filter "controller" in the latest 10-event window. Clear Event source or refresh before treating controller history as absent.')) throw new Error('expected source-filtered empty runtime-events guidance, got ' + filteredEmptyText);
   if (filteredEmptyText.includes('No controller runtime events are retained for this application yet.')) throw new Error('expected source-filtered empty copy to differ from no retained controller history');
   if (!filteredEmptyText.includes('Source filter · controller')) throw new Error('expected filtered-empty scope summary to keep selected source filter metadata');
+  if (!filteredEmptyText.includes('Source mix · deployment-controller · 6 events') || !filteredEmptyText.includes('Source mix · github · 4 events')) throw new Error('expected source-filtered empty payload to keep retained sourceSummary chips');
+  sourceSummaryChips = collectNodes(filteredEmptyView.document.getElementById('accounts'), (node) => String(node.className || '').includes('deployment-events-source-chip'));
+  if (sourceSummaryChips.length !== 2) throw new Error('expected two sourceSummary chips for source-filtered empty payload, got ' + sourceSummaryChips.length);
 
   const emptyView = await render((url) => {
     if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === eventsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', retention: { limit: 10, retainedEventCount: 0, status: 'within_retention_limit' }, resultScope: { requestedLimit: 10, effectiveLimit: 10, returnedEventCount: 0, totalEventCount: 0, retentionLimit: 10, retainedEventCount: 0, retentionStatus: 'within_retention_limit', truncationStatus: 'not_truncated' }, events: [] }) });
+    if (url === eventsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', sourceSummary: [], retention: { limit: 10, retainedEventCount: 0, status: 'within_retention_limit' }, resultScope: { requestedLimit: 10, effectiveLimit: 10, returnedEventCount: 0, totalEventCount: 0, retentionLimit: 10, retainedEventCount: 0, retentionStatus: 'within_retention_limit', truncationStatus: 'not_truncated' }, events: [] }) });
     throw new Error('unexpected fetch url: ' + url);
   });
   const emptyText = collectText(emptyView.document.getElementById('accounts')).join(' | ');
@@ -4407,6 +4415,9 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   if (!emptyText.includes('Returned events · 0 events') || !emptyText.includes('Total retained events · 0 events') || !emptyText.includes('Retention limit · 10 events') || !emptyText.includes('Retention retained · 0 retained events') || !emptyText.includes('Retention status · Within controller retention limit') || !emptyText.includes('Window status · Query window did not truncate the retained history')) throw new Error('expected empty deployment events resultScope summary to explain no retained history');
   if (emptyText.includes('Newest event ·') || emptyText.includes('Oldest event ·')) throw new Error('expected empty deployment events scope to omit event-window timestamps');
   if (!emptyText.includes('Last refreshed ·')) throw new Error('expected empty successful runtime-events read to keep a freshness cue');
+  if (emptyText.includes('Source mix ·')) throw new Error('expected empty sourceSummary payload to omit runtime-events sourceSummary chips');
+  sourceSummaryChips = collectNodes(emptyView.document.getElementById('accounts'), (node) => String(node.className || '').includes('deployment-events-source-chip'));
+  if (sourceSummaryChips.length !== 0) throw new Error('expected no sourceSummary chips when sourceSummary is empty, got ' + sourceSummaryChips.length);
   buttons = collectNodes(emptyView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
   if (!refreshEvents || refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled in empty state');
