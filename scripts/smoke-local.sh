@@ -1564,6 +1564,10 @@ assert "via project/environment scope" in ui, ui
 assert "const operatorContextDesiredStateSourceEntries = (context) => {" in ui, ui
 assert "Desired-state source:" in ui, ui
 assert "Controller refresh:" in ui, ui
+assert "const operatorContextDesiredStateReadinessLabel = (context) => {" in ui, ui
+assert "Desired state:" in ui, ui
+assert "operatorContextDesiredStateReadinessLabel(context)" in ui, ui
+assert "operatorContextDesiredStateReadinessClass(context)" in ui, ui
 assert "Webhook match statuses" in ui, ui
 assert "Webhook ignored reasons" in ui, ui
 assert "Diagnostic only; no webhook is sent from this page." in ui, ui

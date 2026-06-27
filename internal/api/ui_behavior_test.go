@@ -720,7 +720,8 @@ async function render(operatorResponses, initialHash = '') {
   if (!ready.detailsText().includes('Controller refresh: Redis controller-refresh handoff available (backend redis; channel tenet:controller-refresh). Diagnostic only; no webhook is sent from this page. — GitHub desired-state source can publish accepted matching push webhooks to the Redis controller-refresh handoff')) throw new Error('expected Redis controller-refresh diagnostics inside expanded access details');
   if (!ready.detailsText().includes('Webhook match statuses: matched, repository_mismatch, ref_mismatch, path_untouched, filesystem_source, not_configured')) throw new Error('expected webhook match status vocabulary inside expanded access details');
   if (!ready.detailsText().includes('Webhook ignored reasons: deleted_ref_ignored, repository_mismatch, ref_mismatch, path_untouched, filesystem_source, controller_refresh_unavailable')) throw new Error('expected webhook ignored reason vocabulary inside expanded access details');
-  if (ready.compactText().includes('Desired-state source:') || ready.compactText().includes('Controller refresh:') || ready.liveStatusText().includes('Desired-state source:') || ready.liveStatusText().includes('Webhook match statuses:')) throw new Error('desired-state source diagnostics should stay inside expanded access details');
+  if (!ready.compactText().includes('Desired state: GitHub catalog · Redis controller-refresh handoff available')) throw new Error('expected compact desired-state/controller-refresh readiness cue');
+  if (ready.compactText().includes('Desired-state source:') || ready.compactText().includes('Controller refresh:') || ready.liveStatusText().includes('Desired state:') || ready.liveStatusText().includes('Webhook match statuses:')) throw new Error('verbose desired-state source diagnostics should stay out of compact live status');
   if (!ready.detailsText().includes('Required trusted headers: X-Tenet-Authenticated-Id')) throw new Error('expected required trusted headers inside expanded access details');
 
   const deepLinked = await render({ ok: true, json: () => Promise.resolve(firstContext) }, '#operator-context-access-details-panel');
@@ -842,12 +843,14 @@ async function render(operatorResponses, initialHash = '') {
   if (!localPill) throw new Error('expected local unrestricted enforcement warning pill');
 
   const filesystemSource = await render({ ok: true, json: () => Promise.resolve(filesystemSourceContext) });
+  if (!filesystemSource.compactText().includes('Desired state: filesystem catalog · filesystem source; webhook refresh handoff is a no-op')) throw new Error('expected compact filesystem source/controller-refresh readiness cue');
   if (!filesystemSource.detailsText().includes('Desired-state source: filesystem catalog (local_repository); GitHub webhooks are diagnostic-only in this mode')) throw new Error('expected filesystem desired-state source diagnostic');
   if (!filesystemSource.detailsText().includes('Controller refresh: filesystem source; webhook refresh handoff is a no-op. Diagnostic only; no webhook is sent from this page. — desired-state source uses the filesystem catalog, so GitHub webhook controller-refresh handoff is a no-op in this mode')) throw new Error('expected filesystem controller-refresh no-op diagnostic');
   const filesystemRefreshPill = findFirst(filesystemSource.document.getElementById('operator-context'), (node) => String(node.className || '').includes('operator-context-warning') && node.textContent.includes('filesystem source; webhook refresh handoff is a no-op'));
   if (!filesystemRefreshPill) throw new Error('expected filesystem refresh no-op warning pill');
 
   const unavailableGitHubSource = await render({ ok: true, json: () => Promise.resolve(unavailableGitHubSourceContext) });
+  if (!unavailableGitHubSource.compactText().includes('Desired state: GitHub catalog · GitHub source configured; Redis controller-refresh handoff unavailable')) throw new Error('expected compact unavailable GitHub source/controller-refresh readiness cue');
   if (!unavailableGitHubSource.detailsText().includes('Controller refresh: GitHub source configured; Redis controller-refresh handoff unavailable. Diagnostic only; no webhook is sent from this page. — desired-state source uses GitHub, but Redis controller-refresh handoff is not configured for this API instance')) throw new Error('expected GitHub Redis-unavailable controller-refresh diagnostic');
   const unavailableRefreshPill = findFirst(unavailableGitHubSource.document.getElementById('operator-context'), (node) => String(node.className || '').includes('operator-context-warning') && node.textContent.includes('Redis controller-refresh handoff unavailable'));
   if (!unavailableRefreshPill) throw new Error('expected unavailable GitHub refresh warning pill');

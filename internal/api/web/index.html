@@ -1281,6 +1281,19 @@
         const diagnostic = refresh.diagnosticOnly ? ' Diagnostic only; no webhook is sent from this page.' : '';
         return `Controller refresh: ${operatorContextControllerRefreshStatusLabel(refresh.status)}${fieldText}.${diagnostic}${reason}`;
       };
+      const operatorContextDesiredStateReadinessLabel = (context) => {
+        const source = operatorContextDesiredStateSource(context);
+        if (!source || typeof source !== 'object') return null;
+        const sourceLabel = source.configured ? operatorContextDesiredStateSourceKindLabel(source.kind) : 'not configured';
+        const refresh = source.controllerRefresh || null;
+        if (!refresh || typeof refresh !== 'object') return `Desired state: ${sourceLabel}`;
+        return `Desired state: ${sourceLabel} · ${operatorContextControllerRefreshStatusLabel(refresh.status)}`;
+      };
+      const operatorContextDesiredStateReadinessClass = (context) => {
+        const source = operatorContextDesiredStateSource(context);
+        const refresh = source?.controllerRefresh || null;
+        return source?.configured && refresh?.available ? '' : 'operator-context-warning';
+      };
       const operatorContextDesiredStateSourceListLabel = (source, field, label) => {
         const values = Array.isArray(source?.[field]) ? source[field].filter(Boolean) : [];
         return values.length ? `${label}: ${values.join(', ')}` : null;
@@ -1599,6 +1612,10 @@
           summary.textContent = operatorContextIdentityLabel(context);
           statusAnnouncement = `Operator context ready: ${summary.textContent}`;
           meta.append(createElement('span', '', `${context?.trustedHeaders?.enabled ? 'Trusted headers enabled' : 'Trusted headers disabled'} · ${operatorContextRoleLabel(context)} · ${operatorContextDeploymentAccessLabel(context)}`));
+          const desiredStateReadinessLabel = operatorContextDesiredStateReadinessLabel(context);
+          if (desiredStateReadinessLabel) {
+            meta.append(createElement('span', operatorContextDesiredStateReadinessClass(context), desiredStateReadinessLabel));
+          }
           const lastCheckedLabel = operatorContextLastCheckedLabel(operatorContextState.lastCheckedAt);
           const deploymentAccessSummary = operatorContextDeploymentAccessSummaryLabel(context);
           if (operatorContextState.refreshing) {
