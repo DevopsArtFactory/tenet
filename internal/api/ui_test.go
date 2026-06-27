@@ -2762,6 +2762,7 @@ func TestCISmokeWorkflowSyntaxChecksFastLaneScripts(t *testing.T) {
 		"internal/authidentity/*|internal/authidentity/**",
 		"internal/authstate/*|internal/authstate/**",
 		"internal/requestactor/*|internal/requestactor/**",
+		"internal/rbacpolicy/*|internal/rbacpolicy/**",
 		"internal/statusstore/*|internal/statusstore/**",
 		"internal/resourceaws/*|internal/resourceaws/**",
 		"internal/resourcelogs/*|internal/resourcelogs/**",
@@ -2769,8 +2770,8 @@ func TestCISmokeWorkflowSyntaxChecksFastLaneScripts(t *testing.T) {
 		"internal/planpreview/*|internal/planpreview/**",
 		"internal/applyrequest/*|internal/applyrequest/**",
 		"internal/auditlog/*|internal/auditlog/**",
-		"Docker smoke required because this PR touches a Compose/front-door/auth/API/controller, local desired-state/status fixture, catalog/domain/placement status read model, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
-		"Docker smoke skipped because this PR does not touch a Compose/front-door/auth/API/controller, local desired-state/status fixture, catalog/domain/placement status read model, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
+		"Docker smoke required because this PR touches a Compose/front-door/auth/API/controller, local desired-state/status fixture, catalog/domain/placement status read model, RBAC policy diagnostics, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
+		"Docker smoke skipped because this PR does not touch a Compose/front-door/auth/API/controller, local desired-state/status fixture, catalog/domain/placement status read model, RBAC policy diagnostics, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
 	} {
 		if !strings.Contains(scopeJob, fragment) {
 			t.Fatalf("expected docker-smoke-scope job to include %q", fragment)
