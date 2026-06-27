@@ -526,6 +526,24 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	}
 }
 
+func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditChips(t *testing.T) {
+	overviewText := readTextFile(t, "features/overview-dashboard.md")
+	section := markdownSection(t, overviewText, "### Deployment-scoped audit workspace")
+	for _, fragment := range []string{
+		"clearable toolbar chips",
+		"deployment/action/limit",
+		"removes only its selected control",
+		"preserves `q`, `sync`, `account`",
+		"remaining audit query state",
+		"removes stale `#audit-*` section anchors",
+		"reloads the audit timeline",
+	} {
+		if !strings.Contains(section, fragment) {
+			t.Fatalf("expected deployment-scoped audit workspace docs to include clearable chip contract %q", fragment)
+		}
+	}
+}
+
 func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{
@@ -575,6 +593,20 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 			t.Fatalf("expected operator contracts docs to include resource-detail troubleshooting summary contract %q", fragment)
 		}
 	}
+}
+
+func markdownSection(t *testing.T, text, heading string) string {
+	t.Helper()
+
+	start := strings.Index(text, heading)
+	if start < 0 {
+		t.Fatalf("expected markdown text to include heading %q", heading)
+	}
+	section := text[start+len(heading):]
+	if next := regexp.MustCompile(`(?m)^### `).FindStringIndex(section); next != nil {
+		section = section[:next[0]]
+	}
+	return section
 }
 
 func readTextFile(t *testing.T, path string) string {
