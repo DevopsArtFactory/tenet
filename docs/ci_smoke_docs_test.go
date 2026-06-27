@@ -346,7 +346,7 @@ func TestResourceEvidenceDocsLockOperatorFieldFamilies(t *testing.T) {
 	}
 }
 
-func TestOverviewDashboardAuthToggleDocsUseReadableBooleanExamples(t *testing.T) {
+func TestAuthToggleDocsUseReadableBooleanExamples(t *testing.T) {
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
 	for _, fragment := range []string{
 		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`",
@@ -366,17 +366,36 @@ func TestOverviewDashboardAuthToggleDocsUseReadableBooleanExamples(t *testing.T)
 		}
 	}
 
-	redactedPlaceholder := strings.Repeat("*", 3)
-	for _, toggle := range []string{
-		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION",
-		"TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION",
+	localRuntimeText := readTextFile(t, "architecture/tenet-v1-local-runtime.md")
+	for _, fragment := range []string{
+		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=true` trusts front-door-forwarded",
+		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true` requires authenticated identity",
+		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true` trusts `X-Tenet-Authenticated-Roles`",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` trusts `X-Tenet-Authorized-Deployments`",
 	} {
-		for _, placeholder := range []string{
-			"`" + toggle + "=" + redactedPlaceholder + "`",
-			toggle + "=" + redactedPlaceholder,
+		if !strings.Contains(localRuntimeText, fragment) {
+			t.Fatalf("expected local runtime docs to include readable boolean auth-toggle example %q", fragment)
+		}
+	}
+
+	redactedPlaceholder := strings.Repeat("*", 3)
+	for docName, docText := range map[string]string{
+		"overview dashboard docs": overviewText,
+		"local runtime docs":      localRuntimeText,
+	} {
+		for _, toggle := range []string{
+			"TENET_API_TRUST_AUTHENTICATED_HEADERS",
+			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY",
+			"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION",
+			"TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION",
 		} {
-			if strings.Contains(overviewText, placeholder) {
-				t.Fatalf("expected overview dashboard docs to reject non-secret auth-toggle placeholder %q", placeholder)
+			for _, placeholder := range []string{
+				"`" + toggle + "=" + redactedPlaceholder + "`",
+				toggle + "=" + redactedPlaceholder,
+			} {
+				if strings.Contains(docText, placeholder) {
+					t.Fatalf("expected %s to reject non-secret auth-toggle placeholder %q", docName, placeholder)
+				}
 			}
 		}
 	}
