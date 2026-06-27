@@ -174,7 +174,7 @@ Common bookmarkable routes:
 - `/?page=application&deployment={deploymentName}`
 - `/?page=account&accountId={awsAccountId}`
 - `/?page=resource&deployment={deploymentName}&resourceType={type}&resourceId={stableResourceId}` (canonical); older `resourceName={name}` bookmarks are still accepted as a compatibility fallback
-- `/?page=drift&deployment={deploymentName}`; optional `driftQuery`, `driftSeverity=high|medium|low`, and `driftSort=severity` preserve field-level drift filters in shareable URLs
+- `/?page=drift&deployment={deploymentName}`; optional `driftQuery`, `driftSeverity=high|medium|low`, and `driftSort=severity` preserve field-level drift filters in shareable URLs, and no-row / filtered-no-match drift table messages are announced as polite status updates for assistive technology
 - `/?page=plan&deployment={deploymentName}`
 - `/?page=audit`
 Primary operator APIs:

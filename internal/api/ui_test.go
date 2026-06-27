@@ -70,6 +70,15 @@ func TestEmbeddedUIRuntimeEventStatesAreStatusRegions(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIDriftEmptyStatesAreStatusRegions(t *testing.T) {
+	body := string(indexHTML)
+
+	contract := `if \(!filteredRows\.length\) \{[\s\S]*?const emptyMessage = driftRows\.length[\s\S]*?const stateNode = createElement\('div', 'detail-state', emptyMessage\);[\s\S]*?markPoliteStatusNode\(stateNode\);[\s\S]*?driftTableWrap\.replaceChildren\(stateNode\);[\s\S]*?return;`
+	if !regexp.MustCompile(contract).MatchString(body) {
+		t.Fatalf("expected drift empty states to reuse polite status-region helper")
+	}
+}
+
 func TestEmbeddedUIRendersDeploymentEventSourceSummaryChipsSafely(t *testing.T) {
 	script := embeddedUIScriptForTest(t)
 	for _, want := range []string{
