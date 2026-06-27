@@ -1583,6 +1583,12 @@ assert "const operatorContextControllerRefreshRoute = () => '/v1/controller/refr
 assert "const operatorContextControllerRefreshWriteRoute = () => 'POST /v1/controller/refresh';" in ui, ui
 assert "const operatorContextManualControllerRefreshAvailable = (context) => {" in ui, ui
 assert "const operatorContextManualControllerRefreshResultLabel = (result) => {" in ui, ui
+assert "let activeEmbeddedReadModelRefresh = null;" in ui, ui
+assert "const manualControllerRefreshProcessed = (result) => (" in ui, ui
+assert "const refreshActiveEmbeddedReadModelAfterManualControllerRefresh = (result) => {" in ui, ui
+assert "return refreshActiveEmbeddedReadModelAfterManualControllerRefresh(result);" in ui, ui
+assert "activeEmbeddedReadModelRefresh = applicationsOverviewState.onRefresh;" in ui, ui
+assert "activeEmbeddedReadModelRefresh = () => loadAuditLogsPage({ force: true });" in ui, ui
 assert "Manual controller refresh route:" in ui, ui
 assert "const requestManualControllerRefresh = () => fetch(operatorContextControllerRefreshRoute(), { method: 'POST' })" in ui, ui
 assert "const operatorContextDesiredStateReadinessLabel = (context) => {" in ui, ui

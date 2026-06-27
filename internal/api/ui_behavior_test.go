@@ -874,6 +874,19 @@ async function render(operatorResponses, initialHash = '', controllerRefreshResp
   await settle();
   if (unavailableGitHubSource.fetchRequests.some((request) => request.method === 'POST' && request.url === '/v1/controller/refresh')) throw new Error('unavailable controller-refresh handoff must not POST manual refresh');
 
+  const manualOverviewSuccess = await render(
+    { ok: true, json: () => Promise.resolve(firstContext) },
+    { pathname: '/', search: '?q=payments&sync=Synced', hash: '#operator-context-access-details-panel' },
+    { ok: true, status: 202, json: () => Promise.resolve({ status: 'published', controllerRefresh: { requestId: 'manual-refresh-overview', deliveryId: 'manual-delivery-overview' } }) },
+  );
+  manualOverviewSuccess.controllerRefresh().dispatch('click');
+  await settle();
+  await settle();
+  const manualOverviewReads = manualOverviewSuccess.fetchRequests.filter((request) => request.method === 'GET' && request.url === '/v1/overview/applications');
+  if (manualOverviewReads.length !== 2) throw new Error('expected successful manual controller refresh to reload applications overview in place, got ' + JSON.stringify(manualOverviewSuccess.fetchRequests));
+  if (manualOverviewSuccess.window.location.pathname !== '/' || manualOverviewSuccess.window.location.search !== '?q=payments&sync=Synced' || manualOverviewSuccess.window.location.hash !== '#operator-context-access-details-panel') throw new Error('manual controller refresh should preserve applications overview URL state');
+  if (!manualOverviewSuccess.liveStatusText().includes('Controller refresh requested: published. Request manual-refresh-overview; delivery manual-delivery-overview.')) throw new Error('expected applications overview controller refresh announcement to remain visible');
+
   const manualSuccess = await render(
     { ok: true, json: () => Promise.resolve(firstContext) },
     { pathname: '/embedded', search: '?page=application&deployment=payments-api-prod', hash: '#operator-context-access-details-panel' },
@@ -882,8 +895,11 @@ async function render(operatorResponses, initialHash = '', controllerRefreshResp
   manualSuccess.controllerRefresh().dispatch('click');
   if (!manualSuccess.controllerRefresh().disabled) throw new Error('manual controller refresh button should disable while POST is in flight');
   await settle();
+  await settle();
   const manualSuccessPosts = manualSuccess.fetchRequests.filter((request) => request.method === 'POST' && request.url === '/v1/controller/refresh');
   if (manualSuccessPosts.length !== 1) throw new Error('expected exactly one manual controller refresh POST, got ' + JSON.stringify(manualSuccess.fetchRequests));
+  const manualSuccessApplicationReads = manualSuccess.fetchRequests.filter((request) => request.method === 'GET' && request.url === '/v1/overview/applications/payments-api-prod');
+  if (manualSuccessApplicationReads.length !== 2) throw new Error('expected successful manual controller refresh to reload the active application read in place, got ' + JSON.stringify(manualSuccess.fetchRequests));
   if (manualSuccess.window.location.pathname !== '/embedded' || manualSuccess.window.location.search !== '?page=application&deployment=payments-api-prod' || manualSuccess.window.location.hash !== '#operator-context-access-details-panel') throw new Error('manual controller refresh should preserve bookmarkable URL state');
   if (!manualSuccess.text().includes('Controller refresh requested: published. Request manual-refresh-123; delivery manual-delivery-456.')) throw new Error('expected published manual controller refresh success copy: ' + manualSuccess.text());
   if (!manualSuccess.liveStatusText().includes('Controller refresh requested: published. Request manual-refresh-123; delivery manual-delivery-456.')) throw new Error('expected compact live region to announce manual controller refresh success');

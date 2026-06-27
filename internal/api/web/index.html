@@ -222,6 +222,7 @@
       let auditLogsPageState = { status: 'idle', route: '', result: null, error: null, promise: null, requestId: 0 };
       let operatorContextState = { status: 'idle', context: null, error: null, refreshing: false, lastCheckedAt: null, controllerRefresh: { status: 'idle', message: '' } };
       let activeOperatorReadFailurePage = null;
+      let activeEmbeddedReadModelRefresh = null;
       let operatorContextDetailsOpen = false;
       let operatorContextDetailsDeepLinkAppliedForHash = '';
       const operatorContextSectionID = 'operator-context';
@@ -1601,6 +1602,18 @@
           .map(([label, verdict]) => ({ label: operatorContextAccessVerdictLabel(label, verdict), className: operatorContextAccessVerdictClass(verdict) }))
           .filter((entry) => entry.label);
       };
+      const manualControllerRefreshProcessed = (result) => (
+        result?.status !== 'filesystem_noop' && Boolean(result?.processed || result?.controllerRefresh)
+      );
+      const refreshActiveEmbeddedReadModelAfterManualControllerRefresh = (result) => {
+        if (!manualControllerRefreshProcessed(result) || typeof activeEmbeddedReadModelRefresh !== 'function') {
+          return Promise.resolve(result);
+        }
+        return Promise.resolve()
+          .then(() => activeEmbeddedReadModelRefresh())
+          .catch(() => null)
+          .then(() => result);
+      };
       const handleManualControllerRefresh = () => {
         if (!operatorContextManualControllerRefreshAvailable(operatorContextState.context)) return Promise.resolve(null);
         const currentRefresh = operatorContextState.controllerRefresh || { status: 'idle', message: '' };
@@ -1622,7 +1635,7 @@
               },
             };
             renderOperatorContextBanner();
-            return result;
+            return refreshActiveEmbeddedReadModelAfterManualControllerRefresh(result);
           })
           .catch((error) => {
             const state = { request: 'create', status: error?.kind === 'unavailable' ? 'unavailable' : 'fetch-error', error };
@@ -9845,6 +9858,7 @@
 
       currentPageState = parsePageState();
       currentViewState = parseViewState();
+      activeEmbeddedReadModelRefresh = null;
       setBrowserTitleFromPageState(currentPageState);
       loadOperatorContextBanner().catch(() => {});
       if (currentPageState.page === 'applications') {
@@ -9882,6 +9896,7 @@
                   throw error;
                 });
             };
+            activeEmbeddedReadModelRefresh = applicationsOverviewState.onRefresh;
             renderApplicationsOverview(applications);
           })
           .catch((error) => {
@@ -9892,6 +9907,7 @@
             renderEmptyState(`Failed to load overview: ${error.message}`);
           });
       } else if (currentPageState.page === 'audit') {
+        activeEmbeddedReadModelRefresh = () => loadAuditLogsPage({ force: true });
         loadAuditLogsPage().catch(() => {});
       } else if (currentPageState.page === 'account') {
         if (!currentPageState.accountId) {
@@ -9929,6 +9945,7 @@
                     throw error;
                   });
               };
+              activeEmbeddedReadModelRefresh = accountState.onRefresh;
               renderAccountWorkspace();
             })
             .catch((error) => {
@@ -9977,6 +9994,7 @@
                       throw error;
                     });
                 };
+                activeEmbeddedReadModelRefresh = applicationState.onRefresh;
                 renderApplicationWorkspace();
                 return;
               }
@@ -10011,6 +10029,7 @@
                       throw error;
                     });
                 };
+                activeEmbeddedReadModelRefresh = resourceState.onRefresh;
                 renderResourceWorkspace();
                 return;
               }
@@ -10050,6 +10069,7 @@
                       throw error;
                     });
                 };
+                activeEmbeddedReadModelRefresh = workspaceState.onRefresh;
                 renderDriftWorkspace();
                 return;
               }
@@ -10278,6 +10298,7 @@
                       throw error;
                     });
                 };
+                activeEmbeddedReadModelRefresh = workspaceState.onRefresh;
 
                 renderPlanWorkspace();
                 if (currentPageState.planId) {
