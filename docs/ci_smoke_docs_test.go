@@ -64,6 +64,18 @@ func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
 	}
 }
 
+func TestComposeLocalRuntimeUsesExplicitFilesystemCatalogSource(t *testing.T) {
+	composeText := readTextFile(t, "../compose.yaml")
+	localRuntimeText := readTextFile(t, "architecture/tenet-v1-local-runtime.md")
+
+	if got := strings.Count(composeText, "TENET_CATALOG_SOURCE: filesystem"); got != 2 {
+		t.Fatalf("expected compose local runtime to set TENET_CATALOG_SOURCE=filesystem for api and controller, got %d occurrences", got)
+	}
+	if !strings.Contains(localRuntimeText, "`TENET_CATALOG_SOURCE=filesystem`") {
+		t.Fatalf("expected local runtime docs to keep the filesystem catalog source contract")
+	}
+}
+
 func TestReadmeDocumentsRawDeploymentStatusProbes(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{
