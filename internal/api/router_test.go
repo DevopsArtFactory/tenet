@@ -2975,6 +2975,34 @@ func TestRouterCatalogAccountsFailClosedWhenPlacementsUnavailable(t *testing.T) 
 	}
 }
 
+func TestRouterCatalogEnvironmentsFailClosedWhenPlacementsUnavailable(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+		TrustAuthenticatedHeaders:          true,
+		RequireDeploymentReadAuthorization: true,
+		CatalogEnvironments: func(_ context.Context) ([]catalog.EnvironmentView, error) {
+			return []catalog.EnvironmentView{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/environments", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Set(requestactor.AuthorizedDeploymentsHeader, "api-prod")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var environments []catalog.EnvironmentView
+	if err := json.Unmarshal(resp.Body.Bytes(), &environments); err != nil {
+		t.Fatalf("decode catalog environments: %v", err)
+	}
+	if len(environments) != 0 {
+		t.Fatalf("expected catalog environments to fail closed without placement data, got %+v", environments)
+	}
+}
+
 func TestRouterAuditLogs(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
