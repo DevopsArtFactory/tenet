@@ -57,8 +57,8 @@ func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
 		{name: "local runtime docs", text: localRuntimeText},
 		{name: "operator contracts docs", text: operatorContractsText},
 	} {
-		if !strings.Contains(doc.text, "internal/rbacpolicy/**") {
-			t.Fatalf("expected %s to document RBAC policy changes as Docker-smoke scoped", doc.name)
+		if !strings.Contains(doc.text, "RBAC policy diagnostics, resource evidence") {
+			t.Fatalf("expected %s to document RBAC policy diagnostics in the broad Docker-smoke scope", doc.name)
 		}
 	}
 }
