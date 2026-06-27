@@ -7766,6 +7766,12 @@ document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+const assertStatusRegion = (node, label) => {
+  if (!node) throw new Error('expected status node for ' + label);
+  if (node.getAttribute('role') !== 'status') throw new Error('expected ' + label + ' to use role=status');
+  if (node.getAttribute('aria-live') !== 'polite') throw new Error('expected ' + label + ' to use aria-live=polite');
+  if (node.getAttribute('aria-atomic') !== 'true') throw new Error('expected ' + label + ' to use aria-atomic=true');
+};
 async function settle(count = 1) { for (let i = 0; i < count; i += 1) { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); } }
 const originalResourceID = 'codeDeployDeploymentGroup::payments-api-staging Deployment Group::Original deployment group description';
 const deploymentURL = '/v1/overview/deployments/payments-api-staging';
@@ -7912,6 +7918,12 @@ document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+const assertStatusRegion = (node, label) => {
+  if (!node) throw new Error('expected status node for ' + label);
+  if (node.getAttribute('role') !== 'status') throw new Error('expected ' + label + ' to use role=status');
+  if (node.getAttribute('aria-live') !== 'polite') throw new Error('expected ' + label + ' to use aria-live=polite');
+  if (node.getAttribute('aria-atomic') !== 'true') throw new Error('expected ' + label + ' to use aria-atomic=true');
+};
 async function settle(count = 1) { for (let i = 0; i < count; i += 1) { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); } }
 const resourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
 const deploymentURL = '/v1/overview/deployments/payments-api-staging';
@@ -7956,6 +7968,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!refreshLogs.disabled || !refreshInspection.disabled) throw new Error('expected resource refresh buttons disabled while initial fetches are in flight');
   if (!text.includes('Loading recent logs…')) throw new Error('expected initial loading state for recent logs');
   if (!text.includes('Loading live inspection…')) throw new Error('expected initial loading state for live inspection');
+  const initialStatusNodes = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('detail-state'));
+  assertStatusRegion(initialStatusNodes.find((node) => node.textContent === 'Loading recent logs…'), 'Recent logs loading state');
+  assertStatusRegion(initialStatusNodes.find((node) => node.textContent === 'Loading live inspection…'), 'Live inspection loading state');
 
   resolveInitialLogs({ ok: true, json: () => Promise.resolve({
     available: true,
@@ -7978,6 +7993,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Target account ID') || !text.includes('210987654321')) throw new Error('expected recent logs provider lookup context to include target account');
   if (!text.includes('Observer role configured') || !text.includes('True')) throw new Error('expected recent logs provider lookup context to include observer role status');
   if (!text.includes('Failed to load live inspection: resource inspection request failed (503)')) throw new Error('expected initial live inspection error state before refresh');
+  const failedInspectionStatus = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('detail-state')).find((node) => node.textContent === 'Failed to load live inspection: resource inspection request failed (503)');
+  assertStatusRegion(failedInspectionStatus, 'Live inspection error state');
   if (!text.match(/Evidence freshness \| Recent logs refreshed .+ · Live inspection not refreshed yet/)) throw new Error('expected troubleshooting summary to surface only completed evidence freshness after initial reads: ' + text);
 
   refreshLogs.dispatch('click');
@@ -7988,6 +8005,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!refreshLogs || !refreshInspection) throw new Error('expected refresh buttons during recent-logs refresh');
   if (!refreshLogs.disabled) throw new Error('expected recent-logs refresh button disabled while its fetch is in flight');
   if (refreshInspection.disabled) throw new Error('expected live-inspection refresh button to stay enabled during recent-logs refresh');
+  const refreshingLogsStatus = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('detail-state')).find((node) => node.textContent === 'Loading recent logs…');
+  assertStatusRegion(refreshingLogsStatus, 'Recent logs refresh loading state');
   if (logsFetchCount !== 2) throw new Error('expected recent-logs refresh to bypass cached ready state');
   if (window.location.search !== initialSearch) throw new Error('expected recent-logs refresh to preserve bookmarkable URL');
 
@@ -8016,6 +8035,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!refreshLogs || !refreshInspection) throw new Error('expected refresh buttons during live-inspection refresh');
   if (!refreshInspection.disabled) throw new Error('expected live-inspection refresh button disabled while its fetch is in flight');
   if (refreshLogs.disabled) throw new Error('expected recent-logs refresh button to stay enabled during live-inspection refresh');
+  const refreshingInspectionStatus = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('detail-state')).find((node) => node.textContent === 'Loading live inspection…');
+  assertStatusRegion(refreshingInspectionStatus, 'Live inspection refresh loading state');
   if (inspectionFetchCount !== 2) throw new Error('expected live-inspection refresh to bypass cached error state');
   if (window.location.search !== initialSearch) throw new Error('expected live-inspection refresh to preserve bookmarkable URL');
 

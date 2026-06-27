@@ -30,6 +30,31 @@ func TestEmbeddedUITopLevelEmptyStatesAreStatusRegions(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIResourceLazyPanelStatesAreStatusRegions(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const markResourcePanelStatusNode = (node) => {",
+		"node.setAttribute('role', 'status');",
+		"node.setAttribute('aria-live', 'polite');",
+		"node.setAttribute('aria-atomic', 'true');",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI lazy-panel status helper fragment %q", fragment)
+		}
+	}
+
+	contracts := []string{
+		`const renderResourceLogsState = \(container, text, className = '', beforeNodes = \[\], afterNodes = \[\], actions = \[\]\) => \{[\s\S]*?const stateNode = createElement\('div', 'detail-state', text\);[\s\S]*?markResourcePanelStatusNode\(stateNode\);[\s\S]*?container\.replaceChildren\(heading, \.\.\.beforeNodes, stateNode, \.\.\.afterNodes\);`,
+		`const renderResourceInspectionState = \(container, text, className = '', beforeNodes = \[\], afterNodes = \[\], actions = \[\]\) => \{[\s\S]*?const stateNode = createElement\('div', 'detail-state', text\);[\s\S]*?markResourcePanelStatusNode\(stateNode\);[\s\S]*?container\.replaceChildren\(heading, \.\.\.beforeNodes, stateNode, \.\.\.afterNodes\);`,
+	}
+	for _, contract := range contracts {
+		if !regexp.MustCompile(contract).MatchString(body) {
+			t.Fatalf("expected embedded UI lazy-panel status contract %s", contract)
+		}
+	}
+}
+
 func TestEmbeddedUIRendersDeploymentEventSourceSummaryChipsSafely(t *testing.T) {
 	script := embeddedUIScriptForTest(t)
 	for _, want := range []string{
@@ -3213,6 +3238,11 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert \"Log entry cap · ${resourceLogsLimitText(limit)}\" in ui, ui",
 		"assert \"'Log limit'\" in ui, ui",
 		"assert \"params.set('limit', String(normalizedLimit));\" in ui, ui",
+		"assert \"const markResourcePanelStatusNode = (node) => {\" in ui, ui",
+		"assert \"markResourcePanelStatusNode(stateNode);\" in ui, ui",
+		"assert \"node.setAttribute('role', 'status');\" in ui, ui",
+		"assert \"node.setAttribute('aria-live', 'polite');\" in ui, ui",
+		"assert \"node.setAttribute('aria-atomic', 'true');\" in ui, ui",
 	} {
 		if !strings.Contains(text, fragment) {
 			t.Fatalf("expected smoke-local.sh to assert recent-log limit shell fragment %q", fragment)
@@ -4158,6 +4188,11 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"assert ecs_task_scope.get(\"requestedLimit\") == 1",
 			"assert ecs_task_resource_inspection[\"resourceType\"] == \"ecsTask\"",
 			"assert no_log_source.get(\"truncationStatus\") == \"not_applicable\"",
+			"\"const markResourcePanelStatusNode = (node) => {\"",
+			"\"markResourcePanelStatusNode(stateNode);\"",
+			"\"node.setAttribute('role', 'status');\"",
+			"\"node.setAttribute('aria-live', 'polite');\"",
+			"\"node.setAttribute('aria-atomic', 'true');\"",
 			"\"recent-log-lookup-context-card\"",
 			"\"audit-freshness\"",
 			"\"Last refreshed · ${fetchedAt}\"",
