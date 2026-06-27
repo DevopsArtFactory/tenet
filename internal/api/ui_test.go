@@ -2836,6 +2836,27 @@ func TestCISmokeWorkflowDockerScopeCoversGitHubWebhookChanges(t *testing.T) {
 	}
 }
 
+func TestCISmokeWorkflowDockerScopeCoversRBACPolicyChanges(t *testing.T) {
+	body, err := os.ReadFile("../../.github/workflows/ci-smoke.yml")
+	if err != nil {
+		t.Fatalf("read ci-smoke workflow: %v", err)
+	}
+
+	patterns := dockerSmokeScopePatterns(t, string(body))
+	for _, changedPath := range []string{
+		"internal/rbacpolicy/policy.go",
+		"internal/rbacpolicy/file.go",
+		"internal/rbacpolicy/testdata/policy.json",
+	} {
+		if !dockerSmokeScopeMatches(patterns, changedPath) {
+			t.Fatalf("expected %s to trigger docker smoke scope; patterns=%v", changedPath, patterns)
+		}
+	}
+	if dockerSmokeScopeMatches(patterns, "docs/features/overview-dashboard.md") {
+		t.Fatalf("expected unrelated docs-only paths to skip docker smoke scope")
+	}
+}
+
 func TestCISmokeWorkflowDockerScopeCoversSharedResourceAWSChanges(t *testing.T) {
 	body, err := os.ReadFile("../../.github/workflows/ci-smoke.yml")
 	if err != nil {
