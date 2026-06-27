@@ -22,8 +22,8 @@ Tenet helps operators:
   resource-inspection read models
 - inspect applications, accounts, deployments, rollout workspaces, and resources
   from a single embedded UI
-- troubleshoot front-door auth, deployment access, and runtime evidence with
-  explicit diagnostics
+- troubleshoot front-door auth, deployment access, desired-state refresh
+  readiness, and runtime evidence with explicit diagnostics
 
 The primary UI flow is intentionally simple:
 
