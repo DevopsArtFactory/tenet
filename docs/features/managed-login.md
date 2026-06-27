@@ -2,7 +2,7 @@
 
 Operator troubleshooting guide for Tenet-managed browser login.
 
-Managed login is active only when `GET /v1/operator/context.authRuntime.tenetManagedLogin.active=true`. If it is `false`, inspect the same diagnostic object before changing routes: `requiredSettings`, `missingSettings`, `invalidSettings`, `loginRoute`, `callbackRoute`, `logoutRoute`, state-store, identity-store, and session-secret fields are non-secret activation evidence.
+Managed login is active only when `GET /v1/operator/context` reports `authRuntime.tenetManagedLogin.active=true`. If it is `false`, inspect the same diagnostic object before changing routes: `requiredSettings`, `missingSettings`, `invalidSettings`, `loginRoute`, `callbackRoute`, `logoutRoute`, state-store, identity-store, and session-secret fields are non-secret activation evidence.
 
 ## Provider modes
 
@@ -41,7 +41,7 @@ The legacy `/api/v1/auth/*` family is not the managed-login route contract.
 
 Managed login issues a signed `tenet_session` cookie with `HttpOnly`, `SameSite=Lax`, and path `/`. The cookie is marked `Secure` when Tenet has HTTPS request evidence or trusted `X-Forwarded-Proto: https` / `Forwarded: proto=https` evidence, or when operators set `TENET_AUTH_SESSION_COOKIE_SECURE=true`.
 
-Use `GET /v1/operator/context.authRuntime.tenetManagedLogin` to diagnose cookie behavior. The fields `sessionCookieSecureOverride`, `sessionCookieSecureForRequest`, and `sessionCookieSecureSources` tell you whether the final cookie decision came from an explicit override, direct HTTPS, or trusted forwarded-proto evidence. Local HTTP development can legitimately report a non-secure cookie when the override and HTTPS evidence are absent.
+Use `GET /v1/operator/context` and inspect `authRuntime.tenetManagedLogin` to diagnose cookie behavior. The fields `sessionCookieSecureOverride`, `sessionCookieSecureForRequest`, and `sessionCookieSecureSources` tell you whether the final cookie decision came from an explicit override, direct HTTPS, or trusted forwarded-proto evidence. Local HTTP development can legitimately report a non-secure cookie when the override and HTTPS evidence are absent.
 
 ## Logout boundary
 
