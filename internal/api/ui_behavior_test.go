@@ -6621,6 +6621,8 @@ class Element {
     this.selectionEnd = null;
     this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
   }
+  set innerHTML(value) { throw new Error('innerHTML must not be used in live-inspection harness: ' + value); }
+  get innerHTML() { return collectText(this).join(''); }
   append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
   replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
   addEventListener(type, handler) { this.listeners[type] = handler; }
@@ -7111,7 +7113,7 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
         maximumPercent: 200,
         healthCheckGracePeriodSeconds: 45,
         taskDefinition: 'payments-api:42',
-        deployments: [{ id: 'ecs-svc/123', status: 'PRIMARY', rolloutState: 'COMPLETED', rolloutStateReason: 'steady state', taskDefinition: 'payments-api:42', desiredCount: 2, runningCount: 2, pendingCount: 0, createdAt: '2026-04-18T00:10:00Z', updatedAt: '2026-04-18T00:11:00Z' }],
+        deployments: [{ id: 'ecs-svc/123', status: 'PRIMARY', rolloutState: 'COMPLETED', rolloutStateReason: '<script>window.__rolloutReasonExecuted = true</script> steady state', taskDefinition: 'payments-api:42', desiredCount: 2, runningCount: 2, pendingCount: 0, createdAt: '2026-04-18T00:10:00Z', updatedAt: '2026-04-18T00:11:00Z', primary: true, active: true }],
         events: [{ createdAt: '2026-04-18T00:12:00Z', message: '<img src=x onerror=1> service reached steady state' }],
       },
     }) });
@@ -7127,14 +7129,24 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!ecsSupportedText.includes('Health check grace period')) throw new Error('expected ECS inspection to render health check grace period label');
   if (!ecsSupportedText.includes('45 seconds')) throw new Error('expected ECS inspection to render health check grace period value');
   if (!ecsSupportedText.includes('Service deployments')) throw new Error('expected ECS inspection to render deployments section');
+  if (!ecsSupportedText.includes('Deployment · ecs-svc/123')) throw new Error('expected ECS inspection to render deployment identity heading');
+  if (!ecsSupportedText.includes('Primary deployment')) throw new Error('expected ECS inspection to render primary deployment cue');
+  if (!ecsSupportedText.includes('Active deployment')) throw new Error('expected ECS inspection to render active deployment cue');
+  if (!ecsSupportedText.includes('Deployment ID · ecs-svc/123')) throw new Error('expected ECS inspection to render deployment id');
   if (!ecsSupportedText.includes('Deployment status · PRIMARY')) throw new Error('expected ECS inspection to render deployment status');
   if (!ecsSupportedText.includes('Rollout state · COMPLETED')) throw new Error('expected ECS inspection to render deployment rollout state');
+  if (!ecsSupportedText.includes('Rollout reason · <script>window.__rolloutReasonExecuted = true</script> steady state')) throw new Error('expected ECS inspection to render rollout reason as text');
   if (!ecsSupportedText.includes('Desired/running/pending · 2 / 2 / 0')) throw new Error('expected ECS inspection to render deployment counts');
+  if (!ecsSupportedText.includes('Task definition · payments-api:42')) throw new Error('expected ECS inspection to render deployment task definition');
+  if (!ecsSupportedText.includes('Created at · 2026-04-18T00:10:00Z')) throw new Error('expected ECS inspection to render deployment created timestamp');
+  if (!ecsSupportedText.includes('Updated at · 2026-04-18T00:11:00Z')) throw new Error('expected ECS inspection to render deployment updated timestamp');
   if (!ecsSupportedText.includes('Recent ECS service events')) throw new Error('expected ECS inspection to render events section');
   if (!ecsSupportedText.includes('Event timestamp · 2026-04-18T00:12:00Z')) throw new Error('expected ECS inspection to render event timestamp');
   if (!ecsSupportedText.includes('<img src=x onerror=1> service reached steady state')) throw new Error('expected ECS inspection to render event text safely');
   const ecsImages = collectNodes(ecsSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'IMG');
   if (ecsImages.length !== 0) throw new Error('expected ECS inspection event text to remain text content rather than parsed html');
+  const ecsScripts = collectNodes(ecsSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'SCRIPT');
+  if (ecsScripts.length !== 0) throw new Error('expected ECS deployment rolloutStateReason to remain text content rather than parsed html');
 
   const asgDeploymentURL = '/v1/overview/deployments/payments-api-prod';
   const asgLogsURL = '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate';

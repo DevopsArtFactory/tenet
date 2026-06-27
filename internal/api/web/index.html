@@ -5852,6 +5852,38 @@
           : [];
         return [enabled, rollback, alarmNames.length ? `alarms: ${alarmNames.join(', ')}` : 'no alarms reported'].join('; ');
       };
+      const createECSServiceDeploymentListItem = (deployment) => {
+        const item = createElement('li');
+        item.append(createElement('strong', '', `Deployment · ${textOrDash(deployment.id || deployment.taskDefinition || deployment.status)}`));
+        const cueNodes = createElement('div', 'pills');
+        if (deployment.primary === true) {
+          cueNodes.append(createElement('span', 'pill synced', 'Primary deployment'));
+        }
+        if (deployment.active === true) {
+          cueNodes.append(createElement('span', 'pill progress', 'Active deployment'));
+        }
+        if (cueNodes.children.length) {
+          item.append(cueNodes);
+        }
+        const meta = createElement('div', 'detail-history-meta');
+        [
+          ['Deployment ID', deployment.id],
+          ['Deployment status', deployment.status],
+          ['Rollout state', deployment.rolloutState],
+          ['Rollout reason', deployment.rolloutStateReason],
+          ['Desired/running/pending', `${countText(deployment.desiredCount)} / ${countText(deployment.runningCount)} / ${countText(deployment.pendingCount)}`],
+          ['Task definition', deployment.taskDefinition],
+          ['Created at', deployment.createdAt],
+          ['Updated at', deployment.updatedAt],
+        ]
+          .map(([label, value]) => [label, String(value ?? '').trim()])
+          .filter(([, value]) => value)
+          .forEach(([label, value]) => {
+            meta.append(createElement('span', 'detail-condition-meta', `${label} · ${value}`));
+          });
+        item.append(meta);
+        return item;
+      };
       const renderECSServiceInspection = (section, deploymentName, resource, result) => {
         const service = result?.ecsService;
         const actions = createResourceInspectionActions(section, deploymentName, resource);
@@ -5888,27 +5920,7 @@
         const deploymentsSection = createInspectionListSection(
           'Service deployments',
           service?.deployments || [],
-          (deployment) => {
-            const item = createElement('li');
-            item.append(createElement('strong', '', textOrDash(deployment.taskDefinition || deployment.id || deployment.status)));
-            const meta = createElement('div', 'detail-history-meta');
-            meta.append(
-              createElement('span', 'detail-condition-meta', `Deployment status · ${textOrDash(deployment.status)}`),
-              createElement('span', 'detail-condition-meta', `Rollout state · ${textOrDash(deployment.rolloutState)}`),
-              createElement('span', 'detail-condition-meta', `Desired/running/pending · ${countText(deployment.desiredCount)} / ${countText(deployment.runningCount)} / ${countText(deployment.pendingCount)}`),
-            );
-            if (deployment.rolloutStateReason) {
-              meta.append(createElement('span', 'detail-condition-meta', `Rollout reason · ${deployment.rolloutStateReason}`));
-            }
-            if (deployment.createdAt) {
-              meta.append(createElement('span', 'detail-condition-meta', `Created at · ${deployment.createdAt}`));
-            }
-            if (deployment.updatedAt) {
-              meta.append(createElement('span', 'detail-condition-meta', `Updated at · ${deployment.updatedAt}`));
-            }
-            item.append(meta);
-            return item;
-          },
+          (deployment) => createECSServiceDeploymentListItem(deployment),
           'No active ECS deployments are reported for this service.',
         );
         const taskSampleUnavailable = isECSTaskScopeUnavailable(service?.tasksScope);
