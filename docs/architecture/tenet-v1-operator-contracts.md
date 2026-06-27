@@ -6,7 +6,7 @@ Tenet is a repository-driven deployment control plane for multi-account environm
 
 The project is aimed at giving operators one place to understand what should be running, what is actually happening now, and how a deployment is progressing across EC2 and ECS targets. The current product direction is an ArgoCD-inspired workflow: start from a simple applications overview, drill into an application, then drill further into the concrete resource that matters during rollout or troubleshooting.
 
-Today, Tenet is still early-stage and intentionally read-only. The focus is on a strong control-plane core, clear runtime read models, and an operator-friendly embedded UI before live execution and mutation workflows are added.
+Today, Tenet is still early-stage and intentionally conservative. The focus is on a strong control-plane core, clear runtime read models, shipped immutable plan/apply record writes, and an operator-friendly embedded UI before live AWS execution and mutation workflows are added.
 
 ## What Tenet does
 
