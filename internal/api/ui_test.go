@@ -4170,7 +4170,7 @@ func TestResourceInspectionFeatureGuideDocumentsSelectorsAndScope(t *testing.T) 
 		"# Resource Inspection",
 		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}[&clusterArn={ecsClusterArn}][&limit={positiveInteger}][&instanceId={ec2InstanceId}]`",
 		"`clusterArn` is optional and only meaningful for `resourceType=ecsService` and `resourceType=ecsTask`",
-		"`limit` is optional and applies only to bounded ECS service task samples and Auto Scaling Group instance samples",
+		"`limit` is optional and applies only to bounded ECS service task samples and direct Auto Scaling Group instance samples",
 		"`instanceId` is optional and only meaningful for Auto Scaling Group-backed inspection reads",
 		"Like recent logs, every resource-inspection response includes `lookupContext`",
 		"Unavailable responses keep the selected route explicit with `available=false`, `unavailableReason`, `lookupContext`, and any accepted selector echo such as `clusterArn` or `instanceId`",
