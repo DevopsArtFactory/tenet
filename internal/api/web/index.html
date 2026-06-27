@@ -220,7 +220,7 @@
       const resourceInspectionStateByKey = new Map();
       const resourceTroubleshootingSummaryByResourceKey = new Map();
       let auditLogsPageState = { status: 'idle', route: '', result: null, error: null, promise: null, requestId: 0 };
-      let operatorContextState = { status: 'idle', context: null, error: null, refreshing: false, lastCheckedAt: null };
+      let operatorContextState = { status: 'idle', context: null, error: null, refreshing: false, lastCheckedAt: null, controllerRefresh: { status: 'idle', message: '' } };
       let activeOperatorReadFailurePage = null;
       let operatorContextDetailsOpen = false;
       let operatorContextDetailsDeepLinkAppliedForHash = '';
@@ -1270,6 +1270,29 @@
         };
         return labels[status] || status || 'controller-refresh status unavailable';
       };
+      const operatorContextControllerRefreshRoute = () => '/v1/controller/refresh';
+      const operatorContextControllerRefreshWriteRoute = () => 'POST /v1/controller/refresh';
+      const operatorContextManualControllerRefreshAvailable = (context) => {
+        const refresh = operatorContextDesiredStateSource(context)?.controllerRefresh || null;
+        return Boolean(refresh && refresh.available === true && refresh.status === 'available');
+      };
+      const operatorContextManualControllerRefreshResultLabel = (result) => {
+        const status = String(result?.status || '').trim();
+        const reason = String(result?.reason || '').trim();
+        if (status === 'filesystem_noop') {
+          return `Controller refresh skipped: ${operatorContextControllerRefreshStatusLabel(status)}.${reason ? ` ${reason}` : ''}`;
+        }
+        if (result?.processed || result?.controllerRefresh) {
+          const refresh = result.controllerRefresh || {};
+          const fields = [];
+          if (refresh.requestId) fields.push(`Request ${refresh.requestId}`);
+          if (refresh.deliveryId) fields.push(`delivery ${refresh.deliveryId}`);
+          if (refresh.channel) fields.push(`channel ${refresh.channel}`);
+          return `Controller refresh requested: ${status || 'published'}.${fields.length ? ` ${fields.join('; ')}.` : ''}`;
+        }
+        const label = operatorContextControllerRefreshStatusLabel(status);
+        return `Controller refresh unavailable: ${label}.${reason ? ` ${reason}` : ''}`;
+      };
       const operatorContextControllerRefreshLabel = (context) => {
         const refresh = operatorContextDesiredStateSource(context)?.controllerRefresh || null;
         if (!refresh || typeof refresh !== 'object') return null;
@@ -1304,6 +1327,7 @@
         return [
           { label: operatorContextDesiredStateSourceLabel(context), className: source.configured ? '' : 'operator-context-warning' },
           { label: operatorContextControllerRefreshLabel(context), className: source.controllerRefresh?.available ? '' : 'operator-context-warning' },
+          { label: `Manual controller refresh route: ${operatorContextControllerRefreshWriteRoute()}`, className: operatorContextManualControllerRefreshAvailable(context) ? '' : 'operator-context-warning' },
           { label: operatorContextDesiredStateSourceListLabel(source, 'webhookMatchStatuses', 'Webhook match statuses') },
           { label: operatorContextDesiredStateSourceListLabel(source, 'webhookProcessedFalseReasons', 'Webhook ignored reasons') },
         ].filter((entry) => entry.label);
@@ -1577,6 +1601,57 @@
           .map(([label, verdict]) => ({ label: operatorContextAccessVerdictLabel(label, verdict), className: operatorContextAccessVerdictClass(verdict) }))
           .filter((entry) => entry.label);
       };
+      const handleManualControllerRefresh = () => {
+        if (!operatorContextManualControllerRefreshAvailable(operatorContextState.context)) return Promise.resolve(null);
+        const currentRefresh = operatorContextState.controllerRefresh || { status: 'idle', message: '' };
+        if (currentRefresh.status === 'loading') return Promise.resolve(null);
+        operatorContextState = {
+          ...operatorContextState,
+          controllerRefresh: { status: 'loading', message: 'Requesting controller refresh…' },
+        };
+        renderOperatorContextBanner();
+        return requestManualControllerRefresh()
+          .then((result) => {
+            const message = operatorContextManualControllerRefreshResultLabel(result);
+            operatorContextState = {
+              ...operatorContextState,
+              controllerRefresh: {
+                status: result?.status === 'filesystem_noop' ? 'filesystem_noop' : 'success',
+                message,
+                result,
+              },
+            };
+            renderOperatorContextBanner();
+            return result;
+          })
+          .catch((error) => {
+            const state = { request: 'create', status: error?.kind === 'unavailable' ? 'unavailable' : 'fetch-error', error };
+            const heading = operatorWriteStateHeading(state);
+            let message = '';
+            if (operatorWriteAuthRequiredState(state)) {
+              message = operatorWriteAuthRequiredMessage(operatorContextControllerRefreshWriteRoute(), 'Refresh controller');
+            } else if (operatorWriteRoleRequiredState(state)) {
+              message = operatorWriteRoleRequiredMessage(operatorContextControllerRefreshWriteRoute(), 'Refresh controller');
+            } else if (operatorWriteForbiddenState(state)) {
+              message = operatorWriteForbiddenMessage(operatorContextControllerRefreshWriteRoute(), 'Refresh controller');
+            } else if (error?.kind === 'unavailable') {
+              message = `Controller refresh unavailable: ${error?.message || 'controller refresh unavailable'}`;
+            } else {
+              message = `Controller refresh failed: ${error?.message || 'unknown error'}`;
+            }
+            operatorContextState = {
+              ...operatorContextState,
+              controllerRefresh: {
+                status: error?.kind === 'unavailable' ? 'unavailable' : 'error',
+                heading,
+                message,
+                error,
+              },
+            };
+            renderOperatorContextBanner();
+            return null;
+          });
+      };
       const renderOperatorContextBanner = () => {
         const root = document.getElementById('operator-context');
         if (!root) return;
@@ -1591,6 +1666,16 @@
           if (!refreshButton.disabled) loadOperatorContextBanner({ refresh: true });
         });
         titleRow.append(refreshButton);
+        const manualRefreshState = operatorContextState.controllerRefresh || { status: 'idle', message: '' };
+        const manualRefreshAvailable = operatorContextManualControllerRefreshAvailable(operatorContextState.context);
+        const manualRefreshButton = createElement('button', 'operator-context-action', manualRefreshState.status === 'loading' ? 'Requesting refresh…' : 'Refresh controller');
+        manualRefreshButton.type = 'button';
+        manualRefreshButton.disabled = operatorContextState.status === 'loading' || operatorContextState.status === 'idle' || operatorContextState.refreshing || manualRefreshState.status === 'loading' || !manualRefreshAvailable;
+        manualRefreshButton.setAttribute('aria-label', 'Refresh controller desired-state handoff');
+        manualRefreshButton.addEventListener('click', () => {
+          if (!manualRefreshButton.disabled) handleManualControllerRefresh();
+        });
+        titleRow.append(manualRefreshButton);
         head.append(titleRow);
         const summary = createElement('div', 'operator-context-summary');
         const liveStatus = createElement('div', 'operator-context-live');
@@ -1626,6 +1711,22 @@
             const failureMessage = operatorContextFailureMessage(operatorContextState.error);
             statusAnnouncement = `Operator context refresh failed: ${failureMessage}`;
             meta.append(createElement('span', '', `Last refresh failed: ${failureMessage}`));
+          }
+          if (manualRefreshState.status === 'loading') {
+            statusAnnouncement = manualRefreshState.message;
+            meta.append(createElement('span', '', `${manualRefreshState.message} ${operatorContextControllerRefreshWriteRoute()}`));
+          } else if (manualRefreshState.message) {
+            const isManualRefreshProblem = ['filesystem_noop', 'unavailable', 'error'].includes(manualRefreshState.status);
+            if (manualRefreshState.status === 'unavailable') {
+              root.classList.add('unavailable');
+            } else if (manualRefreshState.status === 'error') {
+              root.classList.add('error');
+            }
+            if (manualRefreshState.heading) {
+              meta.append(createElement('span', isManualRefreshProblem ? 'operator-context-denied' : '', manualRefreshState.heading));
+            }
+            statusAnnouncement = manualRefreshState.heading ? `${manualRefreshState.heading}: ${manualRefreshState.message}` : manualRefreshState.message;
+            meta.append(createElement('span', isManualRefreshProblem ? 'operator-context-warning' : '', manualRefreshState.message));
           }
           const detailsMeta = createElement('div', 'operator-context-meta');
           if (lastCheckedLabel) {
@@ -1763,16 +1864,17 @@
         if (!document.getElementById('operator-context')) return Promise.resolve(null);
         const previousContext = operatorContextState.context || null;
         const previousLastCheckedAt = operatorContextState.lastCheckedAt || null;
+        const previousControllerRefresh = operatorContextState.controllerRefresh || { status: 'idle', message: '' };
         operatorContextState = refresh && previousContext
-          ? { status: 'ready', context: previousContext, error: null, refreshing: true, lastCheckedAt: previousLastCheckedAt }
-          : { status: 'loading', context: previousContext, error: null, refreshing: false, lastCheckedAt: previousLastCheckedAt };
+          ? { status: 'ready', context: previousContext, error: null, refreshing: true, lastCheckedAt: previousLastCheckedAt, controllerRefresh: previousControllerRefresh }
+          : { status: 'loading', context: previousContext, error: null, refreshing: false, lastCheckedAt: previousLastCheckedAt, controllerRefresh: previousControllerRefresh };
         renderOperatorContextBanner();
         return fetchEmbeddedReadRouteJSON(operatorContextRoute(), {
           unavailable: 'operator context unavailable',
           failure: 'operator context request failed',
         })
           .then((context) => {
-            operatorContextState = { status: 'ready', context, error: null, refreshing: false, lastCheckedAt: new Date() };
+            operatorContextState = { status: 'ready', context, error: null, refreshing: false, lastCheckedAt: new Date(), controllerRefresh: previousControllerRefresh };
             renderOperatorContextBanner();
             if (activeOperatorReadFailurePage && operatorReadAuthRequiredState(activeOperatorReadFailurePage.error)) {
               renderOperatorReadFailurePage(activeOperatorReadFailurePage.pageLabel, activeOperatorReadFailurePage.route, activeOperatorReadFailurePage.error);
@@ -1786,6 +1888,7 @@
               error,
               refreshing: false,
               lastCheckedAt: refresh ? previousLastCheckedAt : null,
+              controllerRefresh: previousControllerRefresh,
             };
             renderOperatorContextBanner();
             return null;
@@ -6784,6 +6887,17 @@
           const fallback = response.status === 503
             ? `${labels.unavailable} (${response.status})`
             : `${labels.failure} (${response.status})`;
+          return responseErrorMessage(response, fallback).then((message) => {
+            throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status, requestId);
+          });
+        });
+      const requestManualControllerRefresh = () => fetch(operatorContextControllerRefreshRoute(), { method: 'POST' })
+        .then((response) => {
+          const requestId = responseRequestID(response);
+          if (response.ok) return response.json().then((value) => attachResponseRequestID(value, requestId));
+          const fallback = response.status === 503
+            ? `controller refresh unavailable (${response.status})`
+            : `controller refresh request failed (${response.status})`;
           return responseErrorMessage(response, fallback).then((message) => {
             throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status, requestId);
           });
