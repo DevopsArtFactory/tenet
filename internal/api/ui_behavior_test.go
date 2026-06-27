@@ -4089,6 +4089,7 @@ func TestApplicationDetailPageDeploymentEventsTimelineStatesWithNodeHarness(t *t
 	eventsJSON, err := json.Marshal(map[string]any{
 		"deploymentName":      "payments-api-staging",
 		"managedDriftSummary": map[string]any{"total": 2, "high": 1, "medium": 1, "low": 0},
+		"sourceSummary":       []map[string]any{{"source": "controller", "count": 7}, {"source": "deployment-controller", "count": 2}, {"source": "github", "count": 1}},
 		"retention":           map[string]any{"limit": 10, "retainedEventCount": 10, "status": "at_retention_limit"},
 		"resultScope":         map[string]any{"requestedLimit": 10, "effectiveLimit": 10, "returnedEventCount": 2, "totalEventCount": 10, "retentionLimit": 10, "retainedEventCount": 10, "retentionStatus": "at_retention_limit", "newestEventTimestamp": "2026-04-16T07:10:00Z", "oldestEventTimestamp": "2026-04-16T07:05:00Z", "truncationStatus": "truncated"},
 		"events": []map[string]any{
@@ -4131,6 +4132,7 @@ func TestApplicationDetailPageDeploymentEventsTimelineStatesWithNodeHarness(t *t
 	refreshedEventsJSON, err := json.Marshal(map[string]any{
 		"deploymentName":      "payments-api-staging",
 		"managedDriftSummary": map[string]any{"total": 0, "high": 0, "medium": 0, "low": 0},
+		"sourceSummary":       []map[string]any{{"source": "controller", "count": 1}},
 		"retention":           map[string]any{"limit": 10, "retainedEventCount": 1, "status": "within_retention_limit"},
 		"resultScope":         map[string]any{"requestedLimit": 10, "effectiveLimit": 10, "returnedEventCount": 1, "totalEventCount": 1, "newestEventTimestamp": "2026-04-16T07:14:00Z", "oldestEventTimestamp": "2026-04-16T07:14:00Z", "truncationStatus": "not_truncated"},
 		"events": []map[string]any{
@@ -4266,6 +4268,7 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   if (!readyText.includes('Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=10. Tenet shows the selected bounded window, newest first; use Event window to change how much controller history this panel reads without leaving the application drill-down. This is not audit/auth history.')) throw new Error('expected application page to distinguish controller runtime events from audit/auth history');
   if (!readyText.includes('2 events in latest 10-event window · newest controller event first')) throw new Error('expected event ordering guidance');
   if (!readyText.includes('Last refreshed ·')) throw new Error('expected successful runtime-events read to render a freshness cue');
+  if (!readyText.includes('Retained source mix') || !readyText.includes('controller · 7 events') || !readyText.includes('deployment-controller · 2 events') || !readyText.includes('github · 1 event')) throw new Error('expected runtime-events source summary chips from retained source mix');
   if (!readyText.includes('Requested window · 10 events') || !readyText.includes('Effective window · 10 events') || !readyText.includes('Returned events · 2 events') || !readyText.includes('Total retained events · 10 events') || !readyText.includes('Retention limit · 10 events') || !readyText.includes('Retention retained · 10 retained events') || !readyText.includes('Retention status · Controller retention cap reached; older runtime history may have been dropped') || !readyText.includes('Newest event · 2026-04-16T07:10:00Z') || !readyText.includes('Oldest event · 2026-04-16T07:05:00Z') || !readyText.includes('Window status · Query-limited response; increase Event window to inspect older returned history')) throw new Error('expected runtime-events resultScope and retention summary from bounded deployment events payload');
   if (!readyText.includes('Managed drift summary · 2 total · 1 high · 1 medium · 0 low')) throw new Error('expected managed drift severity summary from deployment events payload');
   if (!readyText.includes('Shifted 50 percent of traffic')) throw new Error('expected newest controller event summary');
@@ -4315,6 +4318,7 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   if (!readyText.includes('Completed traffic shift for v2')) throw new Error('expected refreshed deployment events payload to render in place');
   if (!readyText.includes('Returned events · 1 event') || !readyText.includes('Total retained events · 1 event') || !readyText.includes('Retention limit · 10 events') || !readyText.includes('Retention retained · 1 retained event') || !readyText.includes('Retention status · Within controller retention limit') || !readyText.includes('Newest event · 2026-04-16T07:14:00Z') || !readyText.includes('Oldest event · 2026-04-16T07:14:00Z') || !readyText.includes('Window status · Query window did not truncate the retained history')) throw new Error('expected refreshed deployment events resultScope summary to replace stale bounded-read metadata');
   if (!readyText.includes('Last refreshed ·')) throw new Error('expected refreshed runtime-events read to keep a freshness cue');
+  if (!readyText.includes('Retained source mix') || !readyText.includes('controller · 1 event') || readyText.includes('deployment-controller · 2 events')) throw new Error('expected refreshed source summary to replace stale retained source mix');
   if (!readyText.includes('Managed drift summary · 0 total · 0 high · 0 medium · 0 low')) throw new Error('expected refreshed managed drift summary to replace stale counts');
   if (readyText.includes('Shifted 50 percent of traffic')) throw new Error('expected refreshed deployment events payload to replace stale ready-state content');
   buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
@@ -4361,6 +4365,8 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   const selectedSourceText = collectText(selectedSourceView.document.getElementById('accounts')).join(' | ');
   if (!selectedSourceText.includes('Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=25&source=controller.')) throw new Error('expected runtime-events intro to show the selected source route');
   if (!selectedSourceText.includes('Source filter · controller')) throw new Error('expected runtime-events scope summary to show the selected source filter');
+  if (!selectedSourceText.includes('Selected event source · controller')) throw new Error('expected selected source filter cue to stay separate from retained source mix');
+  if (!selectedSourceText.includes('Retained source mix') || !selectedSourceText.includes('deployment-controller · 2 events')) throw new Error('expected source-filtered response to keep retained-window source mix visible');
   const eventSourceSelect = collectNodes(selectedSourceView.document.getElementById('accounts'), (node) => node.tagName === 'SELECT').find((node) => node.dataset.toolbarField === 'Event source');
   if (!eventSourceSelect) throw new Error('expected Event source selector on application runtime-events section');
   if (eventSourceSelect.disabled) throw new Error('expected Event source selector enabled after runtime-events load');
@@ -4407,6 +4413,7 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   if (!emptyText.includes('Returned events · 0 events') || !emptyText.includes('Total retained events · 0 events') || !emptyText.includes('Retention limit · 10 events') || !emptyText.includes('Retention retained · 0 retained events') || !emptyText.includes('Retention status · Within controller retention limit') || !emptyText.includes('Window status · Query window did not truncate the retained history')) throw new Error('expected empty deployment events resultScope summary to explain no retained history');
   if (emptyText.includes('Newest event ·') || emptyText.includes('Oldest event ·')) throw new Error('expected empty deployment events scope to omit event-window timestamps');
   if (!emptyText.includes('Last refreshed ·')) throw new Error('expected empty successful runtime-events read to keep a freshness cue');
+  if (emptyText.includes('Retained source mix')) throw new Error('expected empty sourceSummary to omit retained source mix chips');
   buttons = collectNodes(emptyView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
   if (!refreshEvents || refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled in empty state');

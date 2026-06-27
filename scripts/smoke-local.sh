@@ -1731,6 +1731,10 @@ assert 'No controller runtime events are retained for this application yet.' in 
 assert "const createDeploymentEventsFreshnessMeta = (result) => {" in ui, ui
 assert "deployment-events-freshness" in ui, ui
 assert 'Last refreshed · ${fetchedAt}' in ui, ui
+assert "const deploymentEventsSourceSummaryEntries = (result) => (Array.isArray(result?.sourceSummary) ? result.sourceSummary : [])" in ui, ui
+assert "deployment-events-source-summary" in ui, ui
+assert "Retained source mix" in ui, ui
+assert "Selected event source · ${source}" in ui, ui
 assert 'Controller runtime events are currently unavailable.' in ui, ui
 assert 'Managed drift summary · ${counts.total} total · ${counts.high} high · ${counts.medium} medium · ${counts.low} low' in ui, ui
 assert "const deploymentEventsRetentionScope = (result) => {" in ui, ui

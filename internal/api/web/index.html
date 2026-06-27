@@ -6940,6 +6940,29 @@
         const fetchedAt = resourcePanelFetchedAtText(result);
         return fetchedAt ? createElement('div', 'detail-condition-meta deployment-events-freshness', `Last refreshed · ${fetchedAt}`) : null;
       };
+      const deploymentEventsSourceSummaryEntries = (result) => (Array.isArray(result?.sourceSummary) ? result.sourceSummary : [])
+        .map((entry) => {
+          const source = String(entry?.source || '').trim();
+          const count = Number(entry?.count);
+          if (!source || !Number.isFinite(count) || count < 0) return null;
+          return { source, count };
+        })
+        .filter(Boolean);
+      const deploymentEventsSourceSummaryCountText = (count) => `${count} ${count === 1 ? 'event' : 'events'}`;
+      const createDeploymentEventsSourceSummary = (result, selectedSource = currentPageState.eventSource) => {
+        const entries = deploymentEventsSourceSummaryEntries(result);
+        if (!entries.length) return null;
+        const summary = createElement('div', 'detail-history-meta deployment-events-source-summary');
+        summary.append(createElement('span', 'detail-condition-meta', 'Retained source mix'));
+        entries.forEach((entry) => {
+          summary.append(createElement('span', 'detail-condition-meta', `${entry.source} · ${deploymentEventsSourceSummaryCountText(entry.count)}`));
+        });
+        const source = normalizeDeploymentEventsSource(selectedSource || result?.resultScope?.sourceFilter || '');
+        if (source) {
+          summary.append(createElement('span', 'detail-condition-meta', `Selected event source · ${source}`));
+        }
+        return summary;
+      };
       const shortRevision = (value) => {
         const text = String(value || '').trim();
         return text ? text.slice(0, 12) : '';
@@ -7043,12 +7066,13 @@
         const selectedSource = normalizeDeploymentEventsSource(currentPageState.eventSource || result?.resultScope?.sourceFilter || '');
         const events = sortTimelineEvents(result?.events || []);
         const scopeSummary = createDeploymentEventsResultScopeSummary(result);
+        const sourceSummary = createDeploymentEventsSourceSummary(result, selectedSource);
         const freshnessMeta = createDeploymentEventsFreshnessMeta(result);
         if (!events.length) {
           const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, false, result));
           const intro = createDeploymentEventsIntro(selectedLimit, selectedSource);
           const stateNode = createElement('div', 'detail-state', deploymentEventsEmptyStateText(result, selectedLimit, selectedSource));
-          section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), stateNode);
+          section.replaceChildren(heading, intro, ...(sourceSummary ? [sourceSummary] : []), ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), stateNode);
           return;
         }
 
@@ -7120,7 +7144,7 @@
           eventList.append(item);
         });
 
-        section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), ordering, driftSummary, eventList);
+        section.replaceChildren(heading, intro, ...(sourceSummary ? [sourceSummary] : []), ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), ordering, driftSummary, eventList);
       };
       const renderDeploymentEventsSection = (section, deploymentName, options = {}) => {
         const force = Boolean(options?.force);
