@@ -4890,6 +4890,18 @@ func TestRouterOverviewAccounts(t *testing.T) {
 				ProgressingCount: 1,
 				PausedCount:      1,
 				ErrorCount:       0,
+				RuntimeEventCue: &catalog.RuntimeEventCue{
+					DeploymentName:       "api-prod",
+					Timestamp:            "2026-04-16T06:49:00Z",
+					Source:               "controller",
+					Summary:              "Traffic shift is progressing",
+					Sync:                 domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"},
+					Health:               domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+					RolloutPhase:         domain.RolloutPhaseAccepted,
+					CurrentStep:          "PromoteCandidateCapacity",
+					RetainedEventCount:   4,
+					EventDeploymentCount: 1,
+				},
 				Deployments: []catalog.DeploymentOverview{
 					{
 						Name:          "api-prod",
@@ -4996,6 +5008,21 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	}
 	if payload[0]["deploymentCount"] != float64(3) || payload[0]["projectCount"] != float64(2) || payload[0]["environmentCount"] != float64(2) || payload[0]["syncedCount"] != float64(1) || payload[0]["progressingCount"] != float64(1) || payload[0]["pausedCount"] != float64(1) || payload[0]["errorCount"] != float64(0) {
 		t.Fatalf("expected additive JSON count fields, got %+v", payload[0])
+	}
+	runtimeEventCue, ok := payload[0]["runtimeEventCue"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected runtimeEventCue object in raw overview accounts payload, got %#v", payload[0])
+	}
+	if runtimeEventCue["deploymentName"] != "api-prod" || runtimeEventCue["timestamp"] != "2026-04-16T06:49:00Z" || runtimeEventCue["source"] != "controller" || runtimeEventCue["summary"] != "Traffic shift is progressing" || runtimeEventCue["rolloutPhase"] != string(domain.RolloutPhaseAccepted) || runtimeEventCue["currentStep"] != "PromoteCandidateCapacity" || runtimeEventCue["retainedEventCount"] != float64(4) || runtimeEventCue["eventDeploymentCount"] != float64(1) {
+		t.Fatalf("expected runtimeEventCue JSON fields in raw overview accounts payload, got %#v", runtimeEventCue)
+	}
+	cueSync, ok := runtimeEventCue["sync"].(map[string]any)
+	if !ok || cueSync["state"] != string(domain.SyncStateReconciling) || cueSync["reason"] != "Traffic shift running" {
+		t.Fatalf("expected runtimeEventCue.sync fields in raw overview accounts payload, got %#v", runtimeEventCue["sync"])
+	}
+	cueHealth, ok := runtimeEventCue["health"].(map[string]any)
+	if !ok || cueHealth["overall"] != string(domain.HealthHealthy) || cueHealth["summary"] != "steady" {
+		t.Fatalf("expected runtimeEventCue.health fields in raw overview accounts payload, got %#v", runtimeEventCue["health"])
 	}
 	rollout, ok := payload[0]["deployments"].([]any)[0].(map[string]any)["rollout"].(map[string]any)
 	if !ok {
@@ -5464,6 +5491,18 @@ func TestRouterOverviewAccountDetail(t *testing.T) {
 				ProjectCount:     1,
 				EnvironmentCount: 1,
 				SyncedCount:      1,
+				RuntimeEventCue: &catalog.RuntimeEventCue{
+					DeploymentName:       "api-prod",
+					Timestamp:            "2026-04-16T06:49:00Z",
+					Source:               "controller",
+					Summary:              "Traffic shift is progressing",
+					Sync:                 domain.Sync{State: domain.SyncStateSynced, Reason: "steady"},
+					Health:               domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+					RolloutPhase:         domain.RolloutPhaseCompleted,
+					CurrentStep:          "Complete",
+					RetainedEventCount:   2,
+					EventDeploymentCount: 1,
+				},
 				Deployments: []catalog.DeploymentOverview{{
 					Name:           "api-prod",
 					EnvironmentRef: "prod-apne2",
@@ -5505,6 +5544,21 @@ func TestRouterOverviewAccountDetail(t *testing.T) {
 	}
 	if payload["projectCount"] != float64(1) || payload["environmentCount"] != float64(1) {
 		t.Fatalf("expected topology count fields in raw overview account detail payload, got %#v", payload)
+	}
+	runtimeEventCue, ok := payload["runtimeEventCue"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected runtimeEventCue object in raw overview account detail payload, got %#v", payload)
+	}
+	if runtimeEventCue["deploymentName"] != "api-prod" || runtimeEventCue["timestamp"] != "2026-04-16T06:49:00Z" || runtimeEventCue["source"] != "controller" || runtimeEventCue["summary"] != "Traffic shift is progressing" || runtimeEventCue["rolloutPhase"] != string(domain.RolloutPhaseCompleted) || runtimeEventCue["currentStep"] != "Complete" || runtimeEventCue["retainedEventCount"] != float64(2) || runtimeEventCue["eventDeploymentCount"] != float64(1) {
+		t.Fatalf("expected runtimeEventCue JSON fields in raw overview account detail payload, got %#v", runtimeEventCue)
+	}
+	cueSync, ok := runtimeEventCue["sync"].(map[string]any)
+	if !ok || cueSync["state"] != string(domain.SyncStateSynced) || cueSync["reason"] != "steady" {
+		t.Fatalf("expected runtimeEventCue.sync fields in raw overview account detail payload, got %#v", runtimeEventCue["sync"])
+	}
+	cueHealth, ok := runtimeEventCue["health"].(map[string]any)
+	if !ok || cueHealth["overall"] != string(domain.HealthHealthy) || cueHealth["summary"] != "steady" {
+		t.Fatalf("expected runtimeEventCue.health fields in raw overview account detail payload, got %#v", runtimeEventCue["health"])
 	}
 }
 
@@ -5596,7 +5650,19 @@ func TestRouterProjectEnvironmentOverview(t *testing.T) {
 				ProgressingCount: 1,
 				PausedCount:      0,
 				ErrorCount:       0,
-				Deployments:      []catalog.DeploymentOverview{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "ap-northeast-2", ExecutionMode: "asgWeightedTargetGroups", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "warming"}}, {Name: "payments-worker-prod", AppRef: "payments-api", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "ap-northeast-2", ExecutionMode: "asgWeightedTargetGroups", Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "steady"}}},
+				RuntimeEventCue: &catalog.RuntimeEventCue{
+					DeploymentName:       "payments-api-prod",
+					Timestamp:            "2026-04-16T06:49:00Z",
+					Source:               "controller",
+					Summary:              "Traffic shift is progressing",
+					Sync:                 domain.Sync{State: domain.SyncStateReconciling, Reason: "warming"},
+					Health:               domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"},
+					RolloutPhase:         domain.RolloutPhaseAccepted,
+					CurrentStep:          "ShiftTrafficCanary",
+					RetainedEventCount:   3,
+					EventDeploymentCount: 1,
+				},
+				Deployments: []catalog.DeploymentOverview{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "ap-northeast-2", ExecutionMode: "asgWeightedTargetGroups", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "warming"}}, {Name: "payments-worker-prod", AppRef: "payments-api", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "ap-northeast-2", ExecutionMode: "asgWeightedTargetGroups", Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "steady"}}},
 			}, nil
 		},
 	})
@@ -5621,6 +5687,21 @@ func TestRouterProjectEnvironmentOverview(t *testing.T) {
 	}
 	if payload["accountName"] != "prod-core" || payload["appRef"] != "payments-api" || payload["environmentRef"] != "prod" || payload["deploymentCount"] != float64(2) {
 		t.Fatalf("expected grouped overview JSON fields, got %#v", payload)
+	}
+	runtimeEventCue, ok := payload["runtimeEventCue"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected runtimeEventCue object in raw grouped overview payload, got %#v", payload)
+	}
+	if runtimeEventCue["deploymentName"] != "payments-api-prod" || runtimeEventCue["timestamp"] != "2026-04-16T06:49:00Z" || runtimeEventCue["source"] != "controller" || runtimeEventCue["summary"] != "Traffic shift is progressing" || runtimeEventCue["rolloutPhase"] != string(domain.RolloutPhaseAccepted) || runtimeEventCue["currentStep"] != "ShiftTrafficCanary" || runtimeEventCue["retainedEventCount"] != float64(3) || runtimeEventCue["eventDeploymentCount"] != float64(1) {
+		t.Fatalf("expected runtimeEventCue JSON fields in raw grouped overview payload, got %#v", runtimeEventCue)
+	}
+	cueSync, ok := runtimeEventCue["sync"].(map[string]any)
+	if !ok || cueSync["state"] != string(domain.SyncStateReconciling) || cueSync["reason"] != "warming" {
+		t.Fatalf("expected runtimeEventCue.sync fields in raw grouped overview payload, got %#v", runtimeEventCue["sync"])
+	}
+	cueHealth, ok := runtimeEventCue["health"].(map[string]any)
+	if !ok || cueHealth["overall"] != string(domain.HealthProgressing) || cueHealth["summary"] != "candidate warming" {
+		t.Fatalf("expected runtimeEventCue.health fields in raw grouped overview payload, got %#v", runtimeEventCue["health"])
 	}
 }
 
@@ -5716,10 +5797,18 @@ func TestRouterOverviewAccountsDeploymentReadAuthorization(t *testing.T) {
 						SyncedCount:      1,
 						ProgressingCount: 1,
 						PausedCount:      1,
+						RuntimeEventCue: &catalog.RuntimeEventCue{
+							DeploymentName:       "hidden-prod",
+							Timestamp:            "2026-04-16T07:00:00Z",
+							Source:               "controller",
+							Summary:              "Hidden deployment event",
+							RetainedEventCount:   9,
+							EventDeploymentCount: 3,
+						},
 						Deployments: []catalog.DeploymentOverview{
 							{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", Sync: domain.Sync{State: domain.SyncStateSynced}},
-							{Name: "worker-prod", AppRef: "worker", EnvironmentRef: "prod-apne2", Sync: domain.Sync{State: domain.SyncStatePaused}},
-							{Name: "payments-api-staging", AppRef: "payments-api", EnvironmentRef: "staging-apne2", Sync: domain.Sync{State: domain.SyncStateReconciling}},
+							{Name: "worker-prod", AppRef: "worker", EnvironmentRef: "prod-apne2", Sync: domain.Sync{State: domain.SyncStatePaused}, RuntimeSummary: &domain.RuntimeSummary{Timestamp: "2026-04-16T06:10:00Z", Source: "controller", Summary: "Worker paused", Sync: domain.Sync{State: domain.SyncStatePaused}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "steady"}, HistoryCount: 4}},
+							{Name: "payments-api-staging", AppRef: "payments-api", EnvironmentRef: "staging-apne2", Sync: domain.Sync{State: domain.SyncStateReconciling}, RuntimeSummary: &domain.RuntimeSummary{Timestamp: "2026-04-16T06:30:00Z", Source: "deployment-controller", Summary: "Staging rollout progressing", Sync: domain.Sync{State: domain.SyncStateReconciling}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "warming"}, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficLinear", HistoryCount: 1}},
 						},
 					},
 					{
@@ -5757,6 +5846,9 @@ func TestRouterOverviewAccountsDeploymentReadAuthorization(t *testing.T) {
 		}
 		if got := accounts[0].Deployments; len(got) != 2 || got[0].Name != "worker-prod" || got[1].Name != "payments-api-staging" {
 			t.Fatalf("unexpected filtered overview account deployments: %+v", got)
+		}
+		if cue := accounts[0].RuntimeEventCue; cue == nil || cue.DeploymentName != "payments-api-staging" || cue.Timestamp != "2026-04-16T06:30:00Z" || cue.Source != "deployment-controller" || cue.Summary != "Staging rollout progressing" || cue.RetainedEventCount != 5 || cue.EventDeploymentCount != 2 {
+			t.Fatalf("expected filtered overview account runtime event cue from visible deployments, got %+v", cue)
 		}
 	})
 

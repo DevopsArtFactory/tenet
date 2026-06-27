@@ -27,6 +27,7 @@ type AccountOverview struct {
 	ProgressingCount int                  `json:"progressingCount"`
 	PausedCount      int                  `json:"pausedCount"`
 	ErrorCount       int                  `json:"errorCount"`
+	RuntimeEventCue  *RuntimeEventCue     `json:"runtimeEventCue,omitempty"`
 	Deployments      []DeploymentOverview `json:"deployments"`
 }
 
@@ -42,6 +43,7 @@ type AccountOverviewDetail struct {
 	ProgressingCount int                  `json:"progressingCount"`
 	PausedCount      int                  `json:"pausedCount"`
 	ErrorCount       int                  `json:"errorCount"`
+	RuntimeEventCue  *RuntimeEventCue     `json:"runtimeEventCue,omitempty"`
 	Deployments      []DeploymentOverview `json:"deployments"`
 }
 
@@ -58,6 +60,7 @@ type ProjectEnvironmentOverviewDetail struct {
 	ProgressingCount int                  `json:"progressingCount"`
 	PausedCount      int                  `json:"pausedCount"`
 	ErrorCount       int                  `json:"errorCount"`
+	RuntimeEventCue  *RuntimeEventCue     `json:"runtimeEventCue,omitempty"`
 	Deployments      []DeploymentOverview `json:"deployments"`
 }
 
@@ -105,6 +108,7 @@ type DeploymentOverview struct {
 	Sync               domain.Sync               `json:"sync"`
 	Health             domain.Health             `json:"health"`
 	RuntimeSummary     *domain.RuntimeSummary    `json:"runtimeSummary,omitempty"`
+	RuntimeEventCue    *RuntimeEventCue          `json:"-"`
 	Rollout            *domain.RolloutSummary    `json:"rollout,omitempty"`
 	Conditions         []domain.Condition        `json:"conditions,omitempty"`
 }
@@ -167,6 +171,21 @@ type RuntimeEventRetention struct {
 	Limit              int    `json:"limit"`
 	RetainedEventCount int    `json:"retainedEventCount"`
 	Status             string `json:"status"`
+}
+
+// RuntimeEventCue summarizes the newest retained runtime event across a visible
+// deployment slice, plus the bounded retained-event counts behind it.
+type RuntimeEventCue struct {
+	DeploymentName       string              `json:"deploymentName,omitempty"`
+	Timestamp            string              `json:"timestamp,omitempty"`
+	Source               string              `json:"source,omitempty"`
+	Summary              string              `json:"summary,omitempty"`
+	Sync                 domain.Sync         `json:"sync"`
+	Health               domain.Health       `json:"health"`
+	RolloutPhase         domain.RolloutPhase `json:"rolloutPhase,omitempty"`
+	CurrentStep          string              `json:"currentStep,omitempty"`
+	RetainedEventCount   int                 `json:"retainedEventCount"`
+	EventDeploymentCount int                 `json:"eventDeploymentCount"`
 }
 
 // DeploymentEventsResultScope describes the bounded runtime-event window returned
@@ -271,6 +290,7 @@ func BuildAccountOverviews(c manifest.Catalog, snapshots []statusstore.Snapshot)
 		case domain.SyncStateError:
 			account.overview.ErrorCount++
 		}
+		runtimeSummary := cloneRuntimeSummary(deriveRuntimeSummary(status))
 		account.overview.Deployments = append(account.overview.Deployments, DeploymentOverview{
 			Name:               deployment.Name,
 			AppRef:             deployment.AppRef,
@@ -286,7 +306,8 @@ func BuildAccountOverviews(c manifest.Catalog, snapshots []statusstore.Snapshot)
 			ObservedGeneration: status.ObservedGeneration,
 			Sync:               status.Sync,
 			Health:             status.Health,
-			RuntimeSummary:     cloneRuntimeSummary(deriveRuntimeSummary(status)),
+			RuntimeSummary:     runtimeSummary,
+			RuntimeEventCue:    runtimeEventCueFromStatus(deployment.Name, status),
 			Rollout:            cloneRolloutSummary(status.Rollout),
 			Conditions:         append([]domain.Condition(nil), status.Conditions...),
 		})
@@ -299,6 +320,7 @@ func BuildAccountOverviews(c manifest.Catalog, snapshots []statusstore.Snapshot)
 		sort.Slice(account.overview.Deployments, func(i, j int) bool {
 			return account.overview.Deployments[i].Name < account.overview.Deployments[j].Name
 		})
+		account.overview.RuntimeEventCue = BuildRuntimeEventCue(account.overview.Deployments)
 		accounts = append(accounts, account.overview)
 	}
 
@@ -382,6 +404,7 @@ func BuildAccountOverviewDetail(c manifest.Catalog, snapshots []statusstore.Snap
 			ProgressingCount: matched.ProgressingCount,
 			PausedCount:      matched.PausedCount,
 			ErrorCount:       matched.ErrorCount,
+			RuntimeEventCue:  cloneRuntimeEventCue(matched.RuntimeEventCue),
 			Deployments:      deployments,
 		}, nil
 	}
@@ -439,6 +462,7 @@ func BuildProjectEnvironmentOverviewDetail(c manifest.Catalog, snapshots []statu
 	sort.Slice(detail.Deployments, func(i, j int) bool {
 		return detail.Deployments[i].Name < detail.Deployments[j].Name
 	})
+	detail.RuntimeEventCue = BuildRuntimeEventCue(detail.Deployments)
 
 	return detail, nil
 }
@@ -595,6 +619,78 @@ func BuildRuntimeEventRetention(retainedEventCount int) RuntimeEventRetention {
 		RetainedEventCount: retainedEventCount,
 		Status:             status,
 	}
+}
+
+func BuildRuntimeEventCue(deployments []DeploymentOverview) *RuntimeEventCue {
+	var cue *RuntimeEventCue
+	for _, deployment := range deployments {
+		deploymentCue := runtimeEventCueFromDeployment(deployment)
+		if deploymentCue == nil {
+			continue
+		}
+		if cue == nil {
+			cue = cloneRuntimeEventCue(deploymentCue)
+			continue
+		}
+		retainedEventCount := cue.RetainedEventCount + deploymentCue.RetainedEventCount
+		eventDeploymentCount := cue.EventDeploymentCount + deploymentCue.EventDeploymentCount
+		if runtimeEventCueIsNewer(deploymentCue, cue) {
+			cue = cloneRuntimeEventCue(deploymentCue)
+		}
+		cue.RetainedEventCount = retainedEventCount
+		cue.EventDeploymentCount = eventDeploymentCount
+	}
+	return cue
+}
+
+func runtimeEventCueFromDeployment(deployment DeploymentOverview) *RuntimeEventCue {
+	if deployment.RuntimeEventCue != nil {
+		return deployment.RuntimeEventCue
+	}
+	if deployment.RuntimeSummary == nil || deployment.RuntimeSummary.HistoryCount == 0 {
+		return nil
+	}
+	return &RuntimeEventCue{
+		DeploymentName:       deployment.Name,
+		Timestamp:            deployment.RuntimeSummary.Timestamp,
+		Source:               deployment.RuntimeSummary.Source,
+		Summary:              deployment.RuntimeSummary.Summary,
+		Sync:                 deployment.RuntimeSummary.Sync,
+		Health:               deployment.RuntimeSummary.Health,
+		RolloutPhase:         deployment.RuntimeSummary.RolloutPhase,
+		CurrentStep:          deployment.RuntimeSummary.CurrentStep,
+		RetainedEventCount:   deployment.RuntimeSummary.HistoryCount,
+		EventDeploymentCount: 1,
+	}
+}
+
+func runtimeEventCueFromStatus(deploymentName string, status domain.DeploymentStatus) *RuntimeEventCue {
+	if len(status.History) == 0 {
+		return nil
+	}
+	latest := status.History[len(status.History)-1]
+	return &RuntimeEventCue{
+		DeploymentName:       deploymentName,
+		Timestamp:            latest.Timestamp,
+		Source:               latest.Source,
+		Summary:              latest.Summary,
+		Sync:                 latest.Sync,
+		Health:               latest.Health,
+		RolloutPhase:         latest.RolloutPhase,
+		CurrentStep:          latest.CurrentStep,
+		RetainedEventCount:   len(status.History),
+		EventDeploymentCount: 1,
+	}
+}
+
+func runtimeEventCueIsNewer(candidate, current *RuntimeEventCue) bool {
+	if candidate.Timestamp != current.Timestamp {
+		return candidate.Timestamp > current.Timestamp
+	}
+	if candidate.DeploymentName != current.DeploymentName {
+		return candidate.DeploymentName < current.DeploymentName
+	}
+	return candidate.Source < current.Source
 }
 
 func withRuntimeEventIDs(deploymentName string, history []domain.StatusHistoryEntry) []domain.StatusHistoryEntry {
@@ -755,9 +851,18 @@ func cloneManagedDrift(items []domain.ManagedDriftItem) []domain.ManagedDriftIte
 func cloneDeploymentOverview(deployment DeploymentOverview) DeploymentOverview {
 	copy := deployment
 	copy.RuntimeSummary = cloneRuntimeSummary(deployment.RuntimeSummary)
+	copy.RuntimeEventCue = cloneRuntimeEventCue(deployment.RuntimeEventCue)
 	copy.Rollout = cloneRolloutSummary(deployment.Rollout)
 	copy.Conditions = append([]domain.Condition(nil), deployment.Conditions...)
 	return copy
+}
+
+func cloneRuntimeEventCue(cue *RuntimeEventCue) *RuntimeEventCue {
+	if cue == nil {
+		return nil
+	}
+	copy := *cue
+	return &copy
 }
 
 func cloneRolloutSummary(summary *domain.RolloutSummary) *domain.RolloutSummary {
