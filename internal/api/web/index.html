@@ -1800,9 +1800,9 @@
       const copyReadRouteToClipboard = (routeText) => {
         return copyTextToClipboard(routeText);
       };
-      const createCopyReadRouteButton = (routeText) => {
+      const createCopyReadRouteButton = (routeText, label = 'Copy read route') => {
         if (!routeText) return null;
-        const button = createElement('button', 'toolbar-button copy-read-route', 'Copy read route');
+        const button = createElement('button', 'toolbar-button copy-read-route', label);
         button.type = 'button';
         button.setAttribute('aria-label', `Copy ${routeText}`);
         button.addEventListener('click', () => {
@@ -1817,7 +1817,7 @@
             .finally(() => {
               setTimeout(() => {
                 button.disabled = false;
-                button.textContent = 'Copy read route';
+                button.textContent = label;
               }, 1600);
             });
         });
@@ -5146,14 +5146,19 @@
           { disabled: isLoading || !deploymentName || !resource?.type || !resource?.name },
         );
       };
-      const createResourceLogsActions = (section, deploymentName, resource, isLoading = false, detail = null) => [
-        createResourceLogsLimitControl(section, deploymentName, resource, isLoading, detail),
-        createRefreshButton(
-          'Refresh recent logs',
-          isLoading || !deploymentName || !resource?.type || !resource?.name,
-          () => renderResourceLogsSection(section, deploymentName, resource, { force: true, detail }).catch(() => {}),
-        ),
-      ];
+      const createResourceLogsActions = (section, deploymentName, resource, isLoading = false, detail = null) => {
+        const selectedLimit = selectedResourceLogsLimit(deploymentName, resource);
+        const readRoute = deploymentName && resource?.type && resource?.name ? resourceLogsReadRoute(deploymentName, resource, selectedLimit) : '';
+        return [
+          createResourceLogsLimitControl(section, deploymentName, resource, isLoading, detail),
+          createRefreshButton(
+            'Refresh recent logs',
+            isLoading || !deploymentName || !resource?.type || !resource?.name,
+            () => renderResourceLogsSection(section, deploymentName, resource, { force: true, detail }).catch(() => {}),
+          ),
+          createCopyReadRouteButton(readRoute, 'Copy recent logs route'),
+        ].filter(Boolean);
+      };
       const buildResourceLogsRoute = (deploymentName, resource, limit = 0) => {
         const params = new URLSearchParams({
           resourceType: resource?.type || '',
@@ -5406,8 +5411,11 @@
         resource,
         resourceInspectionRequestRouteFields(deploymentName, resource, limit),
       );
+      const resourceInspectionDeploymentName = (detailOrDeploymentName) => typeof detailOrDeploymentName === 'string'
+        ? detailOrDeploymentName
+        : detailOrDeploymentName?.name || currentPageState.deployment || '';
       const createResourceInspectionLimitControl = (section, detail, resource, isLoading = false) => {
-        const deploymentName = detail?.name || currentPageState.deployment || '';
+        const deploymentName = resourceInspectionDeploymentName(detail);
         if (!supportsBoundedResourceInspection(resource)) return null;
         const selectedLimit = selectedResourceInspectionLimit(deploymentName, resource);
         return createSelect(
@@ -5423,14 +5431,20 @@
           { disabled: isLoading || !deploymentName || !resource?.type || !resource?.name },
         );
       };
-      const createResourceInspectionActions = (section, detail, resource, isLoading = false) => [
-        createResourceInspectionLimitControl(section, detail, resource, isLoading),
-        createRefreshButton(
-          'Refresh live inspection',
-          isLoading || !(detail?.name || currentPageState.deployment || '') || !resource?.type || !resource?.name,
-          () => renderResourceInspectionSection(section, detail, resource, { force: true }).catch(() => {}),
-        ),
-      ].filter(Boolean);
+      const createResourceInspectionActions = (section, detail, resource, isLoading = false) => {
+        const deploymentName = resourceInspectionDeploymentName(detail);
+        const selectedLimit = selectedResourceInspectionLimit(deploymentName, resource);
+        const readRoute = deploymentName && resource?.type && resource?.name ? resourceInspectionReadRoute(deploymentName, resource, selectedLimit) : '';
+        return [
+          createResourceInspectionLimitControl(section, detail, resource, isLoading),
+          createRefreshButton(
+            'Refresh live inspection',
+            isLoading || !deploymentName || !resource?.type || !resource?.name,
+            () => renderResourceInspectionSection(section, detail, resource, { force: true }).catch(() => {}),
+          ),
+          createCopyReadRouteButton(readRoute, 'Copy live inspection route'),
+        ].filter(Boolean);
+      };
       const renderResourceInspectionState = (container, text, className = '', beforeNodes = [], afterNodes = [], actions = []) => {
         const heading = createDetailSectionHeader('Live inspection', actions);
         const stateNode = createElement('div', 'detail-state', text);

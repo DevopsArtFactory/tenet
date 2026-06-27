@@ -1919,7 +1919,15 @@ async function render(search, fetchImpl) {
   if (!resourceCopyButton || resourceCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/payments-api-staging') throw new Error('expected resource detail copy button');
   resourceCopyButton.dispatch('click');
   await settle();
-  if (resourceView.clipboardWrites.join(', ') !== 'GET /v1/overview/deployments/payments-api-staging') throw new Error('expected resource detail copy route, got ' + resourceView.clipboardWrites.join(', '));
+  const liveInspectionCopyButton = collectNodes(resourceView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Copy live inspection route');
+  if (!liveInspectionCopyButton || liveInspectionCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10') throw new Error('expected live inspection copy button');
+  liveInspectionCopyButton.dispatch('click');
+  await settle();
+  const recentLogsCopyButton = collectNodes(resourceView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Copy recent logs route');
+  if (!recentLogsCopyButton || recentLogsCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service') throw new Error('expected recent logs copy button');
+  recentLogsCopyButton.dispatch('click');
+  await settle();
+  if (resourceView.clipboardWrites.join(', ') !== 'GET /v1/overview/deployments/payments-api-staging, GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10, GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service') throw new Error('expected resource copy routes, got ' + resourceView.clipboardWrites.join(', '));
   const resourceBodyText = collectText(resourceView.document.getElementById('accounts')).join(' | ');
   const resourceToolbarText = collectText(resourceView.document.getElementById('toolbar')).join(' | ');
   if (!resourceBodyText.includes('Current resource read: GET /v1/overview/deployments/payments-api-staging')) throw new Error('expected resource detail body to show the top-level read route');

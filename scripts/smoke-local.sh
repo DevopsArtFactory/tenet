@@ -1763,6 +1763,8 @@ assert 'Live inspection' in ui, ui
 assert 'Loading live inspection…' in ui, ui
 assert 'Live inspection is unavailable for this resource.' in ui, ui
 assert 'Refresh live inspection' in ui, ui
+assert 'Copy live inspection route' in ui, ui
+assert "createCopyReadRouteButton(readRoute, 'Copy live inspection route')" in ui, ui
 assert 'Inspection path ·' in ui, ui
 assert 'Provider lookup context' in ui, ui
 assert 'createResourceInspectionLookupContextNodes(result?.lookupContext)' in ui, ui
@@ -1952,6 +1954,8 @@ assert "renderResourceDetailPage(detail, resourceState);" in ui, ui
 assert "params.set('resourceLogLimit', String(limit));" in ui, ui
 assert "syncResourcePanelLimitQueryParams(deploymentName, resource);" in ui, ui
 assert "Refresh recent logs" in ui, ui
+assert "Copy recent logs route" in ui, ui
+assert "createCopyReadRouteButton(readRoute, 'Copy recent logs route')" in ui, ui
 assert "const responseRequestID = (response) => {" in ui, ui
 assert "Tenet request ID" in ui, ui
 assert "Last refreshed" in ui, ui
