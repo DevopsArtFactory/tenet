@@ -4230,6 +4230,13 @@ const createDocument = () => {
 };
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+const assertStatusRegion = (node, label) => {
+  if (!node) throw new Error('expected status node for ' + label);
+  if (node.getAttribute('role') !== 'status') throw new Error('expected ' + label + ' to use role=status');
+  if (node.getAttribute('aria-live') !== 'polite') throw new Error('expected ' + label + ' to use aria-live=polite');
+  if (node.getAttribute('aria-atomic') !== 'true') throw new Error('expected ' + label + ' to use aria-atomic=true');
+};
+const deploymentEventsStateNode = (document, text) => collectNodes(document.getElementById('accounts'), (node) => String(node.className || '').includes('detail-state') && collectText(node).join(' | ').includes(text))[0];
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 async function render(fetchImpl, initialSearch = '?page=application&deployment=payments-api-staging', initialHash = '') {
   const document = createDocument();
@@ -4280,6 +4287,7 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   if (!refreshEvents.disabled) throw new Error('expected runtime-events refresh button disabled while initial fetch is in flight');
   const loadingText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
   if (!loadingText.includes('Loading controller runtime events…')) throw new Error('expected loading state while deployment events request is pending');
+  assertStatusRegion(deploymentEventsStateNode(loadingView.document, 'Loading controller runtime events…'), 'runtime-events loading state');
   if (loadingView.fetchCalls.length !== 2 || loadingView.fetchCalls[0] !== detailURL || loadingView.fetchCalls[1] !== eventsURL) throw new Error('expected application detail fetch followed by deployment events fetch');
   resolveInitialEvents({ ok: true, json: () => Promise.resolve(eventsBody) });
   await settle();
@@ -4421,6 +4429,7 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   }, '?page=application&deployment=payments-api-staging&eventSource=controller');
   const filteredEmptyText = collectText(filteredEmptyView.document.getElementById('accounts')).join(' | ');
   if (!filteredEmptyText.includes('No controller runtime events match source filter "controller" in the latest 10-event window. Clear Event source or refresh before treating controller history as absent.')) throw new Error('expected source-filtered empty runtime-events guidance, got ' + filteredEmptyText);
+  assertStatusRegion(deploymentEventsStateNode(filteredEmptyView.document, 'No controller runtime events match source filter "controller"'), 'runtime-events source-filtered empty state');
   if (filteredEmptyText.includes('No controller runtime events are retained for this application yet.')) throw new Error('expected source-filtered empty copy to differ from no retained controller history');
   if (!filteredEmptyText.includes('Source filter · controller')) throw new Error('expected filtered-empty scope summary to keep selected source filter metadata');
   if (!filteredEmptyText.includes('Source mix · deployment-controller · 6 events') || !filteredEmptyText.includes('Source mix · github · 4 events')) throw new Error('expected source-filtered empty payload to keep retained sourceSummary chips');
@@ -4434,6 +4443,7 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   });
   const emptyText = collectText(emptyView.document.getElementById('accounts')).join(' | ');
   if (!emptyText.includes('No controller runtime events are retained for this application yet. Refresh runtime events after the controller reconciles before treating runtime history as absent.')) throw new Error('expected empty deployment events state to distinguish no retained controller history');
+  assertStatusRegion(deploymentEventsStateNode(emptyView.document, 'No controller runtime events are retained for this application yet.'), 'runtime-events empty state');
   if (!emptyText.includes('Returned events · 0 events') || !emptyText.includes('Total retained events · 0 events') || !emptyText.includes('Retention limit · 10 events') || !emptyText.includes('Retention retained · 0 retained events') || !emptyText.includes('Retention status · Within controller retention limit') || !emptyText.includes('Window status · Query window did not truncate the retained history')) throw new Error('expected empty deployment events resultScope summary to explain no retained history');
   if (emptyText.includes('Newest event ·') || emptyText.includes('Oldest event ·')) throw new Error('expected empty deployment events scope to omit event-window timestamps');
   if (!emptyText.includes('Last refreshed ·')) throw new Error('expected empty successful runtime-events read to keep a freshness cue');
@@ -4453,6 +4463,7 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   });
   const unavailableText = collectText(unavailableView.document.getElementById('accounts')).join(' | ');
   if (!unavailableText.includes('Controller runtime events are currently unavailable.')) throw new Error('expected unavailable deployment events state');
+  assertStatusRegion(deploymentEventsStateNode(unavailableView.document, 'Controller runtime events are currently unavailable.'), 'runtime-events unavailable state');
   if (!unavailableText.includes('deployment events unavailable (503): overview deployment events unavailable')) throw new Error('expected unavailable deployment events detail');
   if (unavailableText.includes('Last refreshed ·')) throw new Error('expected unavailable runtime-events read not to claim fresh evidence');
   buttons = collectNodes(unavailableView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
