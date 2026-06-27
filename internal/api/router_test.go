@@ -246,6 +246,181 @@ func TestRouterOperatorContextReportsGitHubDesiredStateSourceRefreshDiagnostics(
 	}
 }
 
+func TestRouterControllerRefreshFilesystemNoop(t *testing.T) {
+	publisher := &recordingControllerRefreshPublisher{}
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		GitHubWebhookDesiredStateSource: githubwebhook.DesiredStateSourceConfig{
+			Kind: githubwebhook.DesiredStateSourceKindFilesystem,
+		},
+		GitHubWebhookRefreshPublisher: publisher,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/controller/refresh", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%q", resp.Code, resp.Body.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode controller refresh response: %v", err)
+	}
+	if got["status"] != "filesystem_noop" || got["processed"] != false {
+		t.Fatalf("unexpected filesystem no-op response: %#v", got)
+	}
+	desiredStateSource, ok := got["desiredStateSource"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected desiredStateSource diagnostics, got %#v", got["desiredStateSource"])
+	}
+	if desiredStateSource["kind"] != githubwebhook.DesiredStateSourceKindFilesystem {
+		t.Fatalf("expected filesystem desired-state diagnostic, got %#v", desiredStateSource)
+	}
+	refresh, ok := desiredStateSource["controllerRefresh"].(map[string]any)
+	if !ok || refresh["status"] != "filesystem_noop" {
+		t.Fatalf("expected filesystem controller refresh diagnostic, got %#v", desiredStateSource["controllerRefresh"])
+	}
+	if len(publisher.requests) != 0 {
+		t.Fatalf("expected filesystem refresh to skip publisher, got %+v", publisher.requests)
+	}
+}
+
+func TestRouterControllerRefreshPublishesGitHubDesiredStateRefresh(t *testing.T) {
+	previousNow := githubWebhookNow
+	githubWebhookNow = func() time.Time { return time.Date(2026, time.April, 20, 10, 45, 0, 0, time.UTC) }
+	defer func() {
+		githubWebhookNow = previousNow
+	}()
+
+	publisher := &recordingControllerRefreshPublisher{
+		receipt: controllerrefresh.Receipt{
+			Backend:   controllerrefresh.BackendRedis,
+			Channel:   "tenet:test:controller-refresh",
+			RequestID: "api-controller-refresh:manual-refresh-123",
+		},
+	}
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		GitHubWebhookDesiredStateSource: githubwebhook.DesiredStateSourceConfig{
+			Kind:       githubwebhook.DesiredStateSourceKindGitHub,
+			Repository: "acme/platform-config",
+			Ref:        "main",
+			Path:       "tenet",
+		},
+		GitHubWebhookRefreshPublisher: publisher,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/controller/refresh", nil)
+	req.Header.Set(RequestIDHeader, "manual-refresh-123")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%q", resp.Code, resp.Body.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode controller refresh response: %v", err)
+	}
+	if got["status"] != "published" || got["processed"] != true {
+		t.Fatalf("unexpected published response: %#v", got)
+	}
+	refresh, ok := got["controllerRefresh"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected controllerRefresh summary, got %#v", got["controllerRefresh"])
+	}
+	if refresh["backend"] != controllerrefresh.BackendRedis || refresh["channel"] != "tenet:test:controller-refresh" || refresh["requestId"] != "api-controller-refresh:manual-refresh-123" || refresh["publishedAt"] != "2026-04-20T10:45:00Z" {
+		t.Fatalf("unexpected controller refresh summary: %#v", refresh)
+	}
+	if len(publisher.requests) != 1 {
+		t.Fatalf("expected one controller refresh publish, got %d", len(publisher.requests))
+	}
+	request := publisher.requests[0]
+	if request.RequestID != "api-controller-refresh:manual-refresh-123" || request.DeliveryID != "manual-refresh-123" || request.Repository != "acme/platform-config" || request.Ref != "main" || request.After != "" || request.RequestedAt != "2026-04-20T10:45:00Z" {
+		t.Fatalf("unexpected controller refresh publish request: %+v", request)
+	}
+}
+
+func TestRouterControllerRefreshRequiresPost(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/controller/refresh", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d body=%q", resp.Code, resp.Body.String())
+	}
+	if allow := resp.Header().Get("Allow"); allow != http.MethodPost {
+		t.Fatalf("expected Allow header %q, got %q", http.MethodPost, allow)
+	}
+}
+
+func TestRouterControllerRefreshAuthGuards(t *testing.T) {
+	t.Run("unauthenticated when identity is enforced", func(t *testing.T) {
+		publisher := &recordingControllerRefreshPublisher{}
+		router := NewRouter(Options{
+			BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireAuthenticatedIdentity: true,
+			GitHubWebhookDesiredStateSource: githubwebhook.DesiredStateSourceConfig{
+				Kind:       githubwebhook.DesiredStateSourceKindGitHub,
+				Repository: "acme/platform-config",
+				Ref:        "main",
+			},
+			GitHubWebhookRefreshPublisher: publisher,
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/controller/refresh", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator write route\n" {
+			t.Fatalf("unexpected unauthenticated response body: %q", body)
+		}
+		if len(publisher.requests) != 0 {
+			t.Fatalf("expected identity guard to short-circuit publisher, got %+v", publisher.requests)
+		}
+	})
+
+	t.Run("forbidden when operator role is enforced", func(t *testing.T) {
+		publisher := &recordingControllerRefreshPublisher{}
+		router := NewRouter(Options{
+			BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TrustAuthenticatedHeaders:    true,
+			RequireAuthenticatedIdentity: true,
+			RequireOperatorRoleForWrite:  true,
+			GitHubWebhookDesiredStateSource: githubwebhook.DesiredStateSourceConfig{
+				Kind:       githubwebhook.DesiredStateSourceKindGitHub,
+				Repository: "acme/platform-config",
+				Ref:        "main",
+			},
+			GitHubWebhookRefreshPublisher: publisher,
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/controller/refresh", nil)
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Viewer")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "viewer@example.com")
+		req.Header.Set(requestactor.AuthenticatedRolesHeader, "viewer")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "forbidden: authenticated operator role is required for this operator write route\n" {
+			t.Fatalf("unexpected forbidden response body: %q", body)
+		}
+		if len(publisher.requests) != 0 {
+			t.Fatalf("expected role guard to short-circuit publisher, got %+v", publisher.requests)
+		}
+	})
+}
+
 func TestRouterOperatorContextReportsManagedLoginRuntimeDisabledByDefault(t *testing.T) {
 	router := NewRouter(Options{})
 	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
@@ -632,7 +807,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if operatorWrite["allowed"] != true || operatorWrite["requiresOperatorRole"] != true || operatorWrite["reason"] != "guarded operator write prerequisites are satisfied for this request" {
 		t.Fatalf("expected allowed write verdict, got %#v", operatorWrite)
 	}
-	if !reflect.DeepEqual(operatorWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/transitions"}) {
+	if !reflect.DeepEqual(operatorWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/transitions", "POST /v1/controller/refresh"}) {
 		t.Fatalf("expected operator write route examples, got %#v", operatorWrite["exampleRoutes"])
 	}
 	if !reflect.DeepEqual(operatorWrite["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles"}) {

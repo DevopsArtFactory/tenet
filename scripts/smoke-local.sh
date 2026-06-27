@@ -42,9 +42,11 @@ INVALID_APPLY_TRANSITION_BODY=$(mktemp)
 UNKNOWN_APPLY_TRANSITION_BODY=$(mktemp)
 TERMINAL_APPLY_TRANSITION_BODY=$(mktemp)
 INVALID_WEBHOOK_BODY=$(mktemp)
+CONTROLLER_REFRESH_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_PLAN_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_APPLY_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_TRANSITION_BODY=$(mktemp)
+AUTH_UNAUTHENTICATED_CONTROLLER_REFRESH_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY=$(mktemp)
@@ -70,6 +72,7 @@ AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY=$(mktemp)
 AUTH_FORBIDDEN_PLAN_WRITE_BODY=$(mktemp)
 AUTH_FORBIDDEN_APPLY_WRITE_BODY=$(mktemp)
 AUTH_FORBIDDEN_TRANSITION_BODY=$(mktemp)
+AUTH_ROLE_REQUIRED_CONTROLLER_REFRESH_BODY=$(mktemp)
 AUTH_FORBIDDEN_PLAN_READ_BODY=$(mktemp)
 AUTH_FORBIDDEN_APPLY_READ_BODY=$(mktemp)
 AUTH_FORBIDDEN_AUDIT_BODY=$(mktemp)
@@ -85,7 +88,7 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$ENTERPRISE_SSO_STATE_STORE_PATH" "$ENTERPRISE_SSO_IDENTITY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$INVALID_DEPLOYMENT_EVENTS_LIMIT_BODY" "$INVALID_DEPLOYMENT_EVENTS_SOURCE_BODY" "$INVALID_RESOURCE_LOG_LIMIT_BODY" "$INVALID_RESOURCE_LOG_INSTANCE_BODY" "$INVALID_RESOURCE_INSPECTION_LIMIT_BODY" "$INVALID_RESOURCE_INSPECTION_INSTANCE_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_CATALOG_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_STATUS_READ_BODY" "$AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" "$AUTH_UNAUTHENTICATED_EVENTS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" "$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_EVENTS_BODY" "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_PLAN_WRITE_BODY" "$AUTH_FORBIDDEN_APPLY_WRITE_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_FORBIDDEN_PLAN_READ_BODY" "$AUTH_FORBIDDEN_APPLY_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY" "$AUTH_ROLE_REQUIRED_PLAN_READ_BODY" "$AUTH_ROLE_REQUIRED_APPLY_READ_BODY"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$ENTERPRISE_SSO_STATE_STORE_PATH" "$ENTERPRISE_SSO_IDENTITY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$INVALID_DEPLOYMENT_EVENTS_LIMIT_BODY" "$INVALID_DEPLOYMENT_EVENTS_SOURCE_BODY" "$INVALID_RESOURCE_LOG_LIMIT_BODY" "$INVALID_RESOURCE_LOG_INSTANCE_BODY" "$INVALID_RESOURCE_INSPECTION_LIMIT_BODY" "$INVALID_RESOURCE_INSPECTION_INSTANCE_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$CONTROLLER_REFRESH_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_CONTROLLER_REFRESH_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_CATALOG_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_STATUS_READ_BODY" "$AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" "$AUTH_UNAUTHENTICATED_EVENTS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" "$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_EVENTS_BODY" "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_PLAN_WRITE_BODY" "$AUTH_FORBIDDEN_APPLY_WRITE_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_ROLE_REQUIRED_CONTROLLER_REFRESH_BODY" "$AUTH_FORBIDDEN_PLAN_READ_BODY" "$AUTH_FORBIDDEN_APPLY_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY" "$AUTH_ROLE_REQUIRED_PLAN_READ_BODY" "$AUTH_ROLE_REQUIRED_APPLY_READ_BODY"
   rm -rf "$PAYLOAD_DIR" "$REPO_ROOT"
 }
 trap cleanup EXIT
@@ -494,6 +497,9 @@ invalid_webhook_status=$(curl -sS -o "$INVALID_WEBHOOK_BODY" -w "%{http_code}" -
   --data "$webhook_push_body" \
   "http://$HOST:$PORT/api/v1/github/webhook")
 invalid_webhook=$(cat "$INVALID_WEBHOOK_BODY")
+controller_refresh_status=$(curl -sS -o "$CONTROLLER_REFRESH_BODY" -w "%{http_code}" -X POST \
+  "http://$HOST:$PORT/v1/controller/refresh")
+controller_refresh=$(cat "$CONTROLLER_REFRESH_BODY")
 resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging-codedeploy-group")
 codedeploy_application_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployApplication&resourceName=payments-api-staging-codedeploy-app")
 test_listener_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=testListener&resourceName=payments-api-staging-test-listener")
@@ -580,6 +586,7 @@ webhook_push_path=$(write_payload webhook-push.json "$webhook_push")
 webhook_ping_path=$(write_payload webhook-ping.json "$webhook_ping")
 webhook_deleted_path=$(write_payload webhook-deleted.json "$webhook_deleted")
 invalid_webhook_path=$(write_payload invalid-webhook.txt "$invalid_webhook")
+controller_refresh_path=$(write_payload controller-refresh.json "$controller_refresh")
 resource_logs_path=$(write_payload resource-logs.json "$resource_logs")
 codedeploy_application_resource_logs_path=$(write_payload codedeploy-application-resource-logs.json "$codedeploy_application_resource_logs")
 test_listener_resource_logs_path=$(write_payload test-listener-resource-logs.json "$test_listener_resource_logs")
@@ -627,7 +634,7 @@ audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_ui_path=$(write_payload plan-ui.html "$plan_ui")
 apply_ui_path=$(write_payload apply-ui.html "$apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" DEPLOYMENT_EVENTS_FIXTURE_LIMITED_PATH="$deployment_events_fixture_limited_path" DEPLOYMENT_EVENTS_FIXTURE_SOURCE_PATH="$deployment_events_fixture_source_path" INVALID_DEPLOYMENT_EVENTS_LIMIT_STATUS="$invalid_deployment_events_limit_status" INVALID_DEPLOYMENT_EVENTS_LIMIT_PATH="$invalid_deployment_events_limit_path" INVALID_DEPLOYMENT_EVENTS_SOURCE_STATUS="$invalid_deployment_events_source_status" INVALID_DEPLOYMENT_EVENTS_SOURCE_PATH="$invalid_deployment_events_source_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" STALE_APPLY_PLAN_PREVIEW_PATH="$stale_apply_plan_preview_path" STALE_APPLY_CONFLICT_PATH="$stale_apply_conflict_path" STALE_APPLY_CONFLICT_STATUS="$stale_apply_conflict_status" STALE_APPLY_AUDIT_LOGS_PATH="$stale_apply_audit_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_DELETED_PATH="$webhook_deleted_path" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" RESOURCE_LOGS_PATH="$resource_logs_path" CODEDEPLOY_APPLICATION_RESOURCE_LOGS_PATH="$codedeploy_application_resource_logs_path" TEST_LISTENER_RESOURCE_LOGS_PATH="$test_listener_resource_logs_path" WORKER_CLUSTER_ARN="$worker_cluster_arn" SELECTED_WORKER_RESOURCE_LOGS_PATH="$selected_worker_resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" LIMITED_WORKER_RESOURCE_LOGS_PATH="$limited_worker_resource_logs_path" ECS_TASK_RESOURCE_LOGS_PATH="$ecs_task_resource_logs_path" ECS_TASK_RESOURCE_INSPECTION_PATH="$ecs_task_resource_inspection_path" INVALID_RESOURCE_LOG_LIMIT_STATUS="$invalid_resource_log_limit_status" INVALID_RESOURCE_LOG_LIMIT_PATH="$invalid_resource_log_limit_path" INVALID_RESOURCE_LOG_INSTANCE_STATUS="$invalid_resource_log_instance_status" INVALID_RESOURCE_LOG_INSTANCE_PATH="$invalid_resource_log_instance_path" INVALID_RESOURCE_INSPECTION_LIMIT_STATUS="$invalid_resource_inspection_limit_status" INVALID_RESOURCE_INSPECTION_LIMIT_PATH="$invalid_resource_inspection_limit_path" INVALID_RESOURCE_INSPECTION_INSTANCE_STATUS="$invalid_resource_inspection_instance_status" INVALID_RESOURCE_INSPECTION_INSTANCE_PATH="$invalid_resource_inspection_instance_path" BOOTSTRAP_RESOURCE_LOGS_PATH="$bootstrap_resource_logs_path" SELECTED_BOOTSTRAP_RESOURCE_LOGS_PATH="$selected_bootstrap_resource_logs_path" TRAFFIC_RESOURCE_LOGS_PATH="$traffic_resource_logs_path" PRODUCTION_LISTENER_RULE_RESOURCE_LOGS_PATH="$production_listener_rule_resource_logs_path" ACTIVE_TARGET_GROUP_RESOURCE_LOGS_PATH="$active_target_group_resource_logs_path" CANDIDATE_TARGET_GROUP_RESOURCE_LOGS_PATH="$candidate_target_group_resource_logs_path" BOOTSTRAP_RESOURCE_INSPECTION_PATH="$bootstrap_resource_inspection_path" SELECTED_BOOTSTRAP_RESOURCE_INSPECTION_PATH="$selected_bootstrap_resource_inspection_path" SELECTED_WORKER_RESOURCE_INSPECTION_PATH="$selected_worker_resource_inspection_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" BOUNDED_CANDIDATE_RESOURCE_INSPECTION_PATH="$bounded_candidate_resource_inspection_path" SELECTED_CANDIDATE_RESOURCE_INSPECTION_PATH="$selected_candidate_resource_inspection_path" CODEDEPLOY_APPLICATION_RESOURCE_INSPECTION_PATH="$codedeploy_application_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$blue_task_set_target_group_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" PRODUCTION_LISTENER_RULE_RESOURCE_INSPECTION_PATH="$production_listener_rule_resource_inspection_path" ACTIVE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$active_target_group_resource_inspection_path" CANDIDATE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$candidate_target_group_resource_inspection_path" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" ACCOUNT_UI_PATH="$account_ui_path" RESOURCE_UI_PATH="$resource_ui_path" ECS_RESOURCE_UI_PATH="$ecs_resource_ui_path" BOOTSTRAP_RESOURCE_UI_PATH="$bootstrap_resource_ui_path" CODEDEPLOY_APPLICATION_RESOURCE_UI_PATH="$codedeploy_application_resource_ui_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_UI_PATH="$blue_task_set_target_group_resource_ui_path" PRODUCTION_LISTENER_RULE_RESOURCE_UI_PATH="$production_listener_rule_resource_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" DEPLOYMENT_EVENTS_FIXTURE_LIMITED_PATH="$deployment_events_fixture_limited_path" DEPLOYMENT_EVENTS_FIXTURE_SOURCE_PATH="$deployment_events_fixture_source_path" INVALID_DEPLOYMENT_EVENTS_LIMIT_STATUS="$invalid_deployment_events_limit_status" INVALID_DEPLOYMENT_EVENTS_LIMIT_PATH="$invalid_deployment_events_limit_path" INVALID_DEPLOYMENT_EVENTS_SOURCE_STATUS="$invalid_deployment_events_source_status" INVALID_DEPLOYMENT_EVENTS_SOURCE_PATH="$invalid_deployment_events_source_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" STALE_APPLY_PLAN_PREVIEW_PATH="$stale_apply_plan_preview_path" STALE_APPLY_CONFLICT_PATH="$stale_apply_conflict_path" STALE_APPLY_CONFLICT_STATUS="$stale_apply_conflict_status" STALE_APPLY_AUDIT_LOGS_PATH="$stale_apply_audit_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_DELETED_PATH="$webhook_deleted_path" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" CONTROLLER_REFRESH_PATH="$controller_refresh_path" CONTROLLER_REFRESH_STATUS="$controller_refresh_status" RESOURCE_LOGS_PATH="$resource_logs_path" CODEDEPLOY_APPLICATION_RESOURCE_LOGS_PATH="$codedeploy_application_resource_logs_path" TEST_LISTENER_RESOURCE_LOGS_PATH="$test_listener_resource_logs_path" WORKER_CLUSTER_ARN="$worker_cluster_arn" SELECTED_WORKER_RESOURCE_LOGS_PATH="$selected_worker_resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" LIMITED_WORKER_RESOURCE_LOGS_PATH="$limited_worker_resource_logs_path" ECS_TASK_RESOURCE_LOGS_PATH="$ecs_task_resource_logs_path" ECS_TASK_RESOURCE_INSPECTION_PATH="$ecs_task_resource_inspection_path" INVALID_RESOURCE_LOG_LIMIT_STATUS="$invalid_resource_log_limit_status" INVALID_RESOURCE_LOG_LIMIT_PATH="$invalid_resource_log_limit_path" INVALID_RESOURCE_LOG_INSTANCE_STATUS="$invalid_resource_log_instance_status" INVALID_RESOURCE_LOG_INSTANCE_PATH="$invalid_resource_log_instance_path" INVALID_RESOURCE_INSPECTION_LIMIT_STATUS="$invalid_resource_inspection_limit_status" INVALID_RESOURCE_INSPECTION_LIMIT_PATH="$invalid_resource_inspection_limit_path" INVALID_RESOURCE_INSPECTION_INSTANCE_STATUS="$invalid_resource_inspection_instance_status" INVALID_RESOURCE_INSPECTION_INSTANCE_PATH="$invalid_resource_inspection_instance_path" BOOTSTRAP_RESOURCE_LOGS_PATH="$bootstrap_resource_logs_path" SELECTED_BOOTSTRAP_RESOURCE_LOGS_PATH="$selected_bootstrap_resource_logs_path" TRAFFIC_RESOURCE_LOGS_PATH="$traffic_resource_logs_path" PRODUCTION_LISTENER_RULE_RESOURCE_LOGS_PATH="$production_listener_rule_resource_logs_path" ACTIVE_TARGET_GROUP_RESOURCE_LOGS_PATH="$active_target_group_resource_logs_path" CANDIDATE_TARGET_GROUP_RESOURCE_LOGS_PATH="$candidate_target_group_resource_logs_path" BOOTSTRAP_RESOURCE_INSPECTION_PATH="$bootstrap_resource_inspection_path" SELECTED_BOOTSTRAP_RESOURCE_INSPECTION_PATH="$selected_bootstrap_resource_inspection_path" SELECTED_WORKER_RESOURCE_INSPECTION_PATH="$selected_worker_resource_inspection_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" BOUNDED_CANDIDATE_RESOURCE_INSPECTION_PATH="$bounded_candidate_resource_inspection_path" SELECTED_CANDIDATE_RESOURCE_INSPECTION_PATH="$selected_candidate_resource_inspection_path" CODEDEPLOY_APPLICATION_RESOURCE_INSPECTION_PATH="$codedeploy_application_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$blue_task_set_target_group_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" PRODUCTION_LISTENER_RULE_RESOURCE_INSPECTION_PATH="$production_listener_rule_resource_inspection_path" ACTIVE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$active_target_group_resource_inspection_path" CANDIDATE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$candidate_target_group_resource_inspection_path" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" ACCOUNT_UI_PATH="$account_ui_path" RESOURCE_UI_PATH="$resource_ui_path" ECS_RESOURCE_UI_PATH="$ecs_resource_ui_path" BOOTSTRAP_RESOURCE_UI_PATH="$bootstrap_resource_ui_path" CODEDEPLOY_APPLICATION_RESOURCE_UI_PATH="$codedeploy_application_resource_ui_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_UI_PATH="$blue_task_set_target_group_resource_ui_path" PRODUCTION_LISTENER_RULE_RESOURCE_UI_PATH="$production_listener_rule_resource_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -676,6 +683,7 @@ webhook_push = read_json('WEBHOOK_PUSH_PATH')
 webhook_ping = read_json('WEBHOOK_PING_PATH')
 webhook_deleted = read_json('WEBHOOK_DELETED_PATH')
 invalid_webhook = read_text('INVALID_WEBHOOK_PATH')
+controller_refresh = read_json('CONTROLLER_REFRESH_PATH')
 resource_logs = read_json('RESOURCE_LOGS_PATH')
 codedeploy_application_resource_logs = read_json('CODEDEPLOY_APPLICATION_RESOURCE_LOGS_PATH')
 test_listener_resource_logs = read_json('TEST_LISTENER_RESOURCE_LOGS_PATH')
@@ -1069,6 +1077,13 @@ assert 'controller refresh handoff skipped' in webhook_deleted['reason'], webhoo
 assert 'controllerRefresh' not in webhook_deleted, webhook_deleted
 assert os.environ['INVALID_WEBHOOK_STATUS'] == '400', os.environ['INVALID_WEBHOOK_STATUS']
 assert 'github webhook signature mismatch' in invalid_webhook, invalid_webhook
+assert os.environ['CONTROLLER_REFRESH_STATUS'] == '200', os.environ['CONTROLLER_REFRESH_STATUS']
+assert controller_refresh['status'] == 'filesystem_noop', controller_refresh
+assert controller_refresh['processed'] is False, controller_refresh
+assert 'filesystem catalog' in controller_refresh['reason'], controller_refresh
+assert 'controllerRefresh' not in controller_refresh, controller_refresh
+assert controller_refresh['desiredStateSource']['kind'] == 'filesystem', controller_refresh
+assert controller_refresh['desiredStateSource']['controllerRefresh']['status'] == 'filesystem_noop', controller_refresh
 assert status['status']['sync']['state'] == 'Synced', status
 assert resource_logs['deploymentName'] == 'payments-api-staging', resource_logs
 assert resource_logs['resourceType'] == 'codeDeployDeploymentGroup', resource_logs
@@ -2527,6 +2542,9 @@ auth_unauthenticated_transition_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_TRAN
   -H 'Content-Type: application/json' \
   --data '{"status":"running","step":1}' \
   "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id/transitions")
+auth_unauthenticated_controller_refresh_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_CONTROLLER_REFRESH_BODY" -w "%{http_code}" \
+  -X POST \
+  "http://$HOST:$PORT/v1/controller/refresh")
 if [[ "$APPLY_ENABLED" == "true" ]]; then
   frontdoor_apply_record_get=$(wait_for_apply_status "$frontdoor_apply_id" failed)
 else
@@ -2536,7 +2554,7 @@ frontdoor_audit_logs=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=pa
 frontdoor_apply_record_get_path=$(write_payload frontdoor-apply-record-get.json "$frontdoor_apply_record_get")
 frontdoor_audit_logs_path=$(write_payload frontdoor-audit-logs.json "$frontdoor_audit_logs")
 
-AUTH_UNAUTHENTICATED_PLAN_STATUS="$auth_unauthenticated_plan_status" AUTH_UNAUTHENTICATED_PLAN_BODY_PATH="$AUTH_UNAUTHENTICATED_PLAN_BODY" AUTH_UNAUTHENTICATED_APPLY_STATUS="$auth_unauthenticated_apply_status" AUTH_UNAUTHENTICATED_APPLY_BODY_PATH="$AUTH_UNAUTHENTICATED_APPLY_BODY" AUTH_UNAUTHENTICATED_TRANSITION_STATUS="$auth_unauthenticated_transition_status" AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH="$AUTH_UNAUTHENTICATED_TRANSITION_BODY" FRONTDOOR_PLAN_PREVIEW_PATH="$frontdoor_plan_preview_path" FRONTDOOR_APPLY_RECORD_PATH="$frontdoor_apply_record_path" FRONTDOOR_APPLY_RECORD_GET_PATH="$frontdoor_apply_record_get_path" FRONTDOOR_AUDIT_LOGS_PATH="$frontdoor_audit_logs_path" python3 - <<'PY'
+AUTH_UNAUTHENTICATED_PLAN_STATUS="$auth_unauthenticated_plan_status" AUTH_UNAUTHENTICATED_PLAN_BODY_PATH="$AUTH_UNAUTHENTICATED_PLAN_BODY" AUTH_UNAUTHENTICATED_APPLY_STATUS="$auth_unauthenticated_apply_status" AUTH_UNAUTHENTICATED_APPLY_BODY_PATH="$AUTH_UNAUTHENTICATED_APPLY_BODY" AUTH_UNAUTHENTICATED_TRANSITION_STATUS="$auth_unauthenticated_transition_status" AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH="$AUTH_UNAUTHENTICATED_TRANSITION_BODY" AUTH_UNAUTHENTICATED_CONTROLLER_REFRESH_STATUS="$auth_unauthenticated_controller_refresh_status" AUTH_UNAUTHENTICATED_CONTROLLER_REFRESH_BODY_PATH="$AUTH_UNAUTHENTICATED_CONTROLLER_REFRESH_BODY" FRONTDOOR_PLAN_PREVIEW_PATH="$frontdoor_plan_preview_path" FRONTDOOR_APPLY_RECORD_PATH="$frontdoor_apply_record_path" FRONTDOOR_APPLY_RECORD_GET_PATH="$frontdoor_apply_record_get_path" FRONTDOOR_AUDIT_LOGS_PATH="$frontdoor_audit_logs_path" python3 - <<'PY'
 import json, os
 
 with open(os.environ['AUTH_UNAUTHENTICATED_PLAN_BODY_PATH'], encoding='utf-8') as fh:
@@ -2545,6 +2563,8 @@ with open(os.environ['AUTH_UNAUTHENTICATED_APPLY_BODY_PATH'], encoding='utf-8') 
     unauthenticated_apply_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_transition_body = fh.read()
+with open(os.environ['AUTH_UNAUTHENTICATED_CONTROLLER_REFRESH_BODY_PATH'], encoding='utf-8') as fh:
+    unauthenticated_controller_refresh_body = fh.read()
 with open(os.environ['FRONTDOOR_PLAN_PREVIEW_PATH'], encoding='utf-8') as fh:
     frontdoor_plan_preview = json.load(fh)
 with open(os.environ['FRONTDOOR_APPLY_RECORD_PATH'], encoding='utf-8') as fh:
@@ -2560,6 +2580,8 @@ assert os.environ['AUTH_UNAUTHENTICATED_APPLY_STATUS'] == '401', os.environ['AUT
 assert unauthenticated_apply_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_apply_body
 assert os.environ['AUTH_UNAUTHENTICATED_TRANSITION_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_TRANSITION_STATUS']
 assert unauthenticated_transition_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_transition_body
+assert os.environ['AUTH_UNAUTHENTICATED_CONTROLLER_REFRESH_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_CONTROLLER_REFRESH_STATUS']
+assert unauthenticated_controller_refresh_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_controller_refresh_body
 
 for payload in (frontdoor_plan_preview, frontdoor_apply_record, frontdoor_apply_record_get):
     actor = payload['actor']
@@ -2684,6 +2706,13 @@ auth_role_required_audit_collection_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_AU
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
   "http://$HOST:$PORT/v1/audit-logs?action=apply.requested")
+auth_role_required_controller_refresh_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_CONTROLLER_REFRESH_BODY" -w "%{http_code}" \
+  -X POST \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Viewer" \
+  -H "X-Tenet-Authenticated-Email: viewer@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
+  "http://$HOST:$PORT/v1/controller/refresh")
 auth_unauthenticated_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_READ_BODY" -w "%{http_code}" \
   "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging")
 auth_unauthenticated_status_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" -w "%{http_code}" \
@@ -3041,6 +3070,8 @@ AUTH_ROLE_REQUIRED_STATUS_READ_STATUS="$auth_role_required_status_read_status" \
 AUTH_ROLE_REQUIRED_STATUS_READ_BODY_PATH="$AUTH_ROLE_REQUIRED_STATUS_READ_BODY" \
 AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_STATUS="$auth_role_required_audit_collection_status" \
 AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY_PATH="$AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY" \
+AUTH_ROLE_REQUIRED_CONTROLLER_REFRESH_STATUS="$auth_role_required_controller_refresh_status" \
+AUTH_ROLE_REQUIRED_CONTROLLER_REFRESH_BODY_PATH="$AUTH_ROLE_REQUIRED_CONTROLLER_REFRESH_BODY" \
 AUTH_UNAUTHENTICATED_READ_STATUS="$auth_unauthenticated_read_status" \
 AUTH_UNAUTHENTICATED_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_READ_BODY" \
 AUTH_UNAUTHENTICATED_STATUS_READ_STATUS="$auth_unauthenticated_status_read_status" \
@@ -3149,6 +3180,8 @@ with open(os.environ['AUTH_ROLE_REQUIRED_STATUS_READ_BODY_PATH'], encoding='utf-
     role_required_status_read_body = fh.read()
 with open(os.environ['AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY_PATH'], encoding='utf-8') as fh:
     role_required_audit_collection_body = fh.read()
+with open(os.environ['AUTH_ROLE_REQUIRED_CONTROLLER_REFRESH_BODY_PATH'], encoding='utf-8') as fh:
+    role_required_controller_refresh_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_READ_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_read_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_STATUS_READ_BODY_PATH'], encoding='utf-8') as fh:
@@ -3274,6 +3307,8 @@ assert os.environ['AUTH_ROLE_REQUIRED_STATUS_READ_STATUS'] == '403', os.environ[
 assert role_required_status_read_body.strip() == 'forbidden: authenticated viewer-capable role is required for this operator read route', role_required_status_read_body
 assert os.environ['AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_STATUS'] == '403', os.environ['AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_STATUS']
 assert role_required_audit_collection_body.strip() == 'forbidden: authenticated viewer-capable role is required for this operator read route', role_required_audit_collection_body
+assert os.environ['AUTH_ROLE_REQUIRED_CONTROLLER_REFRESH_STATUS'] == '403', os.environ['AUTH_ROLE_REQUIRED_CONTROLLER_REFRESH_STATUS']
+assert role_required_controller_refresh_body.strip() == 'forbidden: authenticated operator role is required for this operator write route', role_required_controller_refresh_body
 assert os.environ['AUTH_UNAUTHENTICATED_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_READ_STATUS']
 assert unauthenticated_read_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_read_body
 assert os.environ['AUTH_UNAUTHENTICATED_STATUS_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_STATUS_READ_STATUS']
@@ -3407,7 +3442,7 @@ def assert_operator_context_common(payload):
     assert access_verdicts.get('operatorRead', {}).get('requiredTrustedHeaders') == identity_headers + role_headers, payload
     assert access_verdicts.get('operatorRead', {}).get('acceptedRoleNames') == read_roles, payload
     assert access_verdicts.get('operatorWrite', {}).get('requiresOperatorRole') is True, payload
-    assert access_verdicts.get('operatorWrite', {}).get('exampleRoutes') == ['POST /v1/plans/deployments/{deploymentName}', 'POST /v1/applies/plans/{planId}', 'POST /v1/applies/{applyId}/transitions'], payload
+    assert access_verdicts.get('operatorWrite', {}).get('exampleRoutes') == ['POST /v1/plans/deployments/{deploymentName}', 'POST /v1/applies/plans/{planId}', 'POST /v1/applies/{applyId}/transitions', 'POST /v1/controller/refresh'], payload
     assert access_verdicts.get('operatorWrite', {}).get('requiredTrustedHeaders') == identity_headers + role_headers, payload
     assert access_verdicts.get('operatorWrite', {}).get('acceptedRoleNames') == write_roles, payload
     assert access_verdicts.get('deploymentScopedRead', {}).get('requiresExactDeploymentAllowlistMatch') is True, payload

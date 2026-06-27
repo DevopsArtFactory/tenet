@@ -240,13 +240,9 @@ explicitly summary-only and does not invent latest CodeDeploy deployment status
 or target-group health counts. Local smoke guards ensure traffic-routing fallback
 routes do not regress to `aws_unavailable`.
 
-- `POST /v1/plans/deployments/{deploymentName}`
-- `POST /v1/applies/plans/{planId}` (`409 Conflict` means the reviewed plan
-  preview is stale and must be recreated before applying)
-- `GET /v1/audit-logs`
-  (bounded and empty authorized audit reads expose `resultScope.returnedEntryCount`
-  and compact alias `resultScope.returnedCount`, plus `truncationStatus` and
-  compact boolean alias `truncated`)
+- `POST /v1/plans/deployments/{deploymentName}` and `POST /v1/applies/plans/{planId}` (`409 Conflict` means the reviewed plan preview is stale)
+- `POST /v1/controller/refresh` to request the configured desired-state refresh handoff manually (`filesystem_noop` for filesystem catalogs, `202 Accepted` with `controllerRefresh` evidence when GitHub+Redis handoff is available)
+- `GET /v1/audit-logs` (bounded reads expose `resultScope.returnedEntryCount`, `resultScope.returnedCount`, `truncationStatus`, and `truncated`)
 - `GET /v1/operator/context`
 
 The bookmarkable audit timeline (`/?page=audit`) keeps a manual `Refresh audit
