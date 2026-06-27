@@ -9562,6 +9562,9 @@
               }
 
               const detailPanel = createElement('div', 'detail-panel');
+              detailPanel.id = `account-deployment-detail-${sectionIDSegment(account.awsAccountId, 'account')}-${sectionIDSegment(deployment.name, 'deployment')}`;
+              detailPanel.setAttribute('id', detailPanel.id);
+              toggle.setAttribute('aria-controls', detailPanel.id);
               detailPanel.hidden = true;
 
               const toggleExpandedState = () => {

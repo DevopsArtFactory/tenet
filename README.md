@@ -161,7 +161,8 @@ compact `Last update` field from the joined runtime summary, falling back to
 `Latest runtime status` when no timestamp is present. The secondary account
 drill-down keeps its `Refresh account detail` action in the page toolbar so
 operators can refresh account-scoped rows from the same place they refresh
-application detail pages. Application detail pages show the exact backing read route,
+application detail pages; expandable rows expose their controlled lazy-loaded
+detail panel with `aria-controls`. Application detail pages show the exact backing read route,
 `Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search
 for grouped linked resources. When that filter is active, each resource section shows
 visible/total impact and section-specific empty guidance alongside the inline
@@ -178,7 +179,6 @@ Common bookmarkable routes:
 - `/?page=drift&deployment={deploymentName}`; optional `driftQuery`, `driftSeverity=high|medium|low`, and `driftSort=severity` preserve field-level drift filters in shareable URLs
 - `/?page=plan&deployment={deploymentName}`
 - `/?page=audit`
-
 Primary operator APIs:
 - `GET /v1/overview/applications`
 - `GET /v1/overview/deployments/{deploymentName}`
