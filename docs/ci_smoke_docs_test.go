@@ -106,6 +106,22 @@ func TestReadmeDocumentsRecentLogResultScopeFields(t *testing.T) {
 	}
 }
 
+func TestOverviewDashboardDocumentsOperatorContextFreshnessPlacement(t *testing.T) {
+	overviewText := readTextFile(t, "features/overview-dashboard.md")
+	section := markdownSection(t, overviewText, "### Applications overview")
+	for _, fragment := range []string{
+		"a `Last checked` timestamp for the last successful context read inside expanded `Show access details` rather than the compact banner",
+		"A status-only live region announces only compact checking/loading, ready identity, refresh, unavailable, and error status changes",
+	} {
+		if !strings.Contains(section, fragment) {
+			t.Fatalf("expected applications overview docs to include operator-context freshness contract %q", fragment)
+		}
+	}
+	if strings.Contains(section, "a visible `Last checked` timestamp for the last successful context read") {
+		t.Fatalf("expected applications overview docs to avoid stale compact-banner Last checked wording")
+	}
+}
+
 func TestSmokeHelperScriptsRemainDirectlyRunnable(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{
