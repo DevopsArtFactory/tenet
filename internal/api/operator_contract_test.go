@@ -319,6 +319,39 @@ func TestManagedLoginFeatureGuideDocs(t *testing.T) {
 	}
 }
 
+func TestOperatorTroubleshootingRunbookDocsContract(t *testing.T) {
+	readme := readRepoFile(t, "README.md")
+	if !strings.Contains(readme, "`docs/runbooks/operator-troubleshooting.md` documents daily auth, refresh, audit, and drill-down troubleshooting for operators.") {
+		t.Fatal("expected README documentation map to point operators at the operator troubleshooting runbook")
+	}
+
+	runbook := readRepoFile(t, "docs/runbooks/operator-troubleshooting.md")
+	for _, fragment := range []string{
+		"# Operator Troubleshooting",
+		"Daily auth, refresh, audit, and drill-down runbook",
+		"1. Confirm identity, roles, and deployment access",
+		"`GET /v1/operator/context`",
+		"2. Confirm desired-state source and controller-refresh availability",
+		"`POST /v1/controller/refresh`",
+		"3. Request or trace a refresh through audit",
+		"`/?page=audit`",
+		"4. Drill into application, resource evidence, events, live inspection, and logs",
+		"`/?page=application`",
+		"`/?page=resource`",
+		"5. Decode common unavailable states",
+		"`aws_unavailable`",
+		"`no_log_source`",
+		"`source_mismatch`",
+		"`no retained controller history`",
+		"`401`",
+		"`403`",
+	} {
+		if !strings.Contains(runbook, fragment) {
+			t.Fatalf("expected operator troubleshooting runbook to include %q", fragment)
+		}
+	}
+}
+
 func TestEnterpriseSSOSmokeContracts(t *testing.T) {
 	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
