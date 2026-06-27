@@ -395,6 +395,164 @@ func TestRouterControllerRefreshRequiresPost(t *testing.T) {
 	}
 }
 
+func TestRouterControllerRefreshStatusReportsLatestReceipt(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		AuditLogs: func(ctx context.Context, query auditlog.Query) (auditlog.Result, error) {
+			if query.Limit != 1 || query.DeploymentName != "" || query.Action != auditlog.ActionControllerRefresh {
+				t.Fatalf("expected latest controller-refresh audit query, got %+v", query)
+			}
+			return auditlog.Result{
+				Entries: []auditlog.Entry{{
+					EntryID:   "audit_controller_refresh_testopaque",
+					Timestamp: "2026-04-20T10:45:00Z",
+					Action:    string(auditlog.ActionControllerRefresh),
+					Actor: auditlog.Actor{
+						Available: true,
+						ID:        "operator-123",
+						Name:      "Jane Operator",
+						Email:     "jane@example.com",
+					},
+					Metadata: auditlog.Metadata{
+						Status:         "published",
+						Route:          "POST /v1/controller/refresh",
+						Result:         "published",
+						RequestID:      "api-controller-refresh:manual-refresh-123",
+						DeliveryID:     "manual-refresh-123",
+						Backend:        controllerrefresh.BackendRedis,
+						Channel:        "tenet:test:controller-refresh",
+						HTTPStatusCode: http.StatusAccepted,
+					},
+					Source: auditlog.Source{Kind: "controllerRefreshRequest", Store: "controllerRefreshAuditStore", RecordRoute: "POST /v1/controller/refresh"},
+				}},
+				ResultScope: auditlog.BuildResultScope(query, 3, 1),
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/controller/refresh/status", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%q", resp.Code, resp.Body.String())
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode controller refresh status response: %v", err)
+	}
+	if raw["status"] != "published" || raw["available"] != true || raw["hasHistory"] != true || raw["readOnly"] != true || raw["route"] != "GET /v1/controller/refresh/status" {
+		t.Fatalf("unexpected controller refresh status response: %#v", raw)
+	}
+	latest, ok := raw["latestReceipt"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected latestReceipt object, got %#v", raw["latestReceipt"])
+	}
+	if latest["requestId"] != "api-controller-refresh:manual-refresh-123" || latest["deliveryId"] != "manual-refresh-123" || latest["backend"] != controllerrefresh.BackendRedis || latest["channel"] != "tenet:test:controller-refresh" || latest["requestedAt"] != "2026-04-20T10:45:00Z" || latest["httpStatusCode"] != float64(http.StatusAccepted) {
+		t.Fatalf("unexpected latest receipt: %#v", latest)
+	}
+	actor, ok := latest["actor"].(map[string]any)
+	if !ok || actor["available"] != true || actor["id"] != "operator-123" || actor["name"] != "Jane Operator" || actor["email"] != "jane@example.com" {
+		t.Fatalf("expected latest receipt actor projection, got %#v", latest["actor"])
+	}
+	scope, ok := raw["resultScope"].(map[string]any)
+	if !ok || scope["requestedLimit"] != float64(1) || scope["effectiveLimit"] != float64(1) || scope["returnedEntryCount"] != float64(1) || scope["totalEntryCount"] != float64(3) || scope["truncated"] != true {
+		t.Fatalf("expected latest receipt result scope, got %#v", raw["resultScope"])
+	}
+}
+
+func TestRouterControllerRefreshStatusNoHistory(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		AuditLogs: func(ctx context.Context, query auditlog.Query) (auditlog.Result, error) {
+			if query.Limit != 1 || query.Action != auditlog.ActionControllerRefresh {
+				t.Fatalf("expected latest controller-refresh audit query, got %+v", query)
+			}
+			return auditlog.Result{
+				Entries:     []auditlog.Entry{},
+				ResultScope: auditlog.BuildResultScope(query, 0, 0),
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/controller/refresh/status", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%q", resp.Code, resp.Body.String())
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode controller refresh status response: %v", err)
+	}
+	if raw["status"] != "no_history" || raw["available"] != true || raw["hasHistory"] != false || raw["latestReceipt"] != nil {
+		t.Fatalf("unexpected no-history controller refresh status: %#v", raw)
+	}
+	if reason := fmt.Sprint(raw["reason"]); !strings.Contains(reason, "No manual controller refresh receipt history") {
+		t.Fatalf("expected explicit no-history reason, got %q", reason)
+	}
+}
+
+func TestRouterControllerRefreshStatusUnavailable(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/controller/refresh/status", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d body=%q", resp.Code, resp.Body.String())
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode controller refresh status response: %v", err)
+	}
+	if raw["status"] != "unavailable" || raw["available"] != false || raw["hasHistory"] != false || raw["latestReceipt"] != nil {
+		t.Fatalf("unexpected unavailable controller refresh status: %#v", raw)
+	}
+}
+
+func TestRouterControllerRefreshStatusAuthGuards(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+		TrustAuthenticatedHeaders:          true,
+		RequireDeploymentReadAuthorization: true,
+		RequireOperatorRoleForRead:         true,
+		AuditLogs: func(context.Context, auditlog.Query) (auditlog.Result, error) {
+			t.Fatal("auth guard should short-circuit controller refresh status provider")
+			return auditlog.Result{}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/controller/refresh/status", nil)
+	req.Header.Set("X-Tenet-Authenticated-Id", "operator-123")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d body=%q", resp.Code, resp.Body.String())
+	}
+	if body := resp.Body.String(); body != "forbidden: authenticated viewer-capable role is required for this operator read route\n" {
+		t.Fatalf("unexpected forbidden response body: %q", body)
+	}
+}
+
+func TestRouterControllerRefreshStatusRequiresGet(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodPost, "/v1/controller/refresh/status", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d body=%q", resp.Code, resp.Body.String())
+	}
+	if allow := resp.Header().Get("Allow"); allow != http.MethodGet {
+		t.Fatalf("expected Allow header %q, got %q", http.MethodGet, allow)
+	}
+}
+
 func TestRouterControllerRefreshAuthGuards(t *testing.T) {
 	t.Run("unauthenticated when identity is enforced", func(t *testing.T) {
 		publisher := &recordingControllerRefreshPublisher{}
