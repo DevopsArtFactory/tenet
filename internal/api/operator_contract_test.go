@@ -92,6 +92,10 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 			if strings.Contains(doc, placeholder) {
 				t.Fatalf("expected %s to use operator-readable boolean examples instead of placeholder %q", path, placeholder)
 			}
+			unbalancedInlineExample := "`" + toggle + "=true "
+			if strings.Contains(doc, unbalancedInlineExample) {
+				t.Fatalf("expected %s to close non-secret auth-toggle boolean inline code before prose after %q", path, unbalancedInlineExample)
+			}
 		}
 	}
 
