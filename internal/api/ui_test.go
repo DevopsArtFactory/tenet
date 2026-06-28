@@ -4431,7 +4431,8 @@ func TestResourceInspectionFeatureGuideDocumentsSelectorsAndScope(t *testing.T) 
 
 	files := map[string][]string{
 		"../../README.md": {
-			"`docs/features/resource-inspection.md` documents live resource inspection selectors, lookup context, bounded sample metadata, and the operator-facing ECS/ASG/traffic-routing field families locked by docs tests.",
+			"`docs/features/resource-inspection.md` documents the focused live resource inspection route, selectors, lookup context, unavailable states, and detailed field contracts.",
+			"Resource drill-down Recent logs and Live inspection panels summarize lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract.",
 		},
 		"../../docs/architecture/tenet-v1-overview.md": {
 			"`docs/features/resource-inspection.md`",
@@ -4901,7 +4902,9 @@ func TestDocsDescribeCISmokeRunnerStartRunbook(t *testing.T) {
 			"scripts/ci-smoke-runner-evidence.sh --summary <run-id>",
 			"The detailed runner-start evidence bundle remains available by omitting",
 			"`docs/runbooks/ci-smoke-runner-start.md`",
-			"rollback/error/alarm/deployment-overview diagnostics",
+		},
+		"../../docs/features/resource-inspection.md": {
+			"latest-deployment, rollback, error, alarm",
 		},
 		"../../docs/runbooks/ci-smoke-runner-start.md": {
 			"# CI Smoke runner-start failures",
