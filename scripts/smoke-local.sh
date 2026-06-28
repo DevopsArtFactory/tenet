@@ -692,6 +692,14 @@ def assert_ecs_service_event_scope_contract(label, payload):
         if field in events_scope:
             assert isinstance(events_scope.get(field), str) and events_scope[field].strip(), {label: payload}
 
+def assert_ecs_service_event_ids(label, payload):
+    service = payload.get('ecsService') or {}
+    events = service.get('events') or []
+    assert isinstance(events, list), {label: payload}
+    for event in events:
+        event_id = event.get('eventId')
+        assert isinstance(event_id, str) and event_id.startswith('ecs_evt_'), {label: payload}
+
 summary = read_json('SUMMARY_PATH')
 applications = read_json('APPLICATIONS_PATH')
 application_detail = read_json('APPLICATION_DETAIL_PATH')
@@ -1485,6 +1493,7 @@ if worker_resource_inspection['available']:
     assert isinstance(worker_resource_inspection['ecsService'].get('deployments', []), list), worker_resource_inspection
     assert_ecs_service_deployments_contract('worker_resource_inspection', worker_resource_inspection)
     assert isinstance(worker_resource_inspection['ecsService'].get('events', []), list), worker_resource_inspection
+    assert_ecs_service_event_ids('worker_resource_inspection', worker_resource_inspection)
     assert_ecs_service_event_scope_contract('worker_resource_inspection', worker_resource_inspection)
 else:
     assert isinstance(worker_resource_inspection.get('unavailableReason'), str) and worker_resource_inspection['unavailableReason'], worker_resource_inspection
@@ -1499,6 +1508,7 @@ if selected_worker_resource_inspection['available']:
     assert selected_worker_resource_inspection.get('source') == 'ecs_service', selected_worker_resource_inspection
     assert isinstance(selected_worker_resource_inspection.get('ecsService'), dict), selected_worker_resource_inspection
     assert_ecs_service_deployments_contract('selected_worker_resource_inspection', selected_worker_resource_inspection)
+    assert_ecs_service_event_ids('selected_worker_resource_inspection', selected_worker_resource_inspection)
     assert_ecs_service_event_scope_contract('selected_worker_resource_inspection', selected_worker_resource_inspection)
     worker_inspection_scope = selected_worker_resource_inspection.get('resultScope')
     assert isinstance(worker_inspection_scope, dict), selected_worker_resource_inspection

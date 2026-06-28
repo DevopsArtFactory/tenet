@@ -66,6 +66,41 @@ func TestReadmeStaysProductOverview(t *testing.T) {
 	}
 }
 
+func TestECSEventRowHandoffOperatorContract(t *testing.T) {
+	files := map[string][]string{
+		"README.md": {
+			"Use `Share ECS service event` from a Live inspection event row to hand off one ECS service event without changing the resource-page selector state.",
+		},
+		"docs/features/resource-inspection.md": {
+			"`ecsService.events[].eventId`",
+			"When ECS service events are present",
+			"`Share ECS service event` copies a same-page row anchor for one ECS service event",
+			"eventId-backed anchors remain stable across refreshes",
+		},
+		"docs/features/overview-dashboard.md": {
+			"`Share ECS service event` on the Live inspection event row",
+			"preserves the current resource page query state and changes only the hash",
+		},
+		"scripts/smoke-local.sh": {
+			"assert_ecs_service_event_ids('worker_resource_inspection', worker_resource_inspection)",
+			"assert_ecs_service_event_ids('selected_worker_resource_inspection', selected_worker_resource_inspection)",
+		},
+		"scripts/smoke-docker.sh": {
+			"assert_ecs_service_event_ids(\"worker_resource_inspection\", worker_resource_inspection)",
+			"assert_ecs_service_event_ids(\"selected_worker_resource_inspection\", selected_worker_resource_inspection)",
+		},
+	}
+
+	for path, fragments := range files {
+		body := readRepoFile(t, path)
+		for _, fragment := range fragments {
+			if !strings.Contains(body, fragment) {
+				t.Fatalf("expected %s to include ECS service event-row handoff contract %q", path, fragment)
+			}
+		}
+	}
+}
+
 func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 	docPaths := []string{
 		"README.md",
