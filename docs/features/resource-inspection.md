@@ -5,7 +5,7 @@ pages. It complements Recent logs: Recent logs answers "what recent operator
 events or log lines exist?", while Live inspection answers "what does the
 selected AWS/control-plane resource currently look like?"
 
-Runtime code is intentionally unchanged by this guide; it documents the existing read-only route contract.
+Runtime code remains read-only; this guide documents the shipped live-inspection route contract.
 
 ## Route
 
@@ -123,11 +123,17 @@ Truncation statuses are conservative: `not_truncated`, `truncated`, `unknown`, o
 - `unknown` means Tenet reached the cap without provider evidence to prove whether more rows exist.
 - `not_applicable` means the optional sample bridge was unavailable or the inspected resource has no bounded sample.
 
-For ECS service payloads, the same sample window is also described in
-`ecsService.tasksScope`. For ASG payloads, the sibling sample window is described
-in `autoScalingGroup.instancesScope`. The top-level `resultScope` exists so
-generic clients and scripts can summarize the bounded read without parsing every
-resource-specific body first.
+For ECS service payloads, the same task sample window is also described in
+`ecsService.tasksScope`. ECS service event evidence is separately described in
+`ecsService.eventsScope`, an additive response-window summary with
+`effectiveLimit`, `returnedEventCount`, `truncationStatus`, `truncated`, optional
+`newestEventAt`, optional `oldestEventAt`, and optional `summary`. The event
+scope is not a durable audit cursor; ECS service events are a rolling recent
+provider list, so the timestamps identify the newest and oldest events retained
+in the current inspection response. For ASG payloads, the sibling sample window
+is described in `autoScalingGroup.instancesScope`. The top-level `resultScope`
+exists so generic clients and scripts can summarize the bounded task/instance
+read without parsing every resource-specific body first.
 
 ECS service payloads can also include additive deployment-configuration evidence
 from `DescribeServices` when AWS returns it:
@@ -142,7 +148,9 @@ ECS service deployment rollout-state rows are exposed as
 `ecsService.deployments[]` from `DescribeServices` and can include `id`,
 `status`, `rolloutState`, `rolloutStateReason`, `desiredCount`,
 `runningCount`, `pendingCount`, `taskDefinition`, `createdAt`, `updatedAt`,
-`primary`, and `active`.
+`primary`, and `active`. Recent ECS service events remain in
+`ecsService.events[]`; `ecsService.eventsScope` reports the bounded event window
+included in the response.
 
 Those fields are optional. Fixture-backed, local, no-AWS, and older provider
 payloads omit them rather than emitting empty placeholders.
@@ -153,8 +161,9 @@ the operator-facing labels `Deployment controller`, `Deployment circuit breaker`
 and `Deployment alarms`; deployment rollout rows use `Deployment ID`,
 `Deployment status`, `Rollout state`, `Rollout reason`,
 `Desired/running/pending`, `Task definition`, `Created at`, and `Updated at`
-labels plus `Primary deployment` / `Active deployment` cues. When the fields are
-absent, those rows stay quiet.
+labels plus `Primary deployment` / `Active deployment` cues. Service events use
+`Recent ECS service events`, `Event timestamp`, and `Event window scope` labels.
+When the fields are absent, those rows stay quiet.
 
 ## Supported Resource Types
 
@@ -176,8 +185,9 @@ Current resource-inspection payload families:
 - `trafficShiftPlan`
 
 `ecsService` reads service identity, status, desired/running/pending counts,
-deployment configuration, deployments, recent service events, task definition
-evidence, and a bounded task sample when available. Task sample container rows
+deployment configuration, deployments, recent service events with
+`ecsService.eventsScope`, task definition evidence, and a bounded task sample
+when available. Task sample container rows
 preserve status, health, exit/reason, optional `imageDigest`, optional
 `runtimeId`, optional `awslogs`, and optional `networkBindings` evidence from
 ECS `DescribeTasks`. The selected-cluster
