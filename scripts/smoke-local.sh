@@ -676,6 +676,22 @@ def assert_ecs_service_deployments_contract(label, payload):
             if field in deployment:
                 assert isinstance(deployment.get(field), bool), {label: payload}
 
+def assert_ecs_service_event_scope_contract(label, payload):
+    service = payload.get('ecsService') or {}
+    events = service.get('events')
+    events_scope = service.get('eventsScope')
+    assert isinstance(events, list), {label: payload}
+    assert isinstance(events_scope, dict), {label: payload}
+    assert type(events_scope.get('effectiveLimit')) is int and events_scope['effectiveLimit'] >= 0, {label: payload}
+    assert type(events_scope.get('returnedEventCount')) is int and events_scope['returnedEventCount'] >= 0, {label: payload}
+    assert events_scope.get('returnedEventCount') == len(events), {label: payload}
+    assert events_scope.get('truncationStatus') in {'not_truncated', 'truncated', 'unknown', 'not_applicable'}, {label: payload}
+    assert isinstance(events_scope.get('truncated'), bool), {label: payload}
+    assert events_scope.get('truncated') == (events_scope.get('truncationStatus') == 'truncated'), {label: payload}
+    for field in ('newestEventAt', 'oldestEventAt', 'summary'):
+        if field in events_scope:
+            assert isinstance(events_scope.get(field), str) and events_scope[field].strip(), {label: payload}
+
 summary = read_json('SUMMARY_PATH')
 applications = read_json('APPLICATIONS_PATH')
 application_detail = read_json('APPLICATION_DETAIL_PATH')
@@ -1469,6 +1485,7 @@ if worker_resource_inspection['available']:
     assert isinstance(worker_resource_inspection['ecsService'].get('deployments', []), list), worker_resource_inspection
     assert_ecs_service_deployments_contract('worker_resource_inspection', worker_resource_inspection)
     assert isinstance(worker_resource_inspection['ecsService'].get('events', []), list), worker_resource_inspection
+    assert_ecs_service_event_scope_contract('worker_resource_inspection', worker_resource_inspection)
 else:
     assert isinstance(worker_resource_inspection.get('unavailableReason'), str) and worker_resource_inspection['unavailableReason'], worker_resource_inspection
 
@@ -1482,6 +1499,7 @@ if selected_worker_resource_inspection['available']:
     assert selected_worker_resource_inspection.get('source') == 'ecs_service', selected_worker_resource_inspection
     assert isinstance(selected_worker_resource_inspection.get('ecsService'), dict), selected_worker_resource_inspection
     assert_ecs_service_deployments_contract('selected_worker_resource_inspection', selected_worker_resource_inspection)
+    assert_ecs_service_event_scope_contract('selected_worker_resource_inspection', selected_worker_resource_inspection)
     worker_inspection_scope = selected_worker_resource_inspection.get('resultScope')
     assert isinstance(worker_inspection_scope, dict), selected_worker_resource_inspection
     assert worker_inspection_scope.get('sampleType') == 'ecsTasks', selected_worker_resource_inspection
