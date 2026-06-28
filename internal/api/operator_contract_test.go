@@ -2432,6 +2432,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"Selected ASG host detail is optional live AWS evidence",
 		"`autoScalingGroup.instances[].ec2Instance`",
 		"`EC2 state`, `EC2 instance type`, `AMI image ID`, `Private IP`, `Public IP`, `Subnet`, `VPC`, and `Launch time`",
+		"ECS service `eventsScope` / `Event window scope` smoke coverage stays explicit",
 	} {
 		if !strings.Contains(operatorContractsDoc, fragment) {
 			t.Fatalf("expected operator contracts doc resource inspection contract to include %q", fragment)
