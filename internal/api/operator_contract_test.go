@@ -53,10 +53,10 @@ func TestReadmeStaysProductOverview(t *testing.T) {
 		"docs/architecture/tenet-v1-operator-contracts.md",
 		"endpoint, read-model, auth, resource, and smoke-verification contracts formerly\n  kept in this README",
 		"`internal/statusstore`, `internal/planpreview`, `internal/applyrequest`, and\n  `internal/auditlog` - runtime status, plan/apply, and audit stores",
-		"`codeDeployDeploymentGroup`,\n`productionListener`, and `testListener` can return",
-		"`available=true`, `source=rollout_execution_summary`, and a summary-only",
-		"`source=live` / `inspectionMode=live`",
-		"Local no-AWS summary fallback stays\nexplicitly summary-only",
+		"Live inspection keeps the README at the operator-overview level",
+		"local/no-AWS runs keep explicit unavailable or summary-only states instead of\ninventing live data",
+		"Traffic-routing drill-downs remain useful locally through\nrollout-execution summaries",
+		"See `docs/features/resource-inspection.md` for\nthe exact selector, lookup-context, unavailable-state, result-scope, and\nECS/ASG/traffic-routing field contracts.",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README product overview to include %q", fragment)

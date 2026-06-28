@@ -198,47 +198,15 @@ Resource drill-down Recent logs and Live inspection panels label returned `looku
 In the embedded resource page, log and inspection caps stay bookmarkable as `resourceLogLimit=` and `resourceInspectionLimit=` UI state; positive caps are sent only to the matching lazy `resource-logs` or `resource-inspection` read as backend `limit=` query parameters.
 Recent logs and Live inspection lazy-panel state messages such as loading, empty, unavailable, and non-auth fetch failures are polite atomic status regions, so assistive technology announces focused panel state changes without making the full evidence payload live.
 Capture the HTTP `Request-Id` response header with that lookup context when escalating a failed or unavailable Recent logs or Live inspection read; the embedded Recent logs and Live inspection cards label the same value as `Tenet request ID` metadata so reviewers can match the payload to Tenet's structured request logs.
-ECS service Live inspection can include optional deployment-configuration evidence from `DescribeServices`: `deploymentControllerType`, `deploymentCircuitBreaker`, and `deploymentAlarmConfiguration`, plus `ecsService.deployments[]` rollout-state rows with `id`, `status`, `rolloutState`, `rolloutStateReason`, `desiredCount`, `runningCount`, `pendingCount`, `taskDefinition`, `createdAt`, `updatedAt`, `primary`, and `active`, rendered only when AWS returns those fields. Recent service events stay in `ecsService.events[]`, and additive `ecsService.eventsScope` reports the returned rolling event window (`effectiveLimit`, `returnedEventCount`, `truncationStatus`, `truncated`, optional newest/oldest event timestamps, and summary) without pretending it is a durable audit cursor. The embedded resource-detail panel renders those rows as safe DOM text with `Deployment ID`, `Deployment status`, `Rollout state`, `Rollout reason`, `Desired/running/pending`, `Task definition`, `Created at`, and `Updated at` labels plus `Primary deployment` / `Active deployment` cues, and each row adds a same-tab `Share ECS deployment` anchor that preserves the current resource page and targets the deployment row; service events render under `Recent ECS service events` with `Event timestamp` and `Event window scope` copy. Smoke keeps those rows optional for local/no-AWS runs while validating their field types whenever a live ECS service response includes them.
-Auto Scaling Group Live inspection can also render optional
-`autoScalingGroup.scalingActivities[]` evidence as `Recent scaling activities`
-with `Activity ID`, `Status code`, `Progress`, `Start time`, `End time`,
-`Cause`, `Description`, and `Status message` labels, and each populated row
-includes a same-tab `Share scaling activity` anchor for handing off the exact
-bounded activity evidence; an explicit empty array
-renders `No scaling activities are reported in the bounded recent activity window for this Auto Scaling Group.`
-Those rows come from a bounded read-only `DescribeScalingActivities` lookup
-after the ASG itself is resolved, and local/no-AWS runtimes keep the existing
-unavailable or summary-only behavior instead of requiring AWS access.
-For CodeDeploy ECS traffic-routing resources, local and Compose runs do not need
-live AWS access to keep the drill-down usable: `codeDeployDeploymentGroup`,
-`productionListener`, and `testListener` can return
-`available=true`, `source=rollout_execution_summary`, and a summary-only
-`trafficRoutingResource` body derived from rollout execution metadata. When AWS
-inspection is configured and succeeds, the same identifiers may instead return
-`source=live` / `inspectionMode=live`; the resource-detail Live inspection
-panel renders a compact `Traffic-routing status` block with operator-facing
-`Resource`, `Inspection mode`, `Source`, `Summary`, and — only when the live AWS
-payload includes target-group health counts — a target-health status pill,
-next-action cue, and raw `Target group health` rows before the detailed
-deployment-group status cues such as CodeDeploy application, deployment group,
-deployment config, deployment style, ECS service bindings, and the latest
-CodeDeploy deployment summary and target groups. When the live payload
-includes `trafficRoutingResource.codeDeployDeploymentGroup.latestDeployment` or
-`latestCodeDeployDeployment`, that same resource-detail panel also shows a
-scannable latest-deployment status pill, an operator next-action cue, the
-deployment id/status/create time/complete time/status message, and any additive
-rollback/error/alarm/deployment-overview diagnostics from CodeDeploy
-`GetDeployment` when the extra deployment lookup succeeds, without moving that
-noise onto the applications overview. If only the deployment-group summary is
-available, Tenet preserves the existing summary-only payload shape. When live
-target-group/listener rows
-match exactly one normalized rollout resource, they add `_self` `Open resource
-detail` handoffs back into the bookmarkable resource drill-down; unmatched or
-incomplete identifiers remain plain text so operators never get broken self-
-links. Local no-AWS summary fallback stays
-explicitly summary-only and does not invent latest CodeDeploy deployment status
-or target-group health counts. Local smoke guards ensure traffic-routing fallback
-routes do not regress to `aws_unavailable`.
+Live inspection keeps the README at the operator-overview level: ECS service,
+ECS task, Auto Scaling Group, bootstrap-source, and CodeDeploy traffic-routing
+resources can show current provider evidence when AWS lookup is available, while
+local/no-AWS runs keep explicit unavailable or summary-only states instead of
+inventing live data. Traffic-routing drill-downs remain useful locally through
+rollout-execution summaries and can upgrade to live CodeDeploy/listener/target-
+group evidence when configured. See `docs/features/resource-inspection.md` for
+the exact selector, lookup-context, unavailable-state, result-scope, and
+ECS/ASG/traffic-routing field contracts.
 
 - `POST /v1/plans/deployments/{deploymentName}` and `POST /v1/applies/plans/{planId}` (`409 Conflict` means the reviewed plan preview is stale)
 - `POST /v1/controller/refresh` to request the configured desired-state refresh handoff manually (`filesystem_noop` for filesystem catalogs, `202 Accepted` with `controllerRefresh` evidence when GitHub+Redis handoff is available). Accepted manual refresh requests are also projected through `GET /v1/audit-logs?action=controller.refresh.requested` with actor metadata plus safe route/status/result/request ID/delivery ID/channel or no-op evidence, and `GET /v1/controller/refresh/status` returns the latest receipt plus explicit `no_history` / `unavailable` states for read-after-write troubleshooting; from deployment-scoped application/resource/drift/plan pages, the embedded Operator context keeps a non-noisy `Last refresh requested` cue and links operators to `/?page=audit&deployment={deploymentName}&action=controller.refresh.requested` without dropping the current bookmarkable route. The embedded Operator context details expose a DOM-built `Refresh controller` control only when `GET /v1/operator/context.desiredStateSource.controllerRefresh` reports an available handoff; the control preserves the current bookmarkable URL, disables while the POST is in flight, reports success/no-op/unavailable failures in the banner live status, reuses the shared operator-write auth guidance for `401` / `403` responses, and after an accepted processed handoff re-runs the currently active embedded read model once in place without rewriting `window.location.search` or `window.location.hash`, hiding the banner announcement, or starting polling.
@@ -327,7 +295,7 @@ The detailed runner-start evidence bundle remains available by omitting
 - `docs/features/resource-inspection.md` documents live resource inspection selectors, lookup context, bounded sample metadata, and the operator-facing ECS/ASG/traffic-routing field families locked by docs tests.
 - `docs/runbooks/operator-troubleshooting.md` documents daily auth, refresh, audit, and drill-down troubleshooting for operators.
 - `docs/runbooks/ci-smoke-runner-start.md` documents GitHub Actions runner-start
-  failure triage for CI smoke checks.
+  failure triage for CI smoke checks and rollback/error/alarm/deployment-overview diagnostics.
 
 ## Repository Layout
 

@@ -332,6 +332,8 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 	for _, fragment := range []string{
 		"`docs/features/resource-inspection.md` documents live resource inspection selectors, lookup context, bounded sample metadata, and the operator-facing ECS/ASG/traffic-routing field families locked by docs tests.",
 		"`docs/features/resource-recent-logs.md` documents recent-log resource contracts, including lookup context, selector echoes, and friendly empty/unavailable states.",
+		"Live inspection keeps the README at the operator-overview level",
+		"See `docs/features/resource-inspection.md` for\nthe exact selector, lookup-context, unavailable-state, result-scope, and\nECS/ASG/traffic-routing field contracts.",
 		"Capture the HTTP `Request-Id` response header with that lookup context when escalating a failed or unavailable Recent logs or Live inspection read",
 		"Recent logs and Live inspection cards label the same value as `Tenet request ID` metadata",
 	} {
