@@ -330,13 +330,26 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 	recentLogsFeatureText := readTextFile(t, "features/resource-recent-logs.md")
 
 	for _, fragment := range []string{
-		"`docs/features/resource-inspection.md` documents live resource inspection selectors, lookup context, bounded sample metadata, and the operator-facing ECS/ASG/traffic-routing field families locked by docs tests.",
+		"`docs/features/resource-inspection.md` documents the focused live resource inspection route, selectors, lookup context, unavailable states, and detailed field contracts.",
 		"`docs/features/resource-recent-logs.md` documents recent-log resource contracts, including lookup context, selector echoes, and friendly empty/unavailable states.",
-		"Capture the HTTP `Request-Id` response header with that lookup context when escalating a failed or unavailable Recent logs or Live inspection read",
-		"Recent logs and Live inspection cards label the same value as `Tenet request ID` metadata",
+		"Resource drill-down Recent logs and Live inspection panels summarize lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract.",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README documentation map to include %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"`ecsService.deployments[]`",
+		"`autoScalingGroup.scalingActivities[]`",
+		"`deploymentControllerType`",
+		"`deploymentCircuitBreaker`",
+		"`deploymentAlarmConfiguration`",
+		"`resultScope.returnedItemCount`",
+		"`Traffic-routing status`",
+	} {
+		if strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README to link detailed resource-inspection field contracts instead of duplicating %q", fragment)
 		}
 	}
 
