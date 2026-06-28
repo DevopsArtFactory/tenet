@@ -161,8 +161,10 @@ the operator-facing labels `Deployment controller`, `Deployment circuit breaker`
 and `Deployment alarms`; deployment rollout rows use `Deployment ID`,
 `Deployment status`, `Rollout state`, `Rollout reason`,
 `Desired/running/pending`, `Task definition`, `Created at`, and `Updated at`
-labels plus `Primary deployment` / `Active deployment` cues. Service events use
-`Recent ECS service events`, `Event timestamp`, and `Event window scope` labels.
+labels plus `Primary deployment` / `Active deployment` cues and a same-tab
+`Share ECS deployment` row anchor that preserves the current resource page.
+Service events use `Recent ECS service events`, `Event timestamp`, and
+`Event window scope` labels.
 When the fields are absent, those rows stay quiet.
 
 ## Supported Resource Types

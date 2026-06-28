@@ -5865,8 +5865,24 @@
           : [];
         return [enabled, rollback, alarmNames.length ? `alarms: ${alarmNames.join(', ')}` : 'no alarms reported'].join('; ');
       };
-      const createECSServiceDeploymentListItem = (deployment) => {
+      const ecsServiceDeploymentAnchorID = (deployment, index = 0) => {
+        const deploymentID = String(deployment?.id || '').trim();
+        if (deploymentID) return `ecs-deployment-${sectionIDSegment(deploymentID, 'unknown')}`;
+        const fallback = [
+          deployment?.createdAt,
+          deployment?.updatedAt,
+          deployment?.status,
+          deployment?.rolloutState,
+          deployment?.taskDefinition,
+          `row-${index + 1}`,
+        ].filter(Boolean).join('-');
+        return `ecs-deployment-${sectionIDSegment(fallback, 'unknown')}`;
+      };
+      const ecsServiceDeploymentShareURL = (deployment, index = 0) => currentPageSectionURL(ecsServiceDeploymentAnchorID(deployment, index));
+      const createECSServiceDeploymentListItem = (deployment, index = 0) => {
         const item = createElement('li');
+        item.id = ecsServiceDeploymentAnchorID(deployment, index);
+        item.classList.add('operation-anchor-row');
         item.append(createElement('strong', '', `Deployment · ${textOrDash(deployment.id || deployment.taskDefinition || deployment.status)}`));
         const cueNodes = createElement('div', 'pills');
         if (deployment.primary === true) {
@@ -5895,6 +5911,9 @@
             meta.append(createElement('span', 'detail-condition-meta', `${label} · ${value}`));
           });
         item.append(meta);
+        const links = createElement('div', 'row-links');
+        links.append(createNavLink(ecsServiceDeploymentShareURL(deployment, index), 'Share ECS deployment', '_self'));
+        item.append(links);
         return item;
       };
       const renderECSServiceInspection = (section, deploymentName, resource, result) => {
@@ -5933,7 +5952,7 @@
         const deploymentsSection = createInspectionListSection(
           'Service deployments',
           service?.deployments || [],
-          (deployment) => createECSServiceDeploymentListItem(deployment),
+          (deployment, index) => createECSServiceDeploymentListItem(deployment, index),
           'No active ECS deployments are reported for this service.',
         );
         const taskSampleUnavailable = isECSTaskScopeUnavailable(service?.tasksScope);

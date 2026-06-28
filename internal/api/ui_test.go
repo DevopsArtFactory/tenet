@@ -2510,6 +2510,9 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"Cluster ARN",
 		"Service ARN",
 		"Service deployments",
+		"const ecsServiceDeploymentAnchorID = (deployment, index = 0) => {",
+		"const ecsServiceDeploymentShareURL = (deployment, index = 0) => currentPageSectionURL(ecsServiceDeploymentAnchorID(deployment, index));",
+		"Share ECS deployment",
 		"const ecsTaskScopeUnavailableReasonText = (reason) => {",
 		"return 'AWS access is currently unavailable for ECS task sampling.';",
 		"const isECSTaskScopeUnavailable = (scope) => scope && typeof scope === 'object' && scope.available === false;",
@@ -2790,7 +2793,13 @@ func TestEmbeddedUIRendersECSServiceDeploymentRolloutRowsSafely(t *testing.T) {
 	body := string(indexHTML)
 
 	for _, fragment := range []string{
-		"const createECSServiceDeploymentListItem = (deployment) => {",
+		"const ecsServiceDeploymentAnchorID = (deployment, index = 0) => {",
+		"if (deploymentID) return `ecs-deployment-${sectionIDSegment(deploymentID, 'unknown')}`;",
+		"`row-${index + 1}`",
+		"const ecsServiceDeploymentShareURL = (deployment, index = 0) => currentPageSectionURL(ecsServiceDeploymentAnchorID(deployment, index));",
+		"const createECSServiceDeploymentListItem = (deployment, index = 0) => {",
+		"item.id = ecsServiceDeploymentAnchorID(deployment, index);",
+		"item.classList.add('operation-anchor-row');",
 		"const cueNodes = createElement('div', 'pills');",
 		"`Deployment · ${textOrDash(deployment.id || deployment.taskDefinition || deployment.status)}`",
 		"createElement('span', 'pill synced', 'Primary deployment')",
@@ -2803,9 +2812,10 @@ func TestEmbeddedUIRendersECSServiceDeploymentRolloutRowsSafely(t *testing.T) {
 		"['Task definition', deployment.taskDefinition]",
 		"['Created at', deployment.createdAt]",
 		"['Updated at', deployment.updatedAt]",
+		"createNavLink(ecsServiceDeploymentShareURL(deployment, index), 'Share ECS deployment', '_self')",
 		"createInspectionListSection(",
 		"'Service deployments'",
-		"(deployment) => createECSServiceDeploymentListItem(deployment),",
+		"(deployment, index) => createECSServiceDeploymentListItem(deployment, index),",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI ECS service deployment rollout contract %q", fragment)
