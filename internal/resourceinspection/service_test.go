@@ -1785,6 +1785,61 @@ func TestECSInspectionFromServiceBoundsServiceEventEvidence(t *testing.T) {
 	}
 }
 
+func TestECSInspectionFromServiceAssignsStableEventIDs(t *testing.T) {
+	created := time.Date(2026, 6, 1, 3, 12, 0, 0, time.UTC)
+	service := ecstypes.Service{
+		ServiceArn:  stringPtr("arn:aws:ecs:us-west-2:111122223333:service/payments-cluster/payments-api"),
+		ServiceName: stringPtr("payments-api"),
+		Events: []ecstypes.ServiceEvent{
+			{CreatedAt: timePtr(created), Message: stringPtr("service reached steady state")},
+			{CreatedAt: timePtr(created), Message: stringPtr("service reached steady state")},
+			{CreatedAt: timePtr(created.Add(-time.Minute)), Message: stringPtr("registered target")},
+		},
+	}
+
+	first := ecsInspectionFromService(service, "arn:cluster", "", nil, nil)
+	second := ecsInspectionFromService(service, "arn:cluster", "", nil, nil)
+
+	if len(first.Events) != 3 || len(second.Events) != 3 {
+		t.Fatalf("expected three ECS service events, got first=%+v second=%+v", first.Events, second.Events)
+	}
+	for i := range first.Events {
+		if first.Events[i].EventID == "" || !strings.HasPrefix(first.Events[i].EventID, "ecs_evt_") {
+			t.Fatalf("expected stable eventId at index %d, got %+v", i, first.Events[i])
+		}
+		if first.Events[i].EventID != second.Events[i].EventID {
+			t.Fatalf("expected eventId to stay stable at index %d, first=%q second=%q", i, first.Events[i].EventID, second.Events[i].EventID)
+		}
+	}
+	if first.Events[0].EventID == first.Events[1].EventID {
+		t.Fatalf("expected duplicate identical ECS service event rows to get distinct IDs, got %+v", first.Events)
+	}
+	otherService := service
+	otherService.ServiceArn = stringPtr("arn:aws:ecs:us-west-2:111122223333:service/payments-cluster/worker-api")
+	otherService.ServiceName = stringPtr("worker-api")
+	other := ecsInspectionFromService(otherService, "arn:cluster", "", nil, nil)
+	if len(other.Events) == 0 || first.Events[0].EventID == other.Events[0].EventID {
+		t.Fatalf("expected resource identity to influence eventId, first=%+v other=%+v", first.Events, other.Events)
+	}
+
+	raw, err := json.Marshal(first)
+	if err != nil {
+		t.Fatalf("marshal ECS inspection: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("decode ECS inspection JSON: %v", err)
+	}
+	rawEvents, ok := payload["events"].([]any)
+	if !ok || len(rawEvents) != 3 {
+		t.Fatalf("expected events array in ECS inspection JSON, got %#v", payload["events"])
+	}
+	rawEvent, ok := rawEvents[0].(map[string]any)
+	if !ok || rawEvent["eventId"] != first.Events[0].EventID || rawEvent["createdAt"] != first.Events[0].CreatedAt || rawEvent["message"] != first.Events[0].Message {
+		t.Fatalf("expected eventId with preserved event fields in raw JSON, got %#v", rawEvents[0])
+	}
+}
+
 func TestECSInspectionFromServiceReportsEmptyServiceEventWindow(t *testing.T) {
 	got := ecsInspectionFromService(ecstypes.Service{}, "arn:cluster", "", nil, nil)
 	if got.Events == nil || len(got.Events) != 0 {

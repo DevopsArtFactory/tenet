@@ -8898,6 +8898,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 					Active:             aws.Bool(true),
 				}},
 				Events: []resourceinspection.ECSServiceEvent{{
+					EventID:   "ecs_evt_test_steady_state",
 					CreatedAt: "2026-04-18T00:12:00Z",
 					Message:   "service reached steady state",
 				}},
@@ -9090,6 +9091,23 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		} {
 			if !reflect.DeepEqual(eventsScope[key], want) {
 				t.Fatalf("expected eventsScope[%q]=%#v, got %#v in %#v", key, want, eventsScope[key], eventsScope)
+			}
+		}
+		events, ok := ecsService["events"].([]any)
+		if !ok || len(events) != 1 {
+			t.Fatalf("expected ECS service events array in raw payload, got %#v", ecsService["events"])
+		}
+		event, ok := events[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected ECS service event object in raw payload, got %#v", events[0])
+		}
+		for key, want := range map[string]any{
+			"eventId":   "ecs_evt_test_steady_state",
+			"createdAt": "2026-04-18T00:12:00Z",
+			"message":   "service reached steady state",
+		} {
+			if !reflect.DeepEqual(event[key], want) {
+				t.Fatalf("expected event.%s=%#v, got %#v in %#v", key, want, event[key], event)
 			}
 		}
 		tasksScope, ok := ecsService["tasksScope"].(map[string]any)
