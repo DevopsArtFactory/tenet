@@ -1947,6 +1947,7 @@ assert 'Created at' in ui, ui
 assert 'Updated at' in ui, ui
 assert 'Primary deployment' in ui, ui
 assert 'Active deployment' in ui, ui
+assert 'Share ECS deployment' in ui, ui
 assert 'Container instance' in ui, ui
 assert 'EC2 instance' in ui, ui
 assert 'Capacity provider' in ui, ui
@@ -2368,6 +2369,9 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "'Effective sample cap'" in body, body
     assert "'Returned sample items'" in body, body
     assert "[createECSTaskScopeSummary(service?.tasksScope)]" in body, body
+    assert "const ecsServiceDeploymentAnchorID = (deployment, index = 0) =>" in body, body
+    assert "const ecsServiceDeploymentShareURL = (deployment, index = 0) => currentPageSectionURL(ecsServiceDeploymentAnchorID(deployment, index));" in body, body
+    assert "Share ECS deployment" in body, body
     assert "const createAutoScalingInstanceScopeSummary = (scope) => {" in body, body
     assert "ASG instance sample scope · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)} · returned ${countText(returnedInstanceCount)} instance(s) · ${truncationStatus}" in body, body
     assert "ASG instance sampling is unavailable for this group; group inspection remains available." in body, body

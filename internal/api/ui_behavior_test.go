@@ -6651,6 +6651,14 @@ const createDocument = () => {
 };
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+const hasInteractiveAncestor = (node) => {
+  let parent = node.parentNode;
+  while (parent) {
+    if (['A', 'BUTTON', 'SUMMARY'].includes(parent.tagName)) return true;
+    parent = parent.parentNode;
+  }
+  return false;
+};
 const expectLabelValue = (text, label, value, context) => {
   const labelIndex = text.indexOf(label);
   const valueIndex = text.indexOf(value, labelIndex + label.length);
@@ -7117,7 +7125,10 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
         maximumPercent: 200,
         healthCheckGracePeriodSeconds: 45,
         taskDefinition: 'payments-api:42',
-        deployments: [{ id: 'ecs-svc/123', status: 'PRIMARY', rolloutState: 'COMPLETED', rolloutStateReason: '<script>window.__rolloutReasonExecuted = true</script> steady state', taskDefinition: 'payments-api:42', desiredCount: 2, runningCount: 2, pendingCount: 0, createdAt: '2026-04-18T00:10:00Z', updatedAt: '2026-04-18T00:11:00Z', primary: true, active: true }],
+        deployments: [
+          { id: 'ecs-svc/123', status: 'PRIMARY', rolloutState: 'COMPLETED', rolloutStateReason: '<script>window.__rolloutReasonExecuted = true</script> steady state', taskDefinition: 'payments-api:42', desiredCount: 2, runningCount: 2, pendingCount: 0, createdAt: '2026-04-18T00:10:00Z', updatedAt: '2026-04-18T00:11:00Z', primary: true, active: true },
+          { status: 'ACTIVE', rolloutState: 'IN_PROGRESS', taskDefinition: 'payments-api:41', desiredCount: 1, runningCount: 1, pendingCount: 0, createdAt: '2026-04-18T00:08:00Z', updatedAt: '2026-04-18T00:09:00Z', active: true },
+        ],
         events: [{ createdAt: '2026-04-18T00:12:00Z', message: '<img src=x onerror=1> service reached steady state' }],
       },
     }) });
@@ -7144,6 +7155,17 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!ecsSupportedText.includes('Task definition · payments-api:42')) throw new Error('expected ECS inspection to render deployment task definition');
   if (!ecsSupportedText.includes('Created at · 2026-04-18T00:10:00Z')) throw new Error('expected ECS inspection to render deployment created timestamp');
   if (!ecsSupportedText.includes('Updated at · 2026-04-18T00:11:00Z')) throw new Error('expected ECS inspection to render deployment updated timestamp');
+  if (!ecsSupportedText.includes('Share ECS deployment')) throw new Error('expected ECS inspection to render deployment share handoff');
+  const ecsDeploymentRows = collectNodes(ecsSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'LI' && node.id === 'ecs-deployment-ecs-svc-123');
+  if (ecsDeploymentRows.length !== 1) throw new Error('expected ECS deployment with provider id to expose stable row anchor, got ' + ecsDeploymentRows.length);
+  const fallbackECSDeploymentRows = collectNodes(ecsSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'LI' && node.id === 'ecs-deployment-2026-04-18t00-08-00z-2026-04-18t00-09-00z-active-in-progress-payments-api-41-row-2');
+  if (fallbackECSDeploymentRows.length !== 1) throw new Error('expected ECS deployment without provider id to expose content-derived row anchor, got ' + fallbackECSDeploymentRows.length);
+  const ecsDeploymentShareLinks = collectNodes(ecsSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Share ECS deployment');
+  if (ecsDeploymentShareLinks.length !== 2) throw new Error('expected two ECS deployment share links, got ' + ecsDeploymentShareLinks.length);
+  if (ecsDeploymentShareLinks[0].target !== '_self') throw new Error('expected ECS deployment share link to stay inside embedded UI');
+  if (ecsDeploymentShareLinks[0].rel) throw new Error('expected ECS deployment share link to avoid new-tab rel attributes');
+  if (ecsDeploymentShareLinks[0].href !== '/?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=ecsService%3A%3Apayments-api-staging-service%3A%3APrimary%20ECS%20service#ecs-deployment-ecs-svc-123') throw new Error('expected ECS deployment share link to preserve resource route and deployment anchor, got ' + ecsDeploymentShareLinks[0].href);
+  if (ecsDeploymentShareLinks.some((node) => hasInteractiveAncestor(node))) throw new Error('expected ECS deployment share links not to be nested in interactive controls');
   if (!ecsSupportedText.includes('Recent ECS service events')) throw new Error('expected ECS inspection to render events section');
   if (!ecsSupportedText.includes('Event timestamp · 2026-04-18T00:12:00Z')) throw new Error('expected ECS inspection to render event timestamp');
   if (!ecsSupportedText.includes('<img src=x onerror=1> service reached steady state')) throw new Error('expected ECS inspection to render event text safely');
