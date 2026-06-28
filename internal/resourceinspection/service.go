@@ -31,6 +31,7 @@ const (
 	ecsServiceHintCacheCap               = 256
 	trafficRoutingCacheCap               = 128
 	maxECSServiceTaskSummaries           = 10
+	maxECSServiceEventSummaries          = 10
 	maxECSServiceDeploymentSummaries     = 10
 	maxAutoScalingGroupInstanceSummaries = maxECSServiceTaskSummaries
 	maxAutoScalingGroupScalingActivities = 10
@@ -299,6 +300,7 @@ type ECSServiceInspection struct {
 	TaskDefinitionImage           string                           `json:"taskDefinitionImage,omitempty"`
 	Deployments                   []ECSDeploymentSummary           `json:"deployments"`
 	Events                        []ECSServiceEvent                `json:"events"`
+	EventsScope                   *ECSServiceEventScope            `json:"eventsScope,omitempty"`
 	Tasks                         []ECSTaskSummary                 `json:"tasks,omitempty"`
 	TasksScope                    *ECSTaskSummaryScope             `json:"tasksScope,omitempty"`
 }
@@ -322,6 +324,20 @@ type ECSTaskSummaryScope struct {
 	TruncationStatus  string `json:"truncationStatus"`
 	UnavailableReason string `json:"unavailableReason,omitempty"`
 	Summary           string `json:"summary,omitempty"`
+}
+
+// ECSServiceEventScope describes the bounded ECS service event window included
+// in live inspection payloads. ECS returns recent service events as a rolling
+// list, so the timestamps identify the newest and oldest retained entries in
+// this response rather than a durable audit range.
+type ECSServiceEventScope struct {
+	EffectiveLimit     int    `json:"effectiveLimit"`
+	ReturnedEventCount int    `json:"returnedEventCount"`
+	TruncationStatus   string `json:"truncationStatus"`
+	Truncated          bool   `json:"truncated"`
+	NewestEventAt      string `json:"newestEventAt,omitempty"`
+	OldestEventAt      string `json:"oldestEventAt,omitempty"`
+	Summary            string `json:"summary,omitempty"`
 }
 
 type ECSTaskSummary struct {
@@ -1921,8 +1937,9 @@ func ecsInspectionFromService(service ecstypes.Service, clusterARN string, taskD
 		}
 		return left.After(right)
 	})
-	if len(events) > 10 {
-		events = events[:10]
+	truncatedEvents := len(events) > maxECSServiceEventSummaries
+	if truncatedEvents {
+		events = events[:maxECSServiceEventSummaries]
 	}
 	eventSummaries := make([]ECSServiceEvent, 0, len(events))
 	for _, event := range events {
@@ -1955,6 +1972,7 @@ func ecsInspectionFromService(service ecstypes.Service, clusterARN string, taskD
 		TaskDefinitionImage:           strings.TrimSpace(taskDefinitionImage),
 		Deployments:                   deploymentSummaries,
 		Events:                        eventSummaries,
+		EventsScope:                   ecsServiceEventScope(eventSummaries, truncatedEvents),
 		Tasks:                         append([]ECSTaskSummary(nil), tasks...),
 		TasksScope:                    cloneECSTaskSummaryScope(tasksScope),
 	}
@@ -2012,6 +2030,31 @@ func cloneECSTaskSummaryScope(scope *ECSTaskSummaryScope) *ECSTaskSummaryScope {
 	}
 	cloned := *scope
 	return &cloned
+}
+
+func ecsServiceEventScope(events []ECSServiceEvent, truncated bool) *ECSServiceEventScope {
+	truncationStatus := "not_truncated"
+	if truncated {
+		truncationStatus = "truncated"
+	}
+	scope := &ECSServiceEventScope{
+		EffectiveLimit:     maxECSServiceEventSummaries,
+		ReturnedEventCount: len(events),
+		TruncationStatus:   truncationStatus,
+		Truncated:          truncated,
+	}
+	if len(events) > 0 {
+		scope.NewestEventAt = events[0].CreatedAt
+		scope.OldestEventAt = events[len(events)-1].CreatedAt
+	}
+	if truncated {
+		scope.Summary = fmt.Sprintf("Showing the newest %d ECS service events retained in this inspection response.", len(events))
+	} else if len(events) == 0 {
+		scope.Summary = "No ECS service events were returned for this inspection response."
+	} else {
+		scope.Summary = fmt.Sprintf("Showing %d ECS service events retained in this inspection response.", len(events))
+	}
+	return scope
 }
 
 func cloneInt32(value *int32) *int32 {

@@ -5703,6 +5703,19 @@
           `Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}`,
         );
       };
+      const createECSServiceEventScopeSummary = (scope) => {
+        if (!scope || typeof scope !== 'object') return null;
+        const parts = [
+          `returned ${countText(scope.returnedEventCount)} event(s) from effective limit ${countText(scope.effectiveLimit)}`,
+          ecsTaskScopeStatusText(scope.truncationStatus),
+        ];
+        const newest = String(scope.newestEventAt || '').trim();
+        const oldest = String(scope.oldestEventAt || '').trim();
+        if (newest) parts.push(`newest ${newest}`);
+        if (oldest) parts.push(`oldest ${oldest}`);
+        const summary = String(scope.summary || '').trim();
+        return createElement('p', 'detail-section-copy', `Event window scope · ${parts.join(' · ')}${summary ? ` · ${summary}` : ''}`);
+      };
       const ecsTaskDisplayName = (task) => textOrDash(task?.taskId || task?.taskArn || 'ECS task');
       const ecsTaskResource = (task) => {
         const taskARN = String(task?.taskArn || '').trim();
@@ -5941,6 +5954,7 @@
             return item;
           },
           'No recent ECS service events are available for this service.',
+          [createECSServiceEventScopeSummary(service?.eventsScope)],
         );
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),

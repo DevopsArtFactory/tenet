@@ -2516,6 +2516,8 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"const createECSTaskScopeSummary = (scope) => {",
 		"Task sample unavailable · ${reasonText} · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)}",
 		"Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}",
+		"const createECSServiceEventScopeSummary = (scope) => {",
+		"Event window scope · ${parts.join(' · ')}${summary ? ` · ${summary}` : ''}",
 		"const taskSampleUnavailable = isECSTaskScopeUnavailable(service?.tasksScope);",
 		"Task sampling is unavailable for this service; service inspection remains available.",
 		"[createECSTaskScopeSummary(service?.tasksScope)]",
@@ -2564,6 +2566,7 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"Desired/running/pending",
 		"Rollout reason",
 		"Recent ECS service events",
+		"[createECSServiceEventScopeSummary(service?.eventsScope)]",
 		"Event timestamp",
 		"const renderECSTaskInspection = (section, deploymentName, resource, result) => {",
 		"Live ECS task inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.",
@@ -4400,8 +4403,11 @@ func TestResourceInspectionFeatureGuideDocumentsSelectorsAndScope(t *testing.T) 
 		"`resultScope.truncationStatus`",
 		"`resultScope.truncated`",
 		"`not_truncated`, `truncated`, `unknown`, or `not_applicable`",
+		"`ecsService.eventsScope`, an additive response-window summary",
+		"`effectiveLimit`, `returnedEventCount`, `truncationStatus`, `truncated`, optional",
+		"the timestamps identify the newest and oldest events retained",
 		"Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating",
-		"Runtime code is intentionally unchanged by this guide; it documents the existing read-only route contract.",
+		"Runtime code remains read-only; this guide documents the shipped live-inspection route contract.",
 	} {
 		if !strings.Contains(guideText, fragment) {
 			t.Fatalf("expected resource inspection feature guide to include %q", fragment)

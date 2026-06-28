@@ -1731,6 +1731,68 @@ func TestECSInspectionFromServiceSortsDeploymentsAndEvents(t *testing.T) {
 	if got.TasksScope == nil || !got.TasksScope.Available || got.TasksScope.EffectiveLimit != maxECSServiceTaskSummaries || got.TasksScope.ReturnedTaskCount != 1 || got.TasksScope.TruncationStatus != "not_truncated" {
 		t.Fatalf("expected ECS service task scope metadata to pass through, got %+v", got.TasksScope)
 	}
+	if got.EventsScope == nil || got.EventsScope.EffectiveLimit != maxECSServiceEventSummaries || got.EventsScope.ReturnedEventCount != 2 || got.EventsScope.TruncationStatus != "not_truncated" {
+		t.Fatalf("expected ECS service event scope metadata, got %+v", got.EventsScope)
+	}
+	if got.EventsScope.NewestEventAt != "2026-04-18T00:12:00Z" || got.EventsScope.OldestEventAt != "2026-04-18T00:10:00Z" {
+		t.Fatalf("expected ECS service event window timestamps, got %+v", got.EventsScope)
+	}
+}
+
+func TestECSInspectionFromServiceBoundsServiceEventEvidence(t *testing.T) {
+	events := make([]ecstypes.ServiceEvent, 0, maxECSServiceEventSummaries+2)
+	for i := 0; i < maxECSServiceEventSummaries+2; i++ {
+		created := time.Date(2026, 6, 1, 3, i, 0, 0, time.UTC)
+		events = append(events, ecstypes.ServiceEvent{
+			CreatedAt: timePtr(created),
+			Message:   stringPtr(fmt.Sprintf("event-%02d", i)),
+		})
+	}
+
+	got := ecsInspectionFromService(ecstypes.Service{Events: events}, "arn:cluster", "", nil, nil)
+	if len(got.Events) != maxECSServiceEventSummaries {
+		t.Fatalf("expected bounded event summaries, got %d entries: %+v", len(got.Events), got.Events)
+	}
+	if got.Events[0].Message != "event-11" || got.Events[len(got.Events)-1].Message != "event-02" {
+		t.Fatalf("expected newest event summaries after bounding, got %+v", got.Events)
+	}
+	if got.EventsScope == nil {
+		t.Fatalf("expected event scope metadata")
+	}
+	if got.EventsScope.EffectiveLimit != maxECSServiceEventSummaries || got.EventsScope.ReturnedEventCount != maxECSServiceEventSummaries || got.EventsScope.TruncationStatus != "truncated" || !got.EventsScope.Truncated {
+		t.Fatalf("expected truncated event scope metadata, got %+v", got.EventsScope)
+	}
+	if got.EventsScope.NewestEventAt != "2026-06-01T03:11:00Z" || got.EventsScope.OldestEventAt != "2026-06-01T03:02:00Z" {
+		t.Fatalf("expected bounded event window timestamps, got %+v", got.EventsScope)
+	}
+
+	raw, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal ECS inspection: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("decode ECS inspection JSON: %v", err)
+	}
+	rawScope, ok := payload["eventsScope"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected eventsScope object in JSON payload, got %#v", payload["eventsScope"])
+	}
+	for _, key := range []string{"effectiveLimit", "returnedEventCount", "truncationStatus", "truncated", "newestEventAt", "oldestEventAt", "summary"} {
+		if _, ok := rawScope[key]; !ok {
+			t.Fatalf("expected eventsScope JSON field %q in %#v", key, rawScope)
+		}
+	}
+}
+
+func TestECSInspectionFromServiceReportsEmptyServiceEventWindow(t *testing.T) {
+	got := ecsInspectionFromService(ecstypes.Service{}, "arn:cluster", "", nil, nil)
+	if got.Events == nil || len(got.Events) != 0 {
+		t.Fatalf("expected explicit empty events slice, got %#v", got.Events)
+	}
+	if got.EventsScope == nil || got.EventsScope.EffectiveLimit != maxECSServiceEventSummaries || got.EventsScope.ReturnedEventCount != 0 || got.EventsScope.TruncationStatus != "not_truncated" || got.EventsScope.NewestEventAt != "" || got.EventsScope.OldestEventAt != "" {
+		t.Fatalf("expected explicit empty event scope metadata, got %+v", got.EventsScope)
+	}
 }
 
 func TestECSInspectionFromServiceBoundsDeploymentRolloutStateEvidence(t *testing.T) {

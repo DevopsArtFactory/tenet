@@ -8901,6 +8901,14 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 					CreatedAt: "2026-04-18T00:12:00Z",
 					Message:   "service reached steady state",
 				}},
+				EventsScope: &resourceinspection.ECSServiceEventScope{
+					EffectiveLimit:     10,
+					ReturnedEventCount: 1,
+					TruncationStatus:   "not_truncated",
+					NewestEventAt:      "2026-04-18T00:12:00Z",
+					OldestEventAt:      "2026-04-18T00:12:00Z",
+					Summary:            "Showing 1 ECS service events retained in this inspection response.",
+				},
 				Tasks: []resourceinspection.ECSTaskSummary{{
 					TaskARN:              "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/task-1",
 					TaskID:               "task-1",
@@ -9011,7 +9019,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected ecsService object in payload, got %#v", raw["ecsService"])
 		}
-		for _, key := range []string{"minimumHealthyPercent", "maximumPercent", "healthCheckGracePeriodSeconds", "deploymentControllerType", "deploymentCircuitBreaker", "deploymentAlarmConfiguration", "tasks", "tasksScope"} {
+		for _, key := range []string{"minimumHealthyPercent", "maximumPercent", "healthCheckGracePeriodSeconds", "deploymentControllerType", "deploymentCircuitBreaker", "deploymentAlarmConfiguration", "events", "eventsScope", "tasks", "tasksScope"} {
 			if _, ok := ecsService[key]; !ok {
 				t.Fatalf("expected ECS service inspection field %q in payload, got %#v", key, ecsService)
 			}
@@ -9066,6 +9074,23 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		alarmNames, ok := alarmConfig["alarmNames"].([]any)
 		if !ok || !reflect.DeepEqual(alarmNames, []any{"payments-api-5xx", "payments-api-latency"}) {
 			t.Fatalf("expected deploymentAlarmConfiguration.alarmNames in raw payload, got %#v", alarmConfig["alarmNames"])
+		}
+		eventsScope, ok := ecsService["eventsScope"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected eventsScope object in ECS service payload, got %#v", ecsService["eventsScope"])
+		}
+		for key, want := range map[string]any{
+			"effectiveLimit":     float64(10),
+			"returnedEventCount": float64(1),
+			"truncationStatus":   "not_truncated",
+			"truncated":          false,
+			"newestEventAt":      "2026-04-18T00:12:00Z",
+			"oldestEventAt":      "2026-04-18T00:12:00Z",
+			"summary":            "Showing 1 ECS service events retained in this inspection response.",
+		} {
+			if !reflect.DeepEqual(eventsScope[key], want) {
+				t.Fatalf("expected eventsScope[%q]=%#v, got %#v in %#v", key, want, eventsScope[key], eventsScope)
+			}
 		}
 		tasksScope, ok := ecsService["tasksScope"].(map[string]any)
 		if !ok {
