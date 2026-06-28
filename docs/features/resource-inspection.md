@@ -163,8 +163,12 @@ and `Deployment alarms`; deployment rollout rows use `Deployment ID`,
 `Desired/running/pending`, `Task definition`, `Created at`, and `Updated at`
 labels plus `Primary deployment` / `Active deployment` cues and a same-tab
 `Share ECS deployment` row anchor that preserves the current resource page.
-Service events use `Recent ECS service events`, `Event timestamp`, and
-`Event window scope` labels.
+Service events use `Recent ECS service events`, `Event timestamp`, optional
+`Event ID`, and `Event window scope` labels plus a same-tab
+`Share ECS service event` row anchor. Event anchors prefer provider-authored
+`eventId` values when present and otherwise use a deterministic timestamp/message
+fallback so operators can share a specific ECS service event without losing the
+current resource selector state such as `clusterArn` or `resourceInspectionLimit`.
 When the fields are absent, those rows stay quiet.
 
 ## Supported Resource Types
