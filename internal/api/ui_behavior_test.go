@@ -552,7 +552,7 @@ class Element {
 }
 class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
 class Document {
-  constructor() { this.activeElement = null; this.byID = new Map(); }
+  constructor() { this.activeElement = null; this.byID = new Map(); this.lastScrolledTarget = null; }
   createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
   getElementById(id) { return this.byID.get(id) || null; }
   querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
@@ -1925,15 +1925,19 @@ class Element {
     this.autocomplete = '';
     this.selectionStart = null;
     this.selectionEnd = null;
+    this._id = '';
     this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
   }
+  set id(value) { if (this._id) this.ownerDocument.byID.delete(this._id); this._id = String(value || ''); if (this._id) this.ownerDocument.byID.set(this._id, this); }
+  get id() { return this._id; }
   append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
   replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
   addEventListener(type, handler) { this.listeners[type] = handler; }
   dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
-  setAttribute(name, value) { this.attributes[name] = String(value); }
+  setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'id') this.id = value; }
   getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
   focus() { this.ownerDocument.activeElement = this; }
+  scrollIntoView(options) { this.ownerDocument.lastScrolledTarget = { id: this.id || '', options }; }
 }
 class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
 class Document {
@@ -1956,8 +1960,9 @@ const collectText = (node) => [node.textContent || '', ...(node.children || []).
 async function render(search, fetchImpl) {
   const document = createDocument();
   const clipboardWrites = [];
-  const window = { location: { pathname: '/console', search, hash: '' }, navigator: { clipboard: { writeText: (text) => { clipboardWrites.push(text); return Promise.resolve(); } } } };
-  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const [searchPart, hashPart = ''] = String(search).split('#');
+  const window = { location: { pathname: '/console', search: searchPart, hash: hashPart ? '#' + hashPart : '' }, navigator: { clipboard: { writeText: (text) => { clipboardWrites.push(text); return Promise.resolve(); } } } };
+  const history = { replaceState(_state, _title, url) { const [pathAndQuery, nextHash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = nextHash ? '#' + nextHash : ''; } };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetchImpl, history, Element, InputElement);
   await settle();
   await settle();
@@ -2032,10 +2037,27 @@ async function render(search, fetchImpl) {
   if (applicationView.clipboardWrites.join(', ') !== 'GET /v1/overview/applications/payments-api-staging') throw new Error('expected application detail copy route, got ' + applicationView.clipboardWrites.join(', '));
 
   const resourceID = 'ecsService::payments-api-staging-service::ECS service Tenet updates during CodeDeploy traffic shifting (style: linear)';
-  const resourceView = await render('?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID), (url) => {
+  const clusterArn = 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging';
+  const resourceView = await render('?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID) + '&clusterArn=' + encodeURIComponent(clusterArn) + '&resourceInspectionLimit=5#ecs-service-event-evt-deployment-steady', (url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(applicationDetail) });
-    if (url === '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service') return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, unavailableReason: 'local_no_provider' }) });
-    if (url === '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service') return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, unavailableReason: 'no_log_source', entries: [] }) });
+    if (url === '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-staging&limit=5') return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      available: true,
+      source: 'aws_ecs',
+      lookupContext: { region: 'ap-northeast-2', targetAccountId: '210987654321' },
+      ecsService: {
+        serviceName: 'payments-api-staging-service',
+        status: 'ACTIVE',
+        clusterArn,
+        desiredCount: 2,
+        runningCount: 2,
+        eventsScope: { returnedEventCount: 2, effectiveLimit: 5, truncationStatus: 'complete', newestEventAt: '2026-06-28T10:00:00Z', oldestEventAt: '2026-06-28T09:55:00Z' },
+        events: [
+          { eventId: 'evt-deployment-steady', createdAt: '2026-06-28T10:00:00Z', message: 'service payments-api-staging-service has reached a steady state' },
+          { createdAt: '2026-06-28T09:55:00Z', message: 'service payments-api-staging-service registered 2 targets' },
+        ],
+      },
+    }) });
+    if (url === '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, unavailableReason: 'no_log_source', entries: [] }) });
     throw new Error('unexpected resource fetch url: ' + url);
   });
   const resourceToolbarLinks = collectNodes(resourceView.document.getElementById('toolbar'), (node) => node.tagName === 'A');
@@ -2047,14 +2069,35 @@ async function render(search, fetchImpl) {
   resourceCopyButton.dispatch('click');
   await settle();
   const liveInspectionCopyButton = collectNodes(resourceView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Copy live inspection route');
-  if (!liveInspectionCopyButton || liveInspectionCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10') throw new Error('expected live inspection copy button');
+  if (!liveInspectionCopyButton || liveInspectionCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-staging&limit=5') throw new Error('expected live inspection copy button');
   liveInspectionCopyButton.dispatch('click');
   await settle();
   const recentLogsCopyButton = collectNodes(resourceView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Copy recent logs route');
-  if (!recentLogsCopyButton || recentLogsCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service') throw new Error('expected recent logs copy button');
+  if (!recentLogsCopyButton || recentLogsCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-staging') throw new Error('expected recent logs copy button');
   recentLogsCopyButton.dispatch('click');
   await settle();
-  if (resourceView.clipboardWrites.join(', ') !== 'GET /v1/overview/deployments/payments-api-staging, GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10, GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service') throw new Error('expected resource copy routes, got ' + resourceView.clipboardWrites.join(', '));
+  if (resourceView.clipboardWrites.join(', ') !== 'GET /v1/overview/deployments/payments-api-staging, GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-staging&limit=5, GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-staging') throw new Error('expected resource copy routes, got ' + resourceView.clipboardWrites.join(', '));
+  const resourceLinks = collectNodes(resourceView.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const encodedResourceID = encodeURIComponent(resourceID);
+  const encodedClusterArn = encodeURIComponent(clusterArn);
+  const eventShareLink = resourceLinks.find((node) => {
+    if (node.textContent !== 'Share ECS service event' || node.target !== '_self') return false;
+    const [pathAndQuery, hash = ''] = String(node.href || '').split('#');
+    return pathAndQuery.startsWith('/console?') &&
+      pathAndQuery.includes('page=resource') &&
+      pathAndQuery.includes('deployment=payments-api-staging') &&
+      pathAndQuery.includes('resourceType=ecsService') &&
+      pathAndQuery.includes('resourceId=' + encodedResourceID) &&
+      pathAndQuery.includes('clusterArn=' + encodedClusterArn) &&
+      pathAndQuery.includes('resourceInspectionLimit=5') &&
+      hash === 'ecs-service-event-evt-deployment-steady';
+  });
+  if (!eventShareLink) throw new Error('expected ECS service event share link to preserve resource query state and target event hash, got ' + resourceLinks.filter((node) => node.textContent === 'Share ECS service event').map((node) => String(node.href || '') + ' target=' + String(node.target || '')).join(' || '));
+  if (!resourceLinks.find((node) => node.textContent === 'Share ECS service event' && node.href.endsWith('#ecs-service-event-2026-06-28t09-55-00z-service-payments-api-staging-service-registered-2-targets-row-2'))) throw new Error('expected fallback ECS service event anchor for payloads without eventId');
+  const eventRows = collectNodes(resourceView.document.getElementById('accounts'), (node) => node.id && node.id.startsWith('ecs-service-event-'));
+  if (!eventRows.find((node) => node.id === 'ecs-service-event-evt-deployment-steady')) throw new Error('expected backend eventId row anchor');
+  if (!eventRows.find((node) => node.id === 'ecs-service-event-2026-06-28t09-55-00z-service-payments-api-staging-service-registered-2-targets-row-2')) throw new Error('expected deterministic fallback event row anchor');
+  if (resourceView.document.lastScrolledTarget?.id !== 'ecs-service-event-evt-deployment-steady') throw new Error('expected bookmarked ECS service event hash to scroll after live-inspection render');
   const resourceBodyText = collectText(resourceView.document.getElementById('accounts')).join(' | ');
   const resourceToolbarText = collectText(resourceView.document.getElementById('toolbar')).join(' | ');
   if (!resourceBodyText.includes('Current resource read: GET /v1/overview/deployments/payments-api-staging')) throw new Error('expected resource detail body to show the top-level read route');

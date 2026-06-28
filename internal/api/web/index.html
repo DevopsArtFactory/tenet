@@ -5879,6 +5879,33 @@
         return `ecs-deployment-${sectionIDSegment(fallback, 'unknown')}`;
       };
       const ecsServiceDeploymentShareURL = (deployment, index = 0) => currentPageSectionURL(ecsServiceDeploymentAnchorID(deployment, index));
+      const ecsServiceEventAnchorID = (event, index = 0) => {
+        const eventID = String(event?.eventId || '').trim();
+        if (eventID) return `ecs-service-event-${sectionIDSegment(eventID, 'unknown')}`;
+        const fallback = [
+          event?.createdAt,
+          event?.message,
+          `row-${index + 1}`,
+        ].filter(Boolean).join('-');
+        return `ecs-service-event-${sectionIDSegment(fallback, 'unknown')}`;
+      };
+      const ecsServiceEventShareURL = (event, index = 0) => currentPageSectionURL(ecsServiceEventAnchorID(event, index));
+      const createECSServiceEventListItem = (event, index = 0) => {
+        const item = createElement('li');
+        item.id = ecsServiceEventAnchorID(event, index);
+        item.classList.add('operation-anchor-row');
+        item.append(createElement('strong', '', textOrDash(event?.message)));
+        const meta = createElement('div', 'detail-history-meta');
+        meta.append(createElement('span', 'detail-condition-meta', `Event timestamp · ${textOrDash(event?.createdAt)}`));
+        if (event?.eventId) {
+          meta.append(createElement('span', 'detail-condition-meta', `Event ID · ${String(event.eventId).trim()}`));
+        }
+        item.append(meta);
+        const links = createElement('div', 'row-links');
+        links.append(createNavLink(ecsServiceEventShareURL(event, index), 'Share ECS service event', '_self'));
+        item.append(links);
+        return item;
+      };
       const createECSServiceDeploymentListItem = (deployment, index = 0) => {
         const item = createElement('li');
         item.id = ecsServiceDeploymentAnchorID(deployment, index);
@@ -5963,16 +5990,12 @@
           taskSampleUnavailable ? 'Task sampling is unavailable for this service; service inspection remains available.' : 'No recent ECS tasks are reported for this service.',
           [createECSTaskScopeSummary(service?.tasksScope)],
         );
+        const events = Array.isArray(service?.events) ? service.events : [];
         const eventsSection = createInspectionListSection(
           'Recent ECS service events',
-          service?.events || [],
-          (event) => {
-            const item = createElement('li');
-            item.append(createElement('strong', '', textOrDash(event.message)));
-            item.append(createElement('span', 'detail-condition-meta', `Event timestamp · ${textOrDash(event.createdAt)}`));
-            return item;
-          },
-          'No recent ECS service events are available for this service.',
+          events,
+          (event, index) => createECSServiceEventListItem(event, index),
+          Array.isArray(service?.events) ? 'No recent ECS service events are available for this service.' : 'ECS service events were not included in this live-inspection payload.',
           [createECSServiceEventScopeSummary(service?.eventsScope)],
         );
         section.replaceChildren(
@@ -5984,6 +6007,7 @@
           tasksSection,
           eventsSection,
         );
+        scrollToCurrentHashTarget();
       };
       const autoScalingLaunchTemplateText = (template) => {
         if (!template || typeof template !== 'object') {
