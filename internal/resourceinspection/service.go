@@ -3,7 +3,9 @@ package resourceinspection
 import (
 	"container/list"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
@@ -407,6 +409,7 @@ type ECSDeploymentSummary struct {
 }
 
 type ECSServiceEvent struct {
+	EventID   string `json:"eventId,omitempty"`
 	CreatedAt string `json:"createdAt,omitempty"`
 	Message   string `json:"message"`
 }
@@ -1942,13 +1945,18 @@ func ecsInspectionFromService(service ecstypes.Service, clusterARN string, taskD
 		events = events[:maxECSServiceEventSummaries]
 	}
 	eventSummaries := make([]ECSServiceEvent, 0, len(events))
+	seenEvents := make(map[string]int, len(events))
 	for _, event := range events {
 		message := strings.TrimSpace(aws.ToString(event.Message))
 		if message == "" {
 			continue
 		}
+		createdAt := formatTime(aws.ToTime(event.CreatedAt))
+		base := ecsServiceEventIdentityBase(clusterARN, aws.ToString(service.ServiceArn), aws.ToString(service.ServiceName), createdAt, message)
+		seenEvents[base]++
 		eventSummaries = append(eventSummaries, ECSServiceEvent{
-			CreatedAt: formatTime(aws.ToTime(event.CreatedAt)),
+			EventID:   stableECSServiceEventID(base, seenEvents[base]),
+			CreatedAt: createdAt,
 			Message:   message,
 		})
 	}
@@ -2055,6 +2063,22 @@ func ecsServiceEventScope(events []ECSServiceEvent, truncated bool) *ECSServiceE
 		scope.Summary = fmt.Sprintf("Showing %d ECS service events retained in this inspection response.", len(events))
 	}
 	return scope
+}
+
+func ecsServiceEventIdentityBase(clusterARN, serviceARN, serviceName, createdAt, message string) string {
+	return strings.Join([]string{
+		"v1",
+		strings.TrimSpace(clusterARN),
+		strings.TrimSpace(serviceARN),
+		strings.TrimSpace(serviceName),
+		strings.TrimSpace(createdAt),
+		strings.TrimSpace(message),
+	}, "\x00")
+}
+
+func stableECSServiceEventID(base string, duplicateOrdinal int) string {
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%d", base, duplicateOrdinal)))
+	return "ecs_evt_" + hex.EncodeToString(hash[:12])
 }
 
 func cloneInt32(value *int32) *int32 {
