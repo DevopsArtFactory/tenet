@@ -1948,6 +1948,11 @@ assert 'Updated at' in ui, ui
 assert 'Primary deployment' in ui, ui
 assert 'Active deployment' in ui, ui
 assert 'Share ECS deployment' in ui, ui
+assert "const createECSServiceEventScopeSummary = (scope) => {" in ui, ui
+assert "Event window scope · ${parts.join(' · ')}${summary ? ` · ${summary}` : ''}" in ui, ui
+assert "[createECSServiceEventScopeSummary(service?.eventsScope)]" in ui, ui
+assert 'Recent ECS service events' in ui, ui
+assert 'Event timestamp' in ui, ui
 assert 'Container instance' in ui, ui
 assert 'EC2 instance' in ui, ui
 assert 'Capacity provider' in ui, ui
