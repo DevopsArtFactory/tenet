@@ -190,7 +190,9 @@ Primary operator APIs:
 - `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}[&clusterArn={ecsClusterArn}][&limit={positiveInteger}][&instanceId={ec2InstanceId}]`
   (the route requires a concrete resource type/name; supported ECS, ASG, and
   traffic-routing reads can use focused selectors/caps documented in
-  `docs/features/resource-inspection.md`)
+  `docs/features/resource-inspection.md`; live ASG reads may add optional
+  `ec2InstanceStatus` status-check evidence beside sampled/selected EC2 host
+  details when AWS `DescribeInstanceStatus` is available)
 
 Resource drill-down Recent logs and Live inspection panels summarize lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract. Use
 `docs/features/resource-recent-logs.md` and

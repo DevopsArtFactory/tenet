@@ -6124,6 +6124,32 @@
         });
         item.append(hostMeta);
       };
+      const appendAutoScalingEC2InstanceStatusDetail = (item, instance) => {
+        const status = instance?.ec2InstanceStatus;
+        if (!status || typeof status !== 'object') return;
+        const rows = [
+          ['EC2 instance state', status.instanceState],
+          ['EC2 instance status check', status.instanceStatus],
+          ['EC2 system status check', status.systemStatus],
+          ['Attached EBS status check', status.attachedEbsStatus],
+        ]
+          .map(([label, value]) => [label, String(value || '').trim()])
+          .filter(([, value]) => value);
+        const events = Array.isArray(status.events) ? status.events : [];
+        if (!rows.length && !events.length) return;
+        const statusMeta = createElement('div', 'detail-history-meta');
+        rows.forEach(([label, value]) => {
+          statusMeta.append(createElement('span', 'detail-condition-meta', `${label} · ${value}`));
+        });
+        events.forEach((event, index) => {
+          const summary = [event?.code, event?.description, event?.notBefore ? `not before ${event.notBefore}` : '', event?.notAfter ? `not after ${event.notAfter}` : '']
+            .map((part) => String(part || '').trim())
+            .filter(Boolean)
+            .join(' · ');
+          if (summary) statusMeta.append(createElement('span', 'detail-condition-meta', `EC2 scheduled event ${index + 1} · ${summary}`));
+        });
+        item.append(statusMeta);
+      };
       const autoScalingActivityAnchorID = (activity, index = 0) => {
         const providerID = activity?.activityId || activity?.activityID || activity?.id;
         if (providerID) return `asg-scaling-activity-${sectionIDSegment(providerID, 'unknown')}`;
@@ -6224,6 +6250,7 @@
             }
             item.append(meta);
             appendAutoScalingEC2InstanceDetail(item, instance);
+            appendAutoScalingEC2InstanceStatusDetail(item, instance);
             const handoffs = createAutoScalingInstanceHandoffLinks(deploymentName, resource, instance);
             if (handoffs) item.append(handoffs);
             return item;
