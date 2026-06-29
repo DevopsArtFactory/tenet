@@ -2348,6 +2348,130 @@ func TestECSTaskInspectionEnrichesResolvedEC2HostDetail(t *testing.T) {
 	}
 }
 
+func TestAutoScalingInstanceEnrichmentIncludesEC2StatusEvidence(t *testing.T) {
+	launchTime := time.Date(2026, 5, 5, 7, 30, 0, 0, time.UTC)
+	statusStart := time.Date(2026, 5, 6, 1, 0, 0, 0, time.UTC)
+	client := &fakeEC2InstanceAPI{
+		output: &ec2.DescribeInstancesOutput{
+			Reservations: []ec2types.Reservation{{
+				Instances: []ec2types.Instance{{
+					InstanceId:       stringPtr("i-0abc123def4567890"),
+					State:            &ec2types.InstanceState{Name: ec2types.InstanceStateNameRunning},
+					InstanceType:     ec2types.InstanceTypeM6iLarge,
+					ImageId:          stringPtr("ami-abc123"),
+					PrivateIpAddress: stringPtr("10.0.4.12"),
+					SubnetId:         stringPtr("subnet-abc123"),
+					VpcId:            stringPtr("vpc-abc123"),
+					LaunchTime:       &launchTime,
+				}},
+			}},
+		},
+		statusOutput: &ec2.DescribeInstanceStatusOutput{
+			InstanceStatuses: []ec2types.InstanceStatus{{
+				InstanceId:    stringPtr("i-0abc123def4567890"),
+				InstanceState: &ec2types.InstanceState{Name: ec2types.InstanceStateNameRunning},
+				InstanceStatus: &ec2types.InstanceStatusSummary{
+					Status: ec2types.SummaryStatusOk,
+				},
+				SystemStatus: &ec2types.InstanceStatusSummary{
+					Status: ec2types.SummaryStatusImpaired,
+				},
+				Events: []ec2types.InstanceStatusEvent{{
+					Code:            ec2types.EventCodeSystemReboot,
+					Description:     stringPtr("scheduled maintenance"),
+					InstanceEventId: stringPtr("event-123"),
+					NotBefore:       &statusStart,
+				}},
+			}},
+		},
+	}
+
+	got := enrichSelectedAutoScalingInstanceFromEC2(context.Background(), client, AutoScalingInspection{
+		AutoScalingGroupName: "payments-api-prod-candidate",
+		Instances: []AutoScalingGroupInstanceSummary{
+			{InstanceID: "i-0oldermember"},
+			{InstanceID: "i-0abc123def4567890", AvailabilityZone: "ap-northeast-2a", LifecycleState: "InService", HealthStatus: "Healthy"},
+		},
+	}, " i-0abc123def4567890 ")
+
+	if !reflect.DeepEqual(client.instanceIDs, []string{"i-0abc123def4567890"}) {
+		t.Fatalf("expected ASG selected-instance detail lookup, got %+v", client.instanceIDs)
+	}
+	if !reflect.DeepEqual(client.statusInstanceIDs, []string{"i-0abc123def4567890"}) {
+		t.Fatalf("expected ASG selected-instance status lookup, got %+v", client.statusInstanceIDs)
+	}
+	selected, ok := selectedAutoScalingInstance(got, "i-0abc123def4567890")
+	if !ok {
+		t.Fatalf("expected selected ASG instance to remain present, got %+v", got.Instances)
+	}
+	if selected.EC2Instance == nil || selected.EC2Instance.InstanceType != "m6i.large" || selected.EC2Instance.LaunchTime != "2026-05-05T07:30:00Z" {
+		t.Fatalf("expected selected ASG instance to preserve EC2 detail, got %+v", selected.EC2Instance)
+	}
+	if selected.EC2InstanceStatus == nil {
+		t.Fatalf("expected selected ASG instance to include EC2 status evidence, got %+v", selected)
+	}
+	status := selected.EC2InstanceStatus
+	if status.InstanceState != "running" || status.InstanceStatus != "ok" || status.SystemStatus != "impaired" {
+		t.Fatalf("unexpected EC2 status summary: %+v", status)
+	}
+	if len(status.Events) != 1 || status.Events[0].Code != "system-reboot" || status.Events[0].Description != "scheduled maintenance" || status.Events[0].InstanceEventID != "event-123" || status.Events[0].NotBefore != "2026-05-06T01:00:00Z" {
+		t.Fatalf("unexpected EC2 status event evidence: %+v", status.Events)
+	}
+}
+
+func TestAutoScalingInstanceStatusEnrichmentFollowsReturnedSampleScope(t *testing.T) {
+	client := &fakeEC2InstanceAPI{
+		statusOutput: &ec2.DescribeInstanceStatusOutput{
+			InstanceStatuses: []ec2types.InstanceStatus{
+				{
+					InstanceId: stringPtr("i-001"),
+					InstanceStatus: &ec2types.InstanceStatusSummary{
+						Status: ec2types.SummaryStatusOk,
+					},
+					SystemStatus: &ec2types.InstanceStatusSummary{
+						Status: ec2types.SummaryStatusOk,
+					},
+				},
+				{
+					InstanceId: stringPtr("i-002"),
+					InstanceStatus: &ec2types.InstanceStatusSummary{
+						Status: ec2types.SummaryStatusImpaired,
+					},
+					SystemStatus: &ec2types.InstanceStatusSummary{
+						Status: ec2types.SummaryStatusOk,
+					},
+				},
+			},
+		},
+	}
+
+	got := enrichAutoScalingInstanceStatusesFromEC2(context.Background(), client, AutoScalingInspection{
+		AutoScalingGroupName: "payments-api-prod-service",
+		Instances: []AutoScalingGroupInstanceSummary{
+			{InstanceID: "i-003"},
+			{InstanceID: "i-001"},
+			{InstanceID: "i-002"},
+		},
+	}, 2)
+
+	if !reflect.DeepEqual(client.statusInstanceIDs, []string{"i-001", "i-002"}) {
+		t.Fatalf("expected status lookup to follow deterministic returned ASG sample, got %+v", client.statusInstanceIDs)
+	}
+	byID := map[string]AutoScalingGroupInstanceSummary{}
+	for _, instance := range got.Instances {
+		byID[instance.InstanceID] = instance
+	}
+	if byID["i-001"].EC2InstanceStatus == nil || byID["i-001"].EC2InstanceStatus.InstanceStatus != "ok" || byID["i-001"].EC2InstanceStatus.SystemStatus != "ok" {
+		t.Fatalf("expected i-001 status evidence, got %+v", byID["i-001"].EC2InstanceStatus)
+	}
+	if byID["i-002"].EC2InstanceStatus == nil || byID["i-002"].EC2InstanceStatus.InstanceStatus != "impaired" || byID["i-002"].EC2InstanceStatus.SystemStatus != "ok" {
+		t.Fatalf("expected i-002 status evidence, got %+v", byID["i-002"].EC2InstanceStatus)
+	}
+	if byID["i-003"].EC2InstanceStatus != nil {
+		t.Fatalf("expected omitted instance outside returned sample to avoid status enrichment, got %+v", byID["i-003"].EC2InstanceStatus)
+	}
+}
+
 func TestECSTaskInspectionOmitsEC2HostDetailOnMissingIdentityOrLookupFailure(t *testing.T) {
 	withoutIdentityClient := &fakeEC2InstanceAPI{}
 	withoutIdentity := enrichECSTaskInspectionFromEC2(context.Background(), withoutIdentityClient, ECSTaskInspection{
@@ -2892,9 +3016,12 @@ type fakeEC2LaunchTemplateAPI struct {
 }
 
 type fakeEC2InstanceAPI struct {
-	instanceIDs []string
-	output      *ec2.DescribeInstancesOutput
-	err         error
+	instanceIDs       []string
+	statusInstanceIDs []string
+	output            *ec2.DescribeInstancesOutput
+	statusOutput      *ec2.DescribeInstanceStatusOutput
+	err               error
+	statusErr         error
 }
 
 func (f *fakeECSServiceAPI) ListClusters(context.Context, *ecs.ListClustersInput, ...func(*ecs.Options)) (*ecs.ListClustersOutput, error) {
@@ -2979,6 +3106,17 @@ func (f *fakeEC2InstanceAPI) DescribeInstances(_ context.Context, input *ec2.Des
 		return &ec2.DescribeInstancesOutput{}, nil
 	}
 	return f.output, nil
+}
+
+func (f *fakeEC2InstanceAPI) DescribeInstanceStatus(_ context.Context, input *ec2.DescribeInstanceStatusInput, _ ...func(*ec2.Options)) (*ec2.DescribeInstanceStatusOutput, error) {
+	f.statusInstanceIDs = append([]string(nil), input.InstanceIds...)
+	if f.statusErr != nil {
+		return nil, f.statusErr
+	}
+	if f.statusOutput == nil {
+		return &ec2.DescribeInstanceStatusOutput{}, nil
+	}
+	return f.statusOutput, nil
 }
 
 func stringPtr(value string) *string { return &value }

@@ -55,6 +55,7 @@ func TestReadmeStaysProductOverview(t *testing.T) {
 		"`internal/statusstore`, `internal/planpreview`, `internal/applyrequest`, and\n  `internal/auditlog` - runtime status, plan/apply, and audit stores",
 		"`docs/features/resource-inspection.md` documents the focused live resource inspection route, selectors, lookup context, unavailable states, and detailed field contracts.",
 		"Resource drill-down Recent logs and Live inspection panels summarize lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract.",
+		"live ASG reads may add optional\n  `ec2InstanceStatus` status-check evidence",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README product overview to include %q", fragment)
@@ -2508,8 +2509,8 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"embedded resource page preserves selected-cluster URL state through bookmarkable ECS service drill-down links",
 		"local and compose smoke now also fetch ECS service selected-cluster backend routes",
 		"optional `resourceDescription` when Tenet resolved rollout execution context for the selected resource",
-		"selected ASG EC2 host-detail evidence is optional live AWS evidence",
-		"local and compose runs may omit `autoScalingGroup.instances[].ec2Instance`",
+		"selected ASG EC2 host-detail and status-check evidence is optional live AWS evidence",
+		"local and compose runs may omit `autoScalingGroup.instances[].ec2Instance` and `autoScalingGroup.instances[].ec2InstanceStatus`",
 		"the exact operator labels `EC2 state`, `EC2 instance type`, `AMI image ID`, `Private IP`, `Public IP`, `Subnet`, `VPC`, and `Launch time`",
 		"the exact local fallback identifiers `codeDeployDeploymentGroup`, `productionListener`, and `testListener`",
 		"`available=true`, `source=rollout_execution_summary`, `trafficRoutingResource.inspectionMode=summary_only`",

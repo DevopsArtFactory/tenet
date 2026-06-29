@@ -8739,6 +8739,17 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 								VPCID:            "vpc-abc123",
 								LaunchTime:       "2026-05-05T07:30:00Z",
 							},
+							EC2InstanceStatus: &resourceinspection.EC2InstanceStatusDetail{
+								InstanceState:  "running",
+								InstanceStatus: "ok",
+								SystemStatus:   "impaired",
+								Events: []resourceinspection.EC2InstanceStatusEvent{{
+									Code:            "system-reboot",
+									Description:     "scheduled maintenance",
+									InstanceEventID: "event-123",
+									NotBefore:       "2026-05-06T01:00:00Z",
+								}},
+							},
 						}},
 					},
 				}, nil
@@ -8783,6 +8794,27 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			if ec2Instance[key] != want {
 				t.Fatalf("expected ec2Instance.%s=%q, got %#v", key, want, ec2Instance)
 			}
+		}
+		ec2Status, ok := instance["ec2InstanceStatus"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected selected ASG instance ec2InstanceStatus object, got %#v", instance)
+		}
+		for key, want := range map[string]string{
+			"instanceState":  "running",
+			"instanceStatus": "ok",
+			"systemStatus":   "impaired",
+		} {
+			if ec2Status[key] != want {
+				t.Fatalf("expected ec2InstanceStatus.%s=%q, got %#v", key, want, ec2Status)
+			}
+		}
+		events, ok := ec2Status["events"].([]any)
+		if !ok || len(events) != 1 {
+			t.Fatalf("expected one EC2 status event in raw payload, got %#v", ec2Status["events"])
+		}
+		event, ok := events[0].(map[string]any)
+		if !ok || event["code"] != "system-reboot" || event["description"] != "scheduled maintenance" || event["instanceEventId"] != "event-123" || event["notBefore"] != "2026-05-06T01:00:00Z" {
+			t.Fatalf("unexpected EC2 status event payload: %#v", events[0])
 		}
 	})
 
@@ -10078,6 +10110,17 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 					ImageID:      "ami-legacy123",
 					InstanceType: "m6i.large",
 				},
+				SelectedInstance: &resourceinspection.AutoScalingGroupInstanceSummary{
+					InstanceID:       "i-0abc123def4567890",
+					AvailabilityZone: "ap-northeast-2a",
+					LifecycleState:   "InService",
+					HealthStatus:     "Healthy",
+					EC2InstanceStatus: &resourceinspection.EC2InstanceStatusDetail{
+						InstanceState:  "running",
+						InstanceStatus: "ok",
+						SystemStatus:   "impaired",
+					},
+				},
 			},
 		}
 
@@ -10141,6 +10184,26 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 		if got := launchTemplate["instanceType"]; got != "m6i.large" {
 			t.Fatalf("expected launchTemplate instanceType, got %#v", got)
+		}
+		selectedInstance, ok := payload["selectedInstance"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected selectedInstance object in bootstrap-source payload, got %#v", payload["selectedInstance"])
+		}
+		if selectedInstance["instanceId"] != "i-0abc123def4567890" || selectedInstance["healthStatus"] != "Healthy" {
+			t.Fatalf("unexpected selectedInstance ASG fields: %#v", selectedInstance)
+		}
+		selectedStatus, ok := selectedInstance["ec2InstanceStatus"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected selected bootstrap-source instance EC2 status object, got %#v", selectedInstance)
+		}
+		for key, want := range map[string]string{
+			"instanceState":  "running",
+			"instanceStatus": "ok",
+			"systemStatus":   "impaired",
+		} {
+			if selectedStatus[key] != want {
+				t.Fatalf("expected selectedInstance.ec2InstanceStatus.%s=%q, got %#v", key, want, selectedStatus)
+			}
 		}
 	})
 

@@ -472,13 +472,14 @@ type AutoScalingLaunchTemplateOverride struct {
 }
 
 type AutoScalingGroupInstanceSummary struct {
-	InstanceID           string             `json:"instanceId"`
-	AvailabilityZone     string             `json:"availabilityZone,omitempty"`
-	LifecycleState       string             `json:"lifecycleState,omitempty"`
-	HealthStatus         string             `json:"healthStatus,omitempty"`
-	ProtectedFromScaleIn bool               `json:"protectedFromScaleIn"`
-	WeightedCapacity     string             `json:"weightedCapacity,omitempty"`
-	EC2Instance          *EC2InstanceDetail `json:"ec2Instance,omitempty"`
+	InstanceID           string                   `json:"instanceId"`
+	AvailabilityZone     string                   `json:"availabilityZone,omitempty"`
+	LifecycleState       string                   `json:"lifecycleState,omitempty"`
+	HealthStatus         string                   `json:"healthStatus,omitempty"`
+	ProtectedFromScaleIn bool                     `json:"protectedFromScaleIn"`
+	WeightedCapacity     string                   `json:"weightedCapacity,omitempty"`
+	EC2Instance          *EC2InstanceDetail       `json:"ec2Instance,omitempty"`
+	EC2InstanceStatus    *EC2InstanceStatusDetail `json:"ec2InstanceStatus,omitempty"`
 }
 
 type EC2InstanceDetail struct {
@@ -490,6 +491,23 @@ type EC2InstanceDetail struct {
 	SubnetID         string `json:"subnetId,omitempty"`
 	VPCID            string `json:"vpcId,omitempty"`
 	LaunchTime       string `json:"launchTime,omitempty"`
+}
+
+type EC2InstanceStatusDetail struct {
+	InstanceState     string                   `json:"instanceState,omitempty"`
+	InstanceStatus    string                   `json:"instanceStatus,omitempty"`
+	SystemStatus      string                   `json:"systemStatus,omitempty"`
+	AttachedEBSStatus string                   `json:"attachedEbsStatus,omitempty"`
+	Events            []EC2InstanceStatusEvent `json:"events,omitempty"`
+}
+
+type EC2InstanceStatusEvent struct {
+	Code              string `json:"code,omitempty"`
+	Description       string `json:"description,omitempty"`
+	InstanceEventID   string `json:"instanceEventId,omitempty"`
+	NotBefore         string `json:"notBefore,omitempty"`
+	NotAfter          string `json:"notAfter,omitempty"`
+	NotBeforeDeadline string `json:"notBeforeDeadline,omitempty"`
 }
 
 type Options struct {
@@ -531,6 +549,7 @@ type ec2LaunchTemplateAPI interface {
 
 type ec2InstanceAPI interface {
 	DescribeInstances(context.Context, *ec2.DescribeInstancesInput, ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
+	DescribeInstanceStatus(context.Context, *ec2.DescribeInstanceStatusInput, ...func(*ec2.Options)) (*ec2.DescribeInstanceStatusOutput, error)
 }
 
 type ecsServiceClusterHintKey struct {
@@ -1061,6 +1080,46 @@ func selectedAutoScalingInstance(detail AutoScalingInspection, instanceID string
 	return AutoScalingGroupInstanceSummary{}, false
 }
 
+func enrichAutoScalingInstanceStatusesFromEC2(ctx context.Context, client ec2InstanceAPI, detail AutoScalingInspection, limit int) AutoScalingInspection {
+	if client == nil || len(detail.Instances) == 0 {
+		return detail
+	}
+	instanceIDs := autoScalingInstanceStatusLookupIDs(detail, limit)
+	if len(instanceIDs) == 0 {
+		return detail
+	}
+	statuses, err := describeEC2InstanceStatusDetails(ctx, client, instanceIDs)
+	if err != nil || len(statuses) == 0 {
+		return detail
+	}
+	for idx := range detail.Instances {
+		instanceID := strings.TrimSpace(detail.Instances[idx].InstanceID)
+		status, ok := statuses[instanceID]
+		if ok {
+			detail.Instances[idx].EC2InstanceStatus = status
+		}
+	}
+	return detail
+}
+
+func autoScalingInstanceStatusLookupIDs(detail AutoScalingInspection, limit int) []string {
+	scoped := applyAutoScalingInstanceScope(detail, limit)
+	ids := make([]string, 0, len(scoped.Instances))
+	seen := make(map[string]struct{}, len(scoped.Instances))
+	for _, instance := range scoped.Instances {
+		instanceID := strings.TrimSpace(instance.InstanceID)
+		if instanceID == "" {
+			continue
+		}
+		if _, ok := seen[instanceID]; ok {
+			continue
+		}
+		seen[instanceID] = struct{}{}
+		ids = append(ids, instanceID)
+	}
+	return ids
+}
+
 func enrichSelectedAutoScalingInstanceFromEC2(ctx context.Context, client ec2InstanceAPI, detail AutoScalingInspection, instanceID string) AutoScalingInspection {
 	instanceID = strings.TrimSpace(instanceID)
 	if client == nil || instanceID == "" {
@@ -1070,12 +1129,24 @@ func enrichSelectedAutoScalingInstanceFromEC2(ctx context.Context, client ec2Ins
 		return detail
 	}
 	ec2Detail, err := describeEC2InstanceDetail(ctx, client, instanceID)
-	if err != nil || ec2Detail == nil {
+	if err != nil {
+		ec2Detail = nil
+	}
+	statusDetail, err := describeEC2InstanceStatusDetail(ctx, client, instanceID)
+	if err != nil {
+		statusDetail = nil
+	}
+	if ec2Detail == nil && statusDetail == nil {
 		return detail
 	}
 	for idx := range detail.Instances {
 		if strings.TrimSpace(detail.Instances[idx].InstanceID) == instanceID {
-			detail.Instances[idx].EC2Instance = ec2Detail
+			if ec2Detail != nil {
+				detail.Instances[idx].EC2Instance = ec2Detail
+			}
+			if statusDetail != nil {
+				detail.Instances[idx].EC2InstanceStatus = statusDetail
+			}
 			break
 		}
 	}
@@ -1103,6 +1174,51 @@ func describeEC2InstanceDetail(ctx context.Context, client ec2InstanceAPI, insta
 	return nil, nil
 }
 
+func describeEC2InstanceStatusDetail(ctx context.Context, client ec2InstanceAPI, instanceID string) (*EC2InstanceStatusDetail, error) {
+	instanceID = strings.TrimSpace(instanceID)
+	if client == nil || instanceID == "" {
+		return nil, nil
+	}
+	out, err := client.DescribeInstanceStatus(ctx, &ec2.DescribeInstanceStatusInput{
+		InstanceIds:         []string{instanceID},
+		IncludeAllInstances: aws.Bool(true),
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, status := range out.InstanceStatuses {
+		if strings.TrimSpace(aws.ToString(status.InstanceId)) != instanceID {
+			continue
+		}
+		detail := ec2InstanceStatusDetailFromStatus(status)
+		return &detail, nil
+	}
+	return nil, nil
+}
+
+func describeEC2InstanceStatusDetails(ctx context.Context, client ec2InstanceAPI, instanceIDs []string) (map[string]*EC2InstanceStatusDetail, error) {
+	if client == nil || len(instanceIDs) == 0 {
+		return nil, nil
+	}
+	out, err := client.DescribeInstanceStatus(ctx, &ec2.DescribeInstanceStatusInput{
+		InstanceIds:         append([]string(nil), instanceIDs...),
+		IncludeAllInstances: aws.Bool(true),
+	})
+	if err != nil {
+		return nil, err
+	}
+	statuses := make(map[string]*EC2InstanceStatusDetail, len(out.InstanceStatuses))
+	for _, status := range out.InstanceStatuses {
+		instanceID := strings.TrimSpace(aws.ToString(status.InstanceId))
+		if instanceID == "" {
+			continue
+		}
+		detail := ec2InstanceStatusDetailFromStatus(status)
+		statuses[instanceID] = &detail
+	}
+	return statuses, nil
+}
+
 func ec2InstanceDetailFromInstance(instance ec2types.Instance) EC2InstanceDetail {
 	detail := EC2InstanceDetail{
 		InstanceType:     strings.TrimSpace(string(instance.InstanceType)),
@@ -1115,6 +1231,45 @@ func ec2InstanceDetailFromInstance(instance ec2types.Instance) EC2InstanceDetail
 	}
 	if instance.State != nil {
 		detail.InstanceState = strings.TrimSpace(string(instance.State.Name))
+	}
+	return detail
+}
+
+func ec2InstanceStatusDetailFromStatus(status ec2types.InstanceStatus) EC2InstanceStatusDetail {
+	detail := EC2InstanceStatusDetail{}
+	if status.InstanceState != nil {
+		detail.InstanceState = strings.TrimSpace(string(status.InstanceState.Name))
+	}
+	if status.InstanceStatus != nil {
+		detail.InstanceStatus = strings.TrimSpace(string(status.InstanceStatus.Status))
+	}
+	if status.SystemStatus != nil {
+		detail.SystemStatus = strings.TrimSpace(string(status.SystemStatus.Status))
+	}
+	if status.AttachedEbsStatus != nil {
+		detail.AttachedEBSStatus = strings.TrimSpace(string(status.AttachedEbsStatus.Status))
+	}
+	if len(status.Events) > 0 {
+		events := append([]ec2types.InstanceStatusEvent(nil), status.Events...)
+		sort.SliceStable(events, func(i, j int) bool {
+			left := aws.ToTime(events[i].NotBefore)
+			right := aws.ToTime(events[j].NotBefore)
+			if left.Equal(right) {
+				return aws.ToString(events[i].InstanceEventId) < aws.ToString(events[j].InstanceEventId)
+			}
+			return left.Before(right)
+		})
+		detail.Events = make([]EC2InstanceStatusEvent, 0, len(events))
+		for _, event := range events {
+			detail.Events = append(detail.Events, EC2InstanceStatusEvent{
+				Code:              strings.TrimSpace(string(event.Code)),
+				Description:       strings.TrimSpace(aws.ToString(event.Description)),
+				InstanceEventID:   strings.TrimSpace(aws.ToString(event.InstanceEventId)),
+				NotBefore:         formatTime(aws.ToTime(event.NotBefore)),
+				NotAfter:          formatTime(aws.ToTime(event.NotAfter)),
+				NotBeforeDeadline: formatTime(aws.ToTime(event.NotBeforeDeadline)),
+			})
+		}
 	}
 	return detail
 }
@@ -1844,6 +1999,8 @@ func (s Service) inspectAutoScalingGroupFromAWS(ctx context.Context, req AutoSca
 	}
 	if instanceID := strings.TrimSpace(req.InstanceID); instanceID != "" {
 		inspection = enrichSelectedAutoScalingInstanceFromEC2(ctx, clients.EC2, inspection, instanceID)
+	} else {
+		inspection = enrichAutoScalingInstanceStatusesFromEC2(ctx, clients.EC2, inspection, req.InstanceLimit)
 	}
 	return inspection, nil
 }

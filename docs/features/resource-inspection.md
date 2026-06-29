@@ -220,19 +220,23 @@ network, and container identity evidence discoverable without opening raw JSON.
 
 `candidateAutoScalingGroup` and `serviceAutoScalingGroup` read ASG size, health
 settings, target groups, launch-template metadata, current instances, optional
-scaling activity evidence, and optional EC2 host facts. The `limit` query bounds
-the current-instance sample, and `instanceId` focuses the payload on one current
-ASG member. The operator-facing ASG/EC2 labels include `Launch template`,
+scaling activity evidence, optional EC2 host facts, and optional EC2 instance
+status-check evidence under `instances[].ec2InstanceStatus`. The `limit` query
+bounds the current-instance sample, and `instanceId` focuses the payload on one
+current ASG member. The operator-facing ASG/EC2 labels include `Launch template`,
 `Mixed instances launch template`, `Observed image ID`, `Observed instance type`,
-`Instances`, `Recent scaling activities`, `EC2 state`, `EC2 instance type`, and
-`AMI image ID`, plus bounded activity labels such as `Activity ID`, `Status code`,
-`Progress`, `Cause`, and `Status message`.
+`Instances`, `Recent scaling activities`, `EC2 state`, `EC2 instance type`,
+`AMI image ID`, `EC2 instance status check`, `EC2 system status check`,
+`Attached EBS status check`, and `EC2 scheduled event {n}`, plus bounded
+activity labels such as `Activity ID`, `Status code`, `Progress`, `Cause`, and
+`Status message`.
 
 `userDataBootstrapSource` resolves the backing Auto Scaling Group for a bootstrap
 source resource and compares the desired bootstrap source to the observed launch
 template marker. Selected-instance inspection can include the matched
-`userDataBootstrapSource.selectedInstance` row and nested EC2 details when live
-AWS evidence is available.
+`userDataBootstrapSource.selectedInstance` row, nested EC2 details, and nested
+EC2 instance status-check evidence under `selectedInstance.ec2InstanceStatus`
+when live AWS evidence is available.
 
 Traffic-routing resources return `trafficRoutingResource` payloads. In local or
 no-AWS runs, Tenet may return `inspectionMode=summary_only` from rollout
