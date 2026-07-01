@@ -470,6 +470,111 @@ func TestResourceEvidenceDocsLockOperatorFieldFamilies(t *testing.T) {
 	}
 }
 
+func TestResourceUnavailableSmokeMatrixDocsAndScripts(t *testing.T) {
+	readmeText := readTextFile(t, "../README.md")
+	inspectionText := readTextFile(t, "features/resource-inspection.md")
+	recentLogsText := readTextFile(t, "features/resource-recent-logs.md")
+	overviewText := readTextFile(t, "features/overview-dashboard.md")
+	smokeLocalText := readTextFile(t, "../scripts/smoke-local.sh")
+	smokeDockerText := readTextFile(t, "../scripts/smoke-docker.sh")
+	uiBehaviorText := readTextFile(t, "../internal/api/ui_behavior_test.go")
+
+	for _, fragment := range []string{
+		"compact no-AWS resource-evidence matrix for ECS service/task, ASG/bootstrap, traffic-routing no-log-source, selector validation, successful-empty, and guarded-auth paths",
+		"Local/no-AWS release-guard matrix",
+	} {
+		if !strings.Contains(readmeText+inspectionText+recentLogsText, fragment) {
+			t.Fatalf("expected resource unavailable docs matrix to include %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"ECS service recent logs",
+		"ECS task recent logs",
+		"ASG console logs",
+		"Traffic-routing no-log-source",
+		"Successful-empty provider read",
+		"`available=false`, `unavailableReason=no_log_source`, `entries=[]`, populated `lookupContext`, and `resultScope.truncationStatus=not_applicable`",
+	} {
+		if !strings.Contains(recentLogsText, fragment) {
+			t.Fatalf("expected recent-log unavailable matrix to include %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"representative no-AWS matrix for ECS service/task, ASG and bootstrap-source, traffic-routing, selector-validation, and guarded-auth paths",
+		"The matrix checks machine fields (`available`, `unavailableReason`, `lookupContext`, `resultScope`, `clusterArn`, `instanceId`) together with the embedded UI's friendly Live inspection copy",
+	} {
+		if !strings.Contains(inspectionText, fragment) {
+			t.Fatalf("expected resource-inspection unavailable matrix to include %q", fragment)
+		}
+	}
+
+	matrix := []struct {
+		name      string
+		local     []string
+		docker    []string
+		docs      []string
+		uiHarness []string
+	}{
+		{
+			name:   "ecs service logs selector/result scope",
+			local:  []string{"worker_resource_logs", "selected_worker_resource_logs", "limited_worker_resource_logs", "assert_recent_log_result_window", "resultScope"},
+			docker: []string{"worker_resource_logs", "selected_worker_resource_logs", "limited_worker_resource_logs", "assert_recent_log_result_window", "resultScope"},
+			docs:   []string{"ECS service recent logs", "`ecsService` with optional `clusterArn`"},
+		},
+		{
+			name:   "ecs task logs unavailable selectors",
+			local:  []string{"ecs_task_resource_logs", "containerName", "cross_account_not_configured", "no_log_source"},
+			docker: []string{"ecs_task_resource_logs", "containerName", "cross_account_not_configured", "no_log_source"},
+			docs:   []string{"ECS task recent logs", "`ecsTask` with `containerName` and `clusterArn`"},
+		},
+		{
+			name:   "asg/bootstrap selected instance",
+			local:  []string{"bootstrap_resource_logs", "selected_bootstrap_resource_logs", "invalid_resource_log_instance", "instanceId"},
+			docker: []string{"bootstrap_resource_logs", "selected_bootstrap_resource_logs", "invalid_resource_log_instance", "instanceId"},
+			docs:   []string{"ASG console logs", "selected-instance echo", "malformed `instanceId` rejected with `400`"},
+		},
+		{
+			name:   "traffic routing no log source",
+			local:  []string{"traffic_resource_logs", "production_listener_rule_resource_logs", "active_target_group_resource_logs", "candidate_target_group_resource_logs", "no_log_source"},
+			docker: []string{"traffic_resource_logs", "production_listener_rule_resource_logs", "active_target_group_resource_logs", "candidate_target_group_resource_logs", "no_log_source"},
+			docs:   []string{"Traffic-routing no-log-source", "resultScope.truncationStatus=not_applicable"},
+			uiHarness: []string{"Recent logs are unavailable for this resource.", "This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet."},
+		},
+		{
+			name:   "live inspection unavailable reasons",
+			local:  []string{"worker_resource_inspection", "selected_worker_resource_inspection", "bootstrap_resource_inspection", "selected_bootstrap_resource_inspection", "aws_unavailable"},
+			docker: []string{"worker_resource_inspection", "selected_worker_resource_inspection", "bootstrap_resource_inspection", "selected_bootstrap_resource_inspection", "aws_unavailable"},
+			docs:   []string{"Live inspection copy", "available`, `unavailableReason`, `lookupContext`, `resultScope`, `clusterArn`, `instanceId"},
+			uiHarness: []string{"AWS access is currently unavailable for live inspection.", "No running tasks were found for this ECS service."},
+		},
+	}
+
+	for _, entry := range matrix {
+		for _, fragment := range entry.local {
+			if !strings.Contains(smokeLocalText, fragment) {
+				t.Fatalf("expected smoke-local to cover %s fragment %q", entry.name, fragment)
+			}
+		}
+		for _, fragment := range entry.docker {
+			if !strings.Contains(smokeDockerText, fragment) {
+				t.Fatalf("expected smoke-docker to cover %s fragment %q", entry.name, fragment)
+			}
+		}
+		for _, fragment := range entry.docs {
+			if !strings.Contains(recentLogsText+inspectionText+overviewText, fragment) {
+				t.Fatalf("expected docs to cover %s fragment %q", entry.name, fragment)
+			}
+		}
+		for _, fragment := range entry.uiHarness {
+			if !strings.Contains(uiBehaviorText, fragment) {
+				t.Fatalf("expected UI behavior harness to cover %s fragment %q", entry.name, fragment)
+			}
+		}
+	}
+}
+
 func TestAuthToggleDocsUseReadableBooleanExamples(t *testing.T) {
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
 	for _, fragment := range []string{
