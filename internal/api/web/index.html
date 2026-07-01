@@ -6862,8 +6862,11 @@
       const renderResourceInspectionPayload = (section, detail, resource, result) => {
         const deploymentName = detail?.name || currentPageState.deployment || '';
         const actions = createResourceInspectionActions(section, detail, resource);
+        const selectedLimit = selectedResourceInspectionLimit(deploymentName, resource);
+        const requestRouteFields = resourceInspectionRequestRouteFields(deploymentName, resource, selectedLimit);
         const inspectionFields = [
           ...resourceInspectionRequestIDFields(result),
+          ...requestRouteFields,
           ['Inspection source', metricValue(result?.source)],
           ...resourceInspectionResultScopeFields(result?.resultScope),
         ];

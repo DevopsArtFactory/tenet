@@ -89,9 +89,16 @@ Use the three response shapes below when deciding whether an empty log card is e
 - Supported resource, AWS lookup unavailable: `available=false`, `unavailableReason=aws_unavailable` (or another explicit provider reason) plus populated `lookupContext.region`, `lookupContext.targetAccountId`, `lookupContext.crossAccount`, and `lookupContext.observerRoleConfigured` means the route was valid but the API process could not complete the live lookup. Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating; that pair gives reviewers the exact Tenet request log correlation key plus the attempted region/account/observer-role path. The embedded UI now surfaces that header as `Tenet request ID` metadata in the Recent logs card when the lazy read provides it, including successful unavailable/empty payloads and non-auth fetch errors, so operators can copy the escalation token without opening browser devtools. Operators should check credentials, observer-role reachability, region/account placement, and CloudWatch/ECS/EC2 access rather than changing the bookmarked resource route. The embedded UI maps known reasons to friendly next-step copy for missing cross-account observer-role wiring, missing ECS tasks, missing ASG instances, stale resource selections, and temporary AWS/provider access failures, and it uses generic troubleshooting guidance for unknown provider/internal codes so the operator page does not expose raw machine-code strings.
 - Route-stable resource with no independent stream: `available=false`, `unavailableReason=no_log_source`, `entries=[]`, and `resultScope.truncationStatus=not_applicable` means the resource is a valid drill-down target but Tenet does not have a separate log stream for it yet. These unavailable/no-log-source responses use `returnedCount=0`, compatibility `returnedEntryCount=0`, `truncated=false`, and `truncationStatus=not_applicable`. This is expected today for weighted-target-group traffic-routing resources such as `trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, and `candidateTargetGroup`.
 
+For local development and no-AWS runs, keep the same distinction: an unavailable
+provider lookup is still a successful route envelope with `available=false`,
+`unavailableReason`, `lookupContext`, and not-applicable `resultScope`; a
+successful empty log read stays `available=true`, `entries=[]`, and carries
+`emptyReason` for machines while the embedded UI renders operator-friendly copy
+instead of raw reason codes.
+
 ### Local/no-AWS release-guard matrix
 
-The local and Docker smoke scripts keep a compact no-AWS matrix so route owners can update one checklist when unavailable-state behavior changes:
+The local and Docker smoke scripts keep a compact no-AWS matrix so route owners can update one checklist when unavailable-state behavior changes. The embedded Recent logs card should preserve the exact lazy-read request route, Request-Id metadata, lookup context, bounded-scope fields, and friendly operator copy for each state.
 
 | Route family | Representative resource | Expected local/no-AWS evidence |
 | --- | --- | --- |
@@ -188,6 +195,16 @@ When a bootstrap-source resource has no resolved backing Auto Scaling Group yet,
 `make smoke-local` and `make smoke-docker` now release-guard the selector and successful-empty reason contracts without requiring live EC2 console output. They fetch representative recent-log routes and assert that `available=true` / `entries=[]` payloads carry `emptyReason` (`no_recent_events` or `no_formatted_entries`), populated successful payloads omit `emptyReason`, and unavailable payloads keep using explicit `unavailableReason`. They also fetch the bootstrap-source recent-log route with `instanceId=i-0abc123def4567890`, assert the response echoes that selector plus backing-ASG metadata even when the local environment returns an explicit unavailable payload, keep the unselected bootstrap-source read covered for newest-instance default behavior and optional `entries[].instanceId` evidence, and reject malformed `instanceId` values before provider lookup.
 
 The additive `lookupContext` object is always present, including unavailable responses, so operators can see which region/account path Tenet tried to inspect before AWS troubleshooting continues elsewhere. `resultScope` is also present on the route response: unavailable/no-log-source responses use `limit={effective cap}`, `returned=0`, `total=0`, compatibility `returnedCount=0` / `returnedEntryCount=0`, `truncated=false`, and `truncationStatus=not_applicable`, while available responses use `truncated=true` only when Tenet trimmed provider output, `not_truncated` when the bounded response is below the effective cap, and `unknown` when the response exactly meets the cap and Tenet deliberately avoids extra provider calls to prove whether more rows exist.
+
+## Release guard matrix
+
+Local and no-AWS release guards intentionally cover representative unavailable and successful-empty states instead of requiring live provider credentials. Keep the matrix compact and operator-facing:
+
+- ECS service/task reads prove selector echoes (`clusterArn`, `containerName`), `lookupContext`, `resultScope`, and explicit unavailable reasons such as `aws_unavailable`, `no_running_tasks`, `resource_not_found`, or `no_log_source` without treating them as route failures.
+- Auto Scaling and bootstrap-source reads prove `instanceId` echoes, backing-resource metadata, `lookupContext`, bounded `resultScope`, malformed-selector rejection, and explicit local/no-AWS unavailable payloads.
+- Traffic-routing resources prove valid route-stable `no_log_source` unavailable responses for resources without independent log streams yet.
+- Successful empty responses stay `available=true` with `entries=[]` plus `emptyReason` (`no_recent_events` or `no_formatted_entries`), so the UI can show a calm empty state while scripts still assert machine-readable evidence.
+- The embedded UI release guard checks friendly copy and stable machine fields together: request route, request ID, lookup context, result scope, `unavailableReason`/`emptyReason`, and safe DOM rendering must stay aligned.
 
 ## Embedded UI behavior
 
