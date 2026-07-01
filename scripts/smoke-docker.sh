@@ -2212,6 +2212,7 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
         "section.dataset.resourceDetailSection = 'true';",
         "decorateResourceDetailSection(section, sectionID, label);",
         "href: currentPageSectionURL(sectionID),",
+        "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')",
         "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",
         "createNavLink(buildPageURL('resource', {",
         "selectedResourceScopeText(resource)",

@@ -5265,6 +5265,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Quick navigation')) throw new Error('expected resource page quick navigation strip');
   if (!accountsText.includes('Current resource')) throw new Error('expected resource page current-resource label');
   if (!accountsText.includes('Current section')) throw new Error('expected resource page current-section label');
+  const quickApplicationsLink = pageLinks.find((node) => node.href === '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.textContent === 'Applications overview' && node.target === '_self');
+  if (!quickApplicationsLink || quickApplicationsLink.rel) throw new Error('expected resource page quick navigation applications overview link');
   const quickBackLink = pageLinks.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Back to application' && node.target === '_self');
   if (!quickBackLink || quickBackLink.rel) throw new Error('expected resource page quick navigation back link');
   const driftLink = pageLinks.find((node) => node.href === '/?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Drift view' && node.target === '_self');
