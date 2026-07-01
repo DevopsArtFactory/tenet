@@ -89,6 +89,18 @@ Use the three response shapes below when deciding whether an empty log card is e
 - Supported resource, AWS lookup unavailable: `available=false`, `unavailableReason=aws_unavailable` (or another explicit provider reason) plus populated `lookupContext.region`, `lookupContext.targetAccountId`, `lookupContext.crossAccount`, and `lookupContext.observerRoleConfigured` means the route was valid but the API process could not complete the live lookup. Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating; that pair gives reviewers the exact Tenet request log correlation key plus the attempted region/account/observer-role path. The embedded UI now surfaces that header as `Tenet request ID` metadata in the Recent logs card when the lazy read provides it, including successful unavailable/empty payloads and non-auth fetch errors, so operators can copy the escalation token without opening browser devtools. Operators should check credentials, observer-role reachability, region/account placement, and CloudWatch/ECS/EC2 access rather than changing the bookmarked resource route. The embedded UI maps known reasons to friendly next-step copy for missing cross-account observer-role wiring, missing ECS tasks, missing ASG instances, stale resource selections, and temporary AWS/provider access failures, and it uses generic troubleshooting guidance for unknown provider/internal codes so the operator page does not expose raw machine-code strings.
 - Route-stable resource with no independent stream: `available=false`, `unavailableReason=no_log_source`, `entries=[]`, and `resultScope.truncationStatus=not_applicable` means the resource is a valid drill-down target but Tenet does not have a separate log stream for it yet. These unavailable/no-log-source responses use `returnedCount=0`, compatibility `returnedEntryCount=0`, `truncated=false`, and `truncationStatus=not_applicable`. This is expected today for weighted-target-group traffic-routing resources such as `trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, and `candidateTargetGroup`.
 
+### Local/no-AWS release-guard matrix
+
+The local and Docker smoke scripts keep a compact no-AWS matrix so route owners can update one checklist when unavailable-state behavior changes:
+
+| Route family | Representative resource | Expected local/no-AWS evidence |
+| --- | --- | --- |
+| ECS service recent logs | `ecsService` with optional `clusterArn` | `lookupContext`, selector echo, bounded `resultScope`, and either successful-empty `emptyReason` or explicit `unavailableReason` |
+| ECS task recent logs | `ecsTask` with `containerName` and `clusterArn` | container/cluster selector echoes, bounded `resultScope`, and friendly unavailable copy for `aws_unavailable`, `resource_not_found`, `cross_account_not_configured`, or `no_log_source` |
+| ASG console logs | `candidateAutoScalingGroup` / `userDataBootstrapSource` with optional `instanceId` | selected-instance echo, backing-ASG metadata for bootstrap sources, malformed `instanceId` rejected with `400`, and stale member selections returned as `resource_not_found` |
+| Traffic-routing no-log-source | `trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, `candidateTargetGroup` | `available=false`, `unavailableReason=no_log_source`, `entries=[]`, populated `lookupContext`, and `resultScope.truncationStatus=not_applicable` |
+| Successful-empty provider read | any supported log source with no returned rows | `available=true`, `entries=[]`, `emptyReason=no_recent_events` or `no_formatted_entries`, and no `unavailableReason` |
+
 ## Supported resource types
 
 Current provider-backed resource types:
