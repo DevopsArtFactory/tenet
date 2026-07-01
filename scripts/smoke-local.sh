@@ -2068,6 +2068,7 @@ assert "createElement('div', 'quick-nav-label', 'Current resource')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Current section')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'On this page')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Sibling resources')" in ui, ui
+assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in ui, ui
 assert "createQuickNavChip(resource.name, `Current resource: ${resource.name}`)" in ui, ui
 assert "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)" in ui, ui
 assert "createElement('div', 'quick-nav-empty', 'No section is currently targeted.')" in ui, ui

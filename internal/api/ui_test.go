@@ -684,6 +684,7 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"createElement('div', 'quick-nav-label', 'Current section')",
 		"createElement('div', 'quick-nav-label', 'On this page')",
 		"createElement('div', 'quick-nav-label', 'Sibling resources')",
+		"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')",
 		"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",
 		"createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self')",
 		"createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self')",
