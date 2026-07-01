@@ -10476,10 +10476,15 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		})
 	}
 
-	t.Run("returns 503 when provider is unavailable", func(t *testing.T) {
+	t.Run("returns 503 JSON envelope when provider is unavailable after deployment validation", func(t *testing.T) {
+		deploymentLookupCalled := false
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				deploymentLookupCalled = true
+				if name != "api-prod" {
+					t.Fatalf("expected deployment lookup for api-prod, got %q", name)
+				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
 		})
@@ -10491,8 +10496,34 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		if resp.Code != http.StatusServiceUnavailable {
 			t.Fatalf("expected 503, got %d with body %q", resp.Code, resp.Body.String())
 		}
-		if !strings.Contains(resp.Body.String(), "resource inspection") {
-			t.Fatalf("expected 503 body to mention resource inspection, got %q", resp.Body.String())
+		if !deploymentLookupCalled {
+			t.Fatalf("expected deployment lookup to run before reporting unavailable provider")
+		}
+		if got := resp.Header().Get("Content-Type"); got != "application/json" {
+			t.Fatalf("expected JSON content type, got %q with body %q", got, resp.Body.String())
+		}
+		body := bytes.TrimSpace(resp.Body.Bytes())
+		var got resourceinspection.Result
+		if err := json.Unmarshal(body, &got); err != nil {
+			t.Fatalf("expected resource inspection JSON envelope, got decode error %v with body %q", err, body)
+		}
+		if got.DeploymentName != "api-prod" || got.ResourceType != "ecsService" || got.ResourceName != "payments-api-prod-service" {
+			t.Fatalf("expected request echo fields in envelope, got %+v", got)
+		}
+		if got.Available {
+			t.Fatalf("expected unavailable envelope, got %+v", got)
+		}
+		if got.UnavailableReason != "overview deployment resource inspection unavailable" {
+			t.Fatalf("expected resource inspection unavailable reason, got %+v", got)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(body, &raw); err != nil {
+			t.Fatalf("expected raw resource inspection JSON envelope, got decode error %v with body %q", err, body)
+		}
+		for _, key := range []string{"deploymentName", "resourceType", "resourceName", "lookupContext", "available", "source", "unavailableReason"} {
+			if _, ok := raw[key]; !ok {
+				t.Fatalf("expected provider-unavailable envelope to include %s in %s", key, body)
+			}
 		}
 	})
 
