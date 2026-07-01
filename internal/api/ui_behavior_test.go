@@ -6040,6 +6040,7 @@ async function renderScenario(hash, fetchImpl) {
   await settle();
   const pendingContainerResolvedText = collectText(pendingContainerRun.document.getElementById('accounts')).join(' | ');
   if (!pendingContainerResolvedText.includes('Recent logs request | GET ' + containerLogsURL)) throw new Error('expected unavailable container recent-log state to show the exact request route, got ' + pendingContainerResolvedText);
+  if (!pendingContainerResolvedText.includes('Live inspection request | GET ' + containerInspectionURL)) throw new Error('expected unavailable container live-inspection state to show the exact request route, got ' + pendingContainerResolvedText);
 
   const containerRun = await (async () => {
     const document = createDocument();

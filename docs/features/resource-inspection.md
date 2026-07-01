@@ -97,6 +97,15 @@ read provides it, including successful unavailable payloads and non-auth fetch
 errors, so operators can copy the escalation token without opening browser
 devtools.
 
+For local development and no-AWS runs, treat unavailable live inspection as an
+operator-friendly route envelope rather than a backend failure: the payload keeps
+`available=false`, `unavailableReason`, `lookupContext`, optional selector echoes,
+and any `resultScope` sample metadata for scripts. A successful empty inspection
+read instead stays `available=true` with `source`, `lookupContext`, request
+metadata, and optional `resultScope`, but no typed body such as `ecsService` or
+`autoScalingGroup`; the embedded UI renders this as an empty details state
+without exposing raw unavailable reason codes.
+
 ## Result Scope
 
 `resultScope` is additive metadata for bounded live-inspection samples, not a pagination cursor or provider-wide total guarantee. Tenet reports the sample window
@@ -289,6 +298,16 @@ Bookmarkable selector state stays scoped to the resource page:
 The resource toolbar exposes narrow reset actions where appropriate, such as
 clearing only the selected cluster or only the selected instance while preserving
 resource identity, limits, filters, and the current section hash.
+
+## Release guard matrix
+
+Local and no-AWS release guards intentionally cover representative live-inspection states instead of requiring provider credentials. Keep the matrix compact and tied to the operator page:
+
+- ECS service/task inspections prove selector echoes (`clusterArn`), request-route metadata, `lookupContext`, bounded `resultScope`, friendly unavailable copy, and explicit reasons such as `aws_unavailable`, `no_running_tasks`, `resource_not_found`, or `cross_account_not_configured`.
+- Auto Scaling and bootstrap-source inspections prove `instanceId` echoes, optional backing-resource metadata, bounded sample fields, malformed-selector rejection, and explicit local/no-AWS unavailable payloads.
+- Traffic-routing resources prove the local-friendly summary path (`trafficRoutingResource.inspectionMode=summary_only`) remains useful when AWS live inspection is unavailable.
+- Available-but-empty inspection envelopes keep route, request ID, lookup context, and result-scope metadata visible without inventing raw machine-code details for operators.
+- The embedded UI release guard checks friendly copy and stable machine fields together so Live inspection stays aligned with Recent logs while preserving safe DOM construction.
 
 ## Current Limitations
 

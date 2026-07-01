@@ -56,6 +56,87 @@ func TestEmbeddedUIResourceLazyPanelStatesAreStatusRegions(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIResourceUnavailableAndEmptyStateReleaseGuard(t *testing.T) {
+	script := embeddedUIScriptForTest(t)
+
+	type stateMapping struct {
+		name                 string
+		requiredFragments    []string
+		forbiddenRawFragment string
+	}
+
+	releaseGuardedStates := []stateMapping{
+		{
+			name: "recent logs local or no AWS unavailable state keeps machine fields and friendly copy",
+			requiredFragments: []string{
+				"if (!result?.available) {",
+				"result?.unavailableReason",
+				"resourceLogsRequestIDFields(result)",
+				"resourceLogsRequestRouteFields(deploymentName, resource, selectedLimit)",
+				"resourceLogsResultScopeFields(result?.resultScope)",
+				"createResourceLogsLookupContextGrid(result?.lookupContext",
+				"Recent logs are unavailable for this resource.",
+				"case 'aws_unavailable':",
+				"AWS access is currently unavailable for recent logs. Capture the Tenet request ID and lookup path, then verify credentials, region/account placement, observer-role reachability, and log-source permissions.",
+			},
+		},
+		{
+			name: "recent logs successful empty state keeps emptyReason machine field behind friendly copy",
+			requiredFragments: []string{
+				"if (!entries.length) {",
+				"result?.emptyReason",
+				"resourceLogsResultScopeFields(result?.resultScope)",
+				"createResourceLogsLookupContextGrid(result?.lookupContext",
+				"No recent logs are available for this resource.",
+				"case 'no_recent_events':",
+				"Tenet reached the recent-log provider, but no events were found in the selected bounded window.",
+				"case 'no_formatted_entries':",
+				"Tenet found provider records, but none could be formatted into operator-visible recent-log rows.",
+			},
+			forbiddenRawFragment: "createElement('div', 'detail-condition-meta', result?.emptyReason)",
+		},
+		{
+			name: "live inspection local or no AWS unavailable state keeps machine fields and friendly copy",
+			requiredFragments: []string{
+				"if (!result?.available) {",
+				"result?.unavailableReason",
+				"resourceInspectionRequestIDFields(result)",
+				"resourceInspectionRequestRouteFields(deploymentName, resource, selectedLimit)",
+				"resourceInspectionResultScopeFields(result?.resultScope)",
+				"createLookupContextGrid(result?.lookupContext, inspectionFields)",
+				"Live inspection is unavailable for this resource.",
+				"case 'aws_unavailable':",
+				"AWS access is currently unavailable for live inspection. Capture the Tenet request ID and inspection path, then verify credentials, region/account placement, observer-role reachability, and describe permissions.",
+			},
+		},
+		{
+			name: "live inspection successful empty details state keeps route metadata without raw codes",
+			requiredFragments: []string{
+				"const inspectionFields = [",
+				"resourceInspectionRequestIDFields(result)",
+				"resourceInspectionRequestRouteFields(deploymentName, resource, selectedLimit)",
+				"resourceInspectionResultScopeFields(result?.resultScope)",
+				"createResourceInspectionLookupContextNodes(result?.lookupContext)",
+				"No live inspection details are available for this resource yet.",
+			},
+			forbiddenRawFragment: "unavailableReason || emptyReason",
+		},
+	}
+
+	for _, state := range releaseGuardedStates {
+		t.Run(state.name, func(t *testing.T) {
+			for _, fragment := range state.requiredFragments {
+				if !strings.Contains(script, fragment) {
+					t.Fatalf("expected embedded UI release guard fragment %q", fragment)
+				}
+			}
+			if state.forbiddenRawFragment != "" && strings.Contains(script, state.forbiddenRawFragment) {
+				t.Fatalf("embedded UI should not render raw machine-code fragment %q", state.forbiddenRawFragment)
+			}
+		})
+	}
+}
+
 func TestEmbeddedUIRuntimeEventStatesAreStatusRegions(t *testing.T) {
 	body := string(indexHTML)
 
