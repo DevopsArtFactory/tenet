@@ -2833,10 +2833,6 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "overview deployment unavailable", http.StatusServiceUnavailable)
 				return
 			}
-			if options.OverviewDeploymentResourceInspection == nil {
-				http.Error(w, "overview deployment resource inspection unavailable", http.StatusServiceUnavailable)
-				return
-			}
 			name := strings.TrimSuffix(path, "/resource-inspection")
 			if name == "" || strings.Contains(name, "/") {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
@@ -2858,20 +2854,37 @@ func NewRouter(options Options) http.Handler {
 				}
 			}
 			ctx := r.Context()
-			if instanceID := strings.TrimSpace(r.URL.Query().Get("instanceId")); instanceID != "" {
+			instanceID := strings.TrimSpace(r.URL.Query().Get("instanceId"))
+			if instanceID != "" {
 				if !validEC2InstanceID(instanceID) {
 					http.Error(w, "invalid instanceId query", http.StatusBadRequest)
 					return
 				}
 				ctx = resourceinspection.ContextWithInstanceID(ctx, instanceID)
 			}
-			if clusterARN, ok := parseOptionalECSClusterARN(w, r); !ok {
+			clusterARN, ok := parseOptionalECSClusterARN(w, r)
+			if !ok {
 				return
-			} else if (resourceType == "ecsService" || resourceType == "ecsTask") && clusterARN != "" {
+			}
+			if (resourceType == "ecsService" || resourceType == "ecsTask") && clusterARN != "" {
 				ctx = resourceinspection.ContextWithClusterARN(ctx, clusterARN)
 			}
 			if _, err := options.OverviewDeployment(r.Context(), name); err != nil {
 				respondReadLookupError(w, err, "overview deployment unavailable")
+				return
+			}
+			if options.OverviewDeploymentResourceInspection == nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_ = json.NewEncoder(w).Encode(resourceinspection.Result{
+					DeploymentName:    name,
+					ResourceType:      resourceType,
+					ResourceName:      resourceName,
+					InstanceID:        instanceID,
+					ClusterARN:        clusterARN,
+					Available:         false,
+					UnavailableReason: "overview deployment resource inspection unavailable",
+				})
 				return
 			}
 			result, err := options.OverviewDeploymentResourceInspection(ctx, name, resourceType, resourceName, resourceLimit)

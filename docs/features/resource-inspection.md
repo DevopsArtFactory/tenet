@@ -76,18 +76,23 @@ Common response fields:
 - optional `resultScope`
 - `unavailableReason` on unavailable responses
 
-Unavailable responses keep the selected route explicit with `available=false`, `unavailableReason`, `lookupContext`, and any accepted selector echo such as `clusterArn` or `instanceId`. This makes local/no-AWS, cross-account, stale-resource,
+Unavailable responses keep the selected route explicit with `available=false`, `unavailableReason`, `lookupContext`, and any accepted selector echo such as `clusterArn` or `instanceId`. This makes local/no-AWS, missing-provider, cross-account, stale-resource,
 and unsupported-resource states useful evidence instead of vague provider
-failures.
+failures. If the API instance was started without resource-inspection provider
+wiring, Tenet still validates the deployment/resource selectors first, preserves
+`503 Service Unavailable`, and returns the same JSON envelope with
+`unavailableReason="overview deployment resource inspection unavailable"` instead
+of a plain-text body.
 
 Known unavailable reasons include:
 - `cross_account_not_configured`
 - `resource_not_found`
 - `aws_unavailable`
+- `overview deployment resource inspection unavailable`
 - `unsupported_resource_type`
 - `no_log_source`
 
-For operator triage, `cross_account_not_configured` means the target deployment needs observer-role wiring before Tenet can inspect the selected resource. `resource_not_found` means the selected AWS resource, task, instance, or rollout target was not found in the resolved lookup path. `aws_unavailable` means Tenet could not complete the provider lookup because credentials, permissions, region/account placement, or the AWS API were unavailable. `unsupported_resource_type` means the route is stable but Tenet has not implemented live inspection for that resource family yet. `no_log_source` means the resource is valid, but inspection can only use summary or sibling evidence rather than a dedicated live provider read.
+For operator triage, `cross_account_not_configured` means the target deployment needs observer-role wiring before Tenet can inspect the selected resource. `resource_not_found` means the selected AWS resource, task, instance, or rollout target was not found in the resolved lookup path. `aws_unavailable` means Tenet could not complete the provider lookup because credentials, permissions, region/account placement, or the AWS API were unavailable. `overview deployment resource inspection unavailable` means the API route is active but this process was launched without the resource-inspection provider wired. `unsupported_resource_type` means the route is stable but Tenet has not implemented live inspection for that resource family yet. `no_log_source` means the resource is valid, but inspection can only use summary or sibling evidence rather than a dedicated live provider read.
 
 ### Local/no-AWS release-guard matrix
 
