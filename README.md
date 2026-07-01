@@ -202,7 +202,10 @@ fields, operator labels, and smoke-test expectations; use
 Local/no-AWS unavailable payloads and successful empty reads stay distinct:
 operators see friendly next-step copy while scripts keep stable fields such as
 `available`, `unavailableReason`, `emptyReason`, `lookupContext`, and
-`resultScope`.
+`resultScope`. The local and Docker smoke scripts keep a compact no-AWS resource-evidence matrix for ECS service/task, ASG/bootstrap, traffic-routing no-log-source, selector validation, successful-empty, and guarded-auth paths.
+The embedded UI release guard keeps lazy Recent logs and Live inspection panels
+aligned so request routes, request IDs, lookup context, and bounded-scope metadata
+stay visible even when AWS evidence is unavailable.
 Use `Share ECS service event` from a Live inspection event row to hand off one ECS service event without changing the resource-page selector state.
 In the embedded resource page, log and inspection caps stay bookmarkable as `resourceLogLimit=` and `resourceInspectionLimit=` UI state; positive caps are sent only to the matching lazy `resource-logs` or `resource-inspection` read as backend `limit=` query parameters.
 Recent logs and Live inspection lazy-panel state messages such as loading, empty, unavailable, and non-auth fetch failures are polite atomic status regions, so assistive technology announces focused panel state changes without making the full evidence payload live.

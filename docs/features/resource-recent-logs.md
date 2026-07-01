@@ -96,6 +96,18 @@ successful empty log read stays `available=true`, `entries=[]`, and carries
 `emptyReason` for machines while the embedded UI renders operator-friendly copy
 instead of raw reason codes.
 
+### Local/no-AWS release-guard matrix
+
+The local and Docker smoke scripts keep a compact no-AWS matrix so route owners can update one checklist when unavailable-state behavior changes. The embedded Recent logs card should preserve the exact lazy-read request route, Request-Id metadata, lookup context, bounded-scope fields, and friendly operator copy for each state.
+
+| Route family | Representative resource | Expected local/no-AWS evidence |
+| --- | --- | --- |
+| ECS service recent logs | `ecsService` with optional `clusterArn` | `lookupContext`, selector echo, bounded `resultScope`, and either successful-empty `emptyReason` or explicit `unavailableReason` |
+| ECS task recent logs | `ecsTask` with `containerName` and `clusterArn` | container/cluster selector echoes, bounded `resultScope`, and friendly unavailable copy for `aws_unavailable`, `resource_not_found`, `cross_account_not_configured`, or `no_log_source` |
+| ASG console logs | `candidateAutoScalingGroup` / `userDataBootstrapSource` with optional `instanceId` | selected-instance echo, backing-ASG metadata for bootstrap sources, malformed `instanceId` rejected with `400`, and stale member selections returned as `resource_not_found` |
+| Traffic-routing no-log-source | `trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, `candidateTargetGroup` | `available=false`, `unavailableReason=no_log_source`, `entries=[]`, populated `lookupContext`, and `resultScope.truncationStatus=not_applicable` |
+| Successful-empty provider read | any supported log source with no returned rows | `available=true`, `entries=[]`, `emptyReason=no_recent_events` or `no_formatted_entries`, and no `unavailableReason` |
+
 ## Supported resource types
 
 Current provider-backed resource types:
