@@ -11051,6 +11051,196 @@ func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
 		}
 	})
 
+	t.Run("repository policy authorization allows scoped create without role or deployment headers", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TrustAuthenticatedHeaders:          true,
+			RequireOperatorRoleForWrite:        true,
+			RequireDeploymentReadAuthorization: true,
+			AuthorizeWithRepositoryPolicy:      true,
+			RepositoryPolicy: func(_ context.Context, identity requestactor.AuthenticatedIdentity, groups requestactor.AuthenticatedGroups) (rbacpolicy.Evaluation, error) {
+				if !identity.Authenticated || identity.ID != "front-door-123" {
+					t.Fatalf("expected authenticated identity to reach repository policy evaluation, got %+v", identity)
+				}
+				if !reflect.DeepEqual(groups.Names, []string{"platform-admins"}) {
+					t.Fatalf("expected forwarded groups to reach repository policy evaluation, got %+v", groups.Names)
+				}
+				return rbacpolicy.Evaluate(rbacpolicy.Policy{
+					Version: rbacpolicy.VersionV1,
+					Groups: []rbacpolicy.GroupGrant{{
+						Name:        "platform-admins",
+						Roles:       []string{requestactor.RoleOperator},
+						Deployments: []string{"api-prod"},
+					}},
+				}, identity, groups)
+			},
+			CreateDeploymentPlanPreview: func(_ context.Context, deploymentName string, req planpreview.CreateRequest) (planpreview.CreateResult, error) {
+				providerCalls++
+				if deploymentName != "api-prod" {
+					t.Fatalf("unexpected deployment name %q", deploymentName)
+				}
+				return planpreview.CreateResult{Created: true, Record: planpreview.Record{ID: "plan_1234abcd", DeploymentName: deploymentName, Status: planpreview.StatusReady, CreatedAt: "2026-04-17T08:00:00Z", Source: planpreview.SourceContext{DeploymentName: deploymentName, Fingerprint: req.IfMatch}}}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{"ifMatch":"plan_input"}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		req.Header.Set(requestactor.AuthenticatedGroupsHeader, "platform-admins")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if providerCalls != 1 {
+			t.Fatalf("expected create provider to run once, got %d calls", providerCalls)
+		}
+	})
+
+	t.Run("repository policy remains diagnostic only until authorization mode is enabled", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TrustAuthenticatedHeaders:          true,
+			RequireOperatorRoleForWrite:        true,
+			RequireDeploymentReadAuthorization: true,
+			RepositoryPolicy: func(_ context.Context, identity requestactor.AuthenticatedIdentity, groups requestactor.AuthenticatedGroups) (rbacpolicy.Evaluation, error) {
+				return rbacpolicy.Evaluate(rbacpolicy.Policy{
+					Version: rbacpolicy.VersionV1,
+					Groups: []rbacpolicy.GroupGrant{{
+						Name:        "platform-admins",
+						Roles:       []string{requestactor.RoleOperator},
+						Deployments: []string{"api-prod"},
+					}},
+				}, identity, groups)
+			},
+			CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {
+				providerCalls++
+				t.Fatal("create provider should not run when trusted role headers are still authoritative")
+				return planpreview.CreateResult{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{"ifMatch":"plan_input"}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		req.Header.Set(requestactor.AuthenticatedGroupsHeader, "platform-admins")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusForbidden {
+			t.Fatalf("expected 403 from trusted-header role enforcement, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if providerCalls != 0 {
+			t.Fatalf("expected role guard to short-circuit before create provider, got %d calls", providerCalls)
+		}
+	})
+
+	t.Run("repository policy authorization denies scoped create without a matching grant", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TrustAuthenticatedHeaders:          true,
+			RequireOperatorRoleForWrite:        true,
+			RequireDeploymentReadAuthorization: true,
+			AuthorizeWithRepositoryPolicy:      true,
+			RepositoryPolicy: func(_ context.Context, identity requestactor.AuthenticatedIdentity, groups requestactor.AuthenticatedGroups) (rbacpolicy.Evaluation, error) {
+				return rbacpolicy.Evaluate(rbacpolicy.Policy{
+					Version: rbacpolicy.VersionV1,
+					Groups: []rbacpolicy.GroupGrant{{
+						Name:        "other-team",
+						Roles:       []string{requestactor.RoleOperator},
+						Deployments: []string{"api-prod"},
+					}},
+				}, identity, groups)
+			},
+			CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {
+				providerCalls++
+				t.Fatal("create provider should not run without a matching repository policy grant")
+				return planpreview.CreateResult{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{"ifMatch":"plan_input"}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedGroupsHeader, "platform-admins")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusForbidden {
+			t.Fatalf("expected 403 from repository policy authorization, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if providerCalls != 0 {
+			t.Fatalf("expected role guard to short-circuit before create provider, got %d calls", providerCalls)
+		}
+	})
+
+	t.Run("repository policy authorization still requires authenticated identity", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TrustAuthenticatedHeaders:          true,
+			RequireOperatorRoleForWrite:        true,
+			RequireDeploymentReadAuthorization: true,
+			AuthorizeWithRepositoryPolicy:      true,
+			RepositoryPolicy: func(_ context.Context, identity requestactor.AuthenticatedIdentity, groups requestactor.AuthenticatedGroups) (rbacpolicy.Evaluation, error) {
+				return rbacpolicy.Evaluate(rbacpolicy.Policy{Version: rbacpolicy.VersionV1}, identity, groups)
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{"ifMatch":"plan_input"}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401 from missing trusted identity, got %d with body %q", resp.Code, resp.Body.String())
+		}
+	})
+
+	t.Run("repository policy authorization allows scoped read from a direct user grant", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TrustAuthenticatedHeaders:          true,
+			RequireOperatorRoleForRead:         true,
+			RequireDeploymentReadAuthorization: true,
+			AuthorizeWithRepositoryPolicy:      true,
+			RepositoryPolicy: func(_ context.Context, identity requestactor.AuthenticatedIdentity, groups requestactor.AuthenticatedGroups) (rbacpolicy.Evaluation, error) {
+				return rbacpolicy.Evaluate(rbacpolicy.Policy{
+					Version: rbacpolicy.VersionV1,
+					Users: []rbacpolicy.Subject{{
+						Email:       "operator@example.com",
+						Roles:       []string{requestactor.RoleViewer},
+						Deployments: []string{"api-prod"},
+					}},
+				}, identity, groups)
+			},
+			OverviewDeployment: func(_ context.Context, deploymentName string) (catalog.DeploymentOverviewDetail, error) {
+				providerCalls++
+				if deploymentName != "api-prod" {
+					t.Fatalf("unexpected deployment name %q", deploymentName)
+				}
+				return catalog.DeploymentOverviewDetail{Name: deploymentName}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod", nil)
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "operator@example.com")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if providerCalls != 1 {
+			t.Fatalf("expected overview provider to run once, got %d calls", providerCalls)
+		}
+	})
+
 	t.Run("project environment authorization allows scoped create", func(t *testing.T) {
 		providerCalls := 0
 		router := NewRouter(Options{
