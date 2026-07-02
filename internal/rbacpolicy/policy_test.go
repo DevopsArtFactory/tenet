@@ -19,6 +19,9 @@ func TestEvaluateCombinesUserAndGroupGrants(t *testing.T) {
 	if !got.Available || !got.Configured || got.Source != SourceRepository || !got.CanRead || !got.CanWrite {
 		t.Fatalf("unexpected evaluation flags: %+v", got)
 	}
+	if want := "repository RBAC policy matched 2 subject grant(s): roles=2 deployments=1 projects=1 environments=1"; got.Summary != want {
+		t.Fatalf("summary = %q, want %q", got.Summary, want)
+	}
 	if gotRoles, want := got.Roles.Names, []string{"viewer", "operator"}; !reflect.DeepEqual(gotRoles, want) {
 		t.Fatalf("roles = %v, want %v", gotRoles, want)
 	}
@@ -41,6 +44,9 @@ func TestEvaluateReportsNoPolicyOrUnauthenticatedIdentity(t *testing.T) {
 	if missing.Configured || missing.Available || missing.UnavailableReason == "" {
 		t.Fatalf("expected not-configured diagnostic, got %+v", missing)
 	}
+	if want := "no repository RBAC policy is configured"; missing.Summary != want {
+		t.Fatalf("missing policy summary = %q, want %q", missing.Summary, want)
+	}
 
 	policy := Policy{Version: VersionV1, Users: []Subject{{Email: "ops@example.com", Roles: []string{"admin"}}}}
 	got, err := Evaluate(policy, requestactor.AuthenticatedIdentity{}, requestactor.AuthenticatedGroups{})
@@ -49,6 +55,17 @@ func TestEvaluateReportsNoPolicyOrUnauthenticatedIdentity(t *testing.T) {
 	}
 	if !got.Configured || !got.Available || got.CanRead || got.CanWrite || got.UnavailableReason == "" {
 		t.Fatalf("expected unauthenticated diagnostic, got %+v", got)
+	}
+	if want := "repository RBAC policy is loaded but no authenticated identity was available to evaluate"; got.Summary != want {
+		t.Fatalf("unauthenticated summary = %q, want %q", got.Summary, want)
+	}
+
+	noGrant, err := Evaluate(policy, requestactor.AuthenticatedIdentity{Authenticated: true, Email: "other@example.com"}, requestactor.AuthenticatedGroups{})
+	if err != nil {
+		t.Fatalf("no-grant Evaluate() error = %v", err)
+	}
+	if want := "repository RBAC policy matched no user or group grants for this authenticated identity"; noGrant.Summary != want {
+		t.Fatalf("no-grant summary = %q, want %q", noGrant.Summary, want)
 	}
 }
 
