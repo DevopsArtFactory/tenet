@@ -5158,6 +5158,8 @@
             return 'The selected resource could not be found in the provider. Refresh resource detail to confirm the deployment still points at this resource, then retry Recent logs.';
           case 'aws_unavailable':
             return 'AWS access is currently unavailable for recent logs. Capture the Tenet request ID and lookup path, then verify credentials, region/account placement, observer-role reachability, and log-source permissions.';
+          case 'overview deployment resource logs unavailable':
+            return 'Recent logs are temporarily unavailable because this API instance is not wired to a recent-log provider. Ask the platform owner to enable the provider, then retry Recent logs.';
           default:
             return reason ? 'Tenet returned an unavailable recent-log state. Use the lookup context above to continue provider troubleshooting.' : '';
         }
@@ -7012,6 +7014,15 @@
         if (!requestId || !value || typeof value !== 'object' || Array.isArray(value)) return value;
         return { ...value, tenetRequestId: requestId };
       };
+      const responseJSONUnavailableEnvelope = (response, requestId) => {
+        if (response?.status !== 503 || typeof response?.json !== 'function') return Promise.resolve(null);
+        return response.json()
+          .then((value) => {
+            if (!value || typeof value !== 'object' || Array.isArray(value) || value.available !== false) return null;
+            return attachResponseRequestID(value, requestId);
+          })
+          .catch(() => null);
+      };
       const fetchResourcePanelJSON = (route, failureLabel) => Promise.resolve()
         .then(() => fetch(route))
         .then((response) => {
@@ -7021,6 +7032,14 @@
           if (response.status === 401 || response.status === 403) {
             return responseErrorMessage(response, fallback).then((message) => {
               throw requestError('fetch-error', message, response.status, requestId);
+            });
+          }
+          if (response.status === 503) {
+            return responseJSONUnavailableEnvelope(response, requestId).then((value) => {
+              if (value) return value;
+              const error = new Error(fallback);
+              error.requestId = requestId;
+              throw error;
             });
           }
           const error = new Error(fallback);

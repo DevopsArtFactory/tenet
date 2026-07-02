@@ -6487,6 +6487,18 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   if (!formattedEmptyText.includes('Tenet found provider records, but none could be formatted into operator-visible recent-log rows.')) throw new Error('expected formatted-empty recent logs state to explain no_formatted_entries, got ' + formattedEmptyText);
   if (formattedEmptyText.includes('no_formatted_entries')) throw new Error('expected formatted-empty recent logs state not to expose raw emptyReason code');
 
+  const missingProviderRun = await renderWithFetch((url) => {
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return Promise.resolve({ ok: false, status: 503, headers: { get: (name) => String(name).toLowerCase() === 'request-id' ? 'req-missing-resource-logs-provider' : '' }, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', resourceType: 'codeDeployDeploymentGroup', resourceName: 'payments-api-staging Deployment Group', available: false, source: '', unavailableReason: 'overview deployment resource logs unavailable', entries: [] }) });
+    throw new Error('unexpected missing-provider fetch url: ' + url);
+  });
+  await settle();
+  const missingProviderText = collectText(missingProviderRun.document.getElementById('accounts')).join(' | ');
+  if (!missingProviderText.includes('Recent logs are unavailable for this resource.')) throw new Error('expected missing-provider 503 JSON to render unavailable recent logs state, got ' + missingProviderText);
+  if (!missingProviderText.includes('Recent logs are temporarily unavailable because this API instance is not wired to a recent-log provider. Ask the platform owner to enable the provider, then retry Recent logs.')) throw new Error('expected missing-provider 503 JSON to keep friendly recent-log provider guidance, got ' + missingProviderText);
+  if (!missingProviderText.includes('Tenet request ID | req-missing-resource-logs-provider')) throw new Error('expected missing-provider 503 JSON to retain request ID metadata, got ' + missingProviderText);
+  if (missingProviderText.includes('Failed to load recent logs:')) throw new Error('expected missing-provider 503 JSON not to render generic fetch failure, got ' + missingProviderText);
+
   const failedStatusRun = await renderWithFetch((url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === logsURL) return Promise.resolve({ ok: false, status: 503, json: () => Promise.resolve({}) });
