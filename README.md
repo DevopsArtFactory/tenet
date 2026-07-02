@@ -253,8 +253,12 @@ sources may additionally opt into repository-backed RBAC grants with
 existing guarded read/write routes keep the same identity requirements but use
 `rbac/policy.json`, `rbac/policy.yaml`, or `rbac/policy.yml` grants evaluated
 against trusted identity plus `X-Tenet-Authenticated-Groups` instead of trusted
-role/deployment grant headers. Leave it unset to preserve the default
-trusted-header authorization path. Keep credential-bearing
+role/deployment grant headers. The embedded Operator context banner adds a
+policy-mode cue in that mode: compact source/availability status stays above the
+toolbar, while expanded details show matched user/group grants and derived
+roles, deployment grants, and project/environment scopes for denied-read
+troubleshooting. Leave it unset to preserve the default trusted-header
+authorization path. Keep credential-bearing
 settings such as tokens redacted.
 
 ## Validation
