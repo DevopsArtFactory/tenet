@@ -2760,10 +2760,6 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "overview deployment unavailable", http.StatusServiceUnavailable)
 				return
 			}
-			if options.OverviewDeploymentResourceLogs == nil {
-				http.Error(w, "overview deployment resource logs unavailable", http.StatusServiceUnavailable)
-				return
-			}
 			name := strings.TrimSuffix(path, "/resource-logs")
 			if name == "" || strings.Contains(name, "/") {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
@@ -2804,6 +2800,22 @@ func NewRouter(options Options) http.Handler {
 			}
 			if _, err := options.OverviewDeployment(r.Context(), name); err != nil {
 				respondReadLookupError(w, err, "overview deployment unavailable")
+				return
+			}
+			if options.OverviewDeploymentResourceLogs == nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_ = json.NewEncoder(w).Encode(resourcelogs.Result{
+					DeploymentName:    name,
+					ResourceType:      resourceType,
+					ResourceName:      resourceName,
+					ContainerName:     containerName,
+					InstanceID:        instanceID,
+					ClusterARN:        clusterARN,
+					Available:         false,
+					Entries:           []resourcelogs.Entry{},
+					UnavailableReason: "overview deployment resource logs unavailable",
+				})
 				return
 			}
 			result, err := options.OverviewDeploymentResourceLogs(ctx, name, resourceType, resourceName, resourceLimit)

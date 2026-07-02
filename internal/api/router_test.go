@@ -7230,6 +7230,59 @@ func TestRouterOverviewDeploymentRejectsInvalidNames(t *testing.T) {
 }
 
 func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
+	t.Run("returns JSON unavailable envelope when resource logs provider is missing", func(t *testing.T) {
+		var overviewCalls int
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				overviewCalls++
+				if name != "worker-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker-prod%2Fabc123&containerName=worker&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if contentType := resp.Header().Get("Content-Type"); contentType != "application/json" {
+			t.Fatalf("expected JSON content type, got %q", contentType)
+		}
+		if overviewCalls != 1 {
+			t.Fatalf("expected deployment lookup before missing provider envelope, got %d calls", overviewCalls)
+		}
+
+		var got resourcelogs.Result
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode missing provider resource logs payload: %v; body=%q", err, resp.Body.String())
+		}
+		if got.DeploymentName != "worker-prod" || got.ResourceType != "ecsTask" || got.ResourceName != "arn:aws:ecs:ap-northeast-2:123456789012:task/worker-prod/abc123" {
+			t.Fatalf("expected missing provider payload to echo selected resource identifiers, got %+v", got)
+		}
+		if got.ContainerName != "worker" || got.InstanceID != "i-0abc123def4567890" || got.ClusterARN != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker-prod" {
+			t.Fatalf("expected missing provider payload to echo accepted selectors, got %+v", got)
+		}
+		if got.Available || got.UnavailableReason != "overview deployment resource logs unavailable" {
+			t.Fatalf("expected unavailable missing provider envelope, got %+v", got)
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("decode raw missing provider resource logs payload: %v", err)
+		}
+		for _, key := range []string{"deploymentName", "resourceType", "resourceName", "containerName", "instanceId", "clusterArn", "available", "unavailableReason"} {
+			if _, ok := raw[key]; !ok {
+				t.Fatalf("expected raw missing provider payload to include %s, got %#v", key, raw)
+			}
+		}
+	})
+
 	t.Run("enforces deployment read authorization and preserves unavailable payload when authorized", func(t *testing.T) {
 		const (
 			path                 = "/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service"
