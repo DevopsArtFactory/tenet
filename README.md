@@ -237,7 +237,12 @@ Deployment runtime events are read from the controller-retained history window, 
 Trusted front-door auth is additive and opt-in. Only enable the auth/RBAC
 environment toggles when every request reaches Tenet through a front door that
 authenticates the caller and strips spoofable trusted headers before forwarding
-trusted values.
+trusted values. The auth/RBAC toggles are boolean, non-secret settings, so use
+operator-readable examples such as `TENET_API_TRUST_AUTHENTICATED_HEADERS=true`,
+`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`,
+`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true`, and
+`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`; keep credential-bearing
+settings such as tokens redacted.
 
 ## Validation
 

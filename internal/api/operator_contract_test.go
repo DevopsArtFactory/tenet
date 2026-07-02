@@ -106,6 +106,7 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 	docPaths := []string{
 		"README.md",
 		"docs/architecture/tenet-v1-local-runtime.md",
+		"docs/architecture/tenet-v1-operator-contracts.md",
 		"docs/architecture/tenet-v1-audit-log-api.md",
 		"docs/architecture/tenet-v1-deployment-status-api.md",
 		"docs/architecture/tenet-v1-overview-ui.md",
