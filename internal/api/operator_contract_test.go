@@ -34,6 +34,15 @@ func redactedAuthProviderPlaceholder() string {
 	return "TENET_AUTH_PROVIDER=" + strings.Repeat("*", 3)
 }
 
+func concreteAuthProviderModeExamples() []string {
+	return []string{
+		"`TENET_AUTH_PROVIDER=github`",
+		"`TENET_AUTH_PROVIDER=google_oidc`",
+		"`TENET_AUTH_PROVIDER=okta_oidc`",
+		"`TENET_AUTH_PROVIDER=okta_saml`",
+	}
+}
+
 func TestReadmeStaysProductOverview(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	lineCount := strings.Count(readme, "\n")
@@ -224,23 +233,31 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	redactedProviderSetting := redactedAuthProviderPlaceholder()
 	for _, source := range []struct {
-		name string
-		body string
+		name     string
+		body     string
+		examples []string
 	}{
-		{name: "docs/architecture/tenet-v1-operator-contracts.md", body: operatorContractsDoc},
-		{name: "docs/architecture/tenet-v1-enterprise-sso.md", body: readRepoFile(t, "docs/architecture/tenet-v1-enterprise-sso.md")},
+		{name: "README.md", body: readRepoFile(t, "README.md"), examples: concreteAuthProviderModeExamples()},
+		{name: "docs/architecture/tenet-v1-operator-contracts.md", body: operatorContractsDoc, examples: concreteAuthProviderModeExamples()},
+		{name: "docs/architecture/tenet-v1-enterprise-sso.md", body: readRepoFile(t, "docs/architecture/tenet-v1-enterprise-sso.md"), examples: concreteAuthProviderModeExamples()},
+		{name: "docs/features/managed-login.md", body: readRepoFile(t, "docs/features/managed-login.md"), examples: concreteAuthProviderModeExamples()},
+		{name: "scripts/smoke-local.sh", body: readRepoFile(t, "scripts/smoke-local.sh"), examples: []string{
+			"TENET_AUTH_PROVIDER=google_oidc",
+			"TENET_AUTH_PROVIDER=okta_oidc",
+			"TENET_AUTH_PROVIDER=okta_saml",
+		}},
+		{name: "scripts/smoke-docker.sh", body: readRepoFile(t, "scripts/smoke-docker.sh"), examples: []string{
+			"TENET_AUTH_PROVIDER=google_oidc",
+			"TENET_AUTH_PROVIDER=okta_oidc",
+			"TENET_AUTH_PROVIDER=okta_saml",
+		}},
 	} {
 		if strings.Contains(source.body, redactedProviderSetting) {
 			t.Fatalf("expected %s to use concrete non-secret auth provider examples instead of placeholder %q", source.name, redactedProviderSetting)
 		}
-		for _, providerExample := range []string{
-			"`TENET_AUTH_PROVIDER=github`",
-			"`TENET_AUTH_PROVIDER=google_oidc`",
-			"`TENET_AUTH_PROVIDER=okta_oidc`",
-			"`TENET_AUTH_PROVIDER=okta_saml`",
-		} {
+		for _, providerExample := range source.examples {
 			if !strings.Contains(source.body, providerExample) {
-				t.Fatalf("expected %s enterprise SSO docs to include concrete provider example %q", source.name, providerExample)
+				t.Fatalf("expected %s to include concrete provider example %q", source.name, providerExample)
 			}
 		}
 	}

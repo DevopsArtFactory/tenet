@@ -151,6 +151,12 @@ TENET_AWS_ENABLE_APPLY=true make docker-up
 That mode exercises the queued apply handoff locally; live AWS mutation is still
 not implemented for this backend slice.
 
+Optional managed-login provider modes are non-secret values: use
+`TENET_AUTH_PROVIDER=github`, `TENET_AUTH_PROVIDER=google_oidc`,
+`TENET_AUTH_PROVIDER=okta_oidc`, or diagnostic-only
+`TENET_AUTH_PROVIDER=okta_saml`. Keep credential-bearing settings such as OAuth
+client secrets, SAML private material, session secrets, and tokens redacted.
+
 ## Operator UI Entry Points
 
 Start at `/` for the applications overview. The overview keeps the first page
