@@ -447,6 +447,7 @@ func TestResourceEvidenceDocsLockOperatorFieldFamilies(t *testing.T) {
 		"optional `instanceId` when an Auto Scaling Group-backed EC2 console-log request supplied an instance selector",
 		"Supported resource, AWS lookup unavailable: `available=false`, `unavailableReason=aws_unavailable`",
 		"Route-stable resource with no independent stream: `available=false`, `unavailableReason=no_log_source`",
+		"Missing provider wiring: `available=false`, `entries=[]`, `unavailableReason=\"overview deployment resource logs unavailable\"`",
 		"empty: `No recent logs are available for this resource.`",
 		"unavailable: `Recent logs are unavailable for this resource.`",
 		"The additive `lookupContext` object is always present, including unavailable responses",
