@@ -195,6 +195,29 @@ const collectLinks = (node) => {
 };
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 
+const policyOperatorContext = {
+  trustedHeaders: { enabled: true },
+  enforcement: { mode: 'repository_policy_authorization' },
+  identity: { authenticated: true, name: 'Policy Operator' },
+  roles: { canRead: true, canWrite: false },
+  deploymentAccess: { enforced: true, forwarded: false },
+  repositoryPolicy: {
+    configured: true,
+    available: true,
+    source: 'repository',
+    version: 'v1',
+    diagnosticOnly: false,
+    supportedGroupHeaderNames: ['X-Tenet-Authenticated-Groups'],
+    matchedUsers: [{ kind: 'user', name: 'operator-123', match: 'id' }],
+    matchedGroups: [{ kind: 'group', name: 'platform-admins', match: 'name' }],
+    roles: { names: ['viewer'] },
+    deploymentAccess: { names: ['payments-api-prod'] },
+    projectEnvironmentScopes: { projects: ['payments'], environments: ['prod'] },
+    canRead: true,
+    canWrite: false,
+    summary: 'repository RBAC policy matched 2 subject grant(s): roles=1 deployments=1 projects=1 environments=1',
+  },
+};
 const scenarios = [
   {
     name: 'applications overview 401 explains trusted front door retry',
@@ -336,6 +359,22 @@ const scenarios = [
     unexpected: 'Failed to load overview:',
   },
   {
+    name: 'application 403 in repository policy mode points at policy grants and preserves bookmark hash',
+    search: '?page=application&deployment=api-prod&q=payments',
+    hash: '#application-runtime-events',
+    route: '/v1/overview/applications/api-prod',
+    status: 403,
+    body: 'forbidden: operator does not have access to this deployment',
+    operatorContext: policyOperatorContext,
+    expected: [
+      'Application detail',
+      'Operator access denied',
+      'Tenet rejected GET /v1/overview/applications/api-prod after recognizing the caller\'s identity, but this operator is not authorized by the repository RBAC policy for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare repositoryPolicy.summary, matchedUsers, matchedGroups, repositoryPolicy.roles, repositoryPolicy.deploymentAccess, repositoryPolicy.projectEnvironmentScopes, and the policy source for this route; ask an admin to add the matching deployment, project, or environment grant in rbac/policy.json, rbac/policy.yaml, or rbac/policy.yml, then retry this same bookmarkable page.',
+    ],
+    forbiddenFragments: ['required trusted headers for this route; ask an admin to grant the matching deployment'],
+    unexpected: 'Failed to load overview:',
+  },
+  {
     name: 'applications overview 403 explains viewer role requirement',
     search: '?q=payments&sync=OutOfSync',
     route: '/v1/overview/applications',
@@ -438,7 +477,8 @@ const scenarios = [
     document.byID.set('summary', document.createElement('section'));
     document.byID.set('accounts', document.createElement('section'));
     const initialSearch = scenario.search;
-    const window = { location: { pathname: '/', search: initialSearch, hash: '' } };
+    const initialHash = scenario.hash || '';
+    const window = { location: { pathname: '/', search: initialSearch, hash: initialHash } };
     const history = { replaceState(_state, _title, url) { const [pathAndQuery, hash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
     let fetchCount = 0;
     const fetch = (url) => {
@@ -461,6 +501,7 @@ const scenarios = [
     const expectedFetchCount = scenario.operatorContext ? 2 : 1;
     if (fetchCount !== expectedFetchCount) throw new Error('expected ' + expectedFetchCount + ' fetches for ' + scenario.name + ', got ' + fetchCount);
     if (window.location.search !== initialSearch) throw new Error('expected bookmarkable URL to stay unchanged for ' + scenario.name + ', got ' + window.location.search);
+    if (window.location.hash !== initialHash) throw new Error('expected bookmarkable hash to stay unchanged for ' + scenario.name + ', got ' + window.location.hash);
     const text = [
       ...collectText(document.getElementById('toolbar')),
       ...collectText(document.getElementById('summary')),
@@ -487,7 +528,7 @@ const scenarios = [
     const operatorContextLink = links.find((link) => link.text.includes('Open Operator context details'));
     if (scenario.status === 401 && scenario.operatorContext?.authRuntime?.enterpriseSso?.active) {
       if (!enterpriseSignInLink) throw new Error('expected enterprise SSO sign-in recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
-      const expectedReturn = encodeURIComponent('/' + initialSearch);
+      const expectedReturn = encodeURIComponent('/' + initialSearch + initialHash);
       const expectedEnterpriseRoute = scenario.operatorContext.authRuntime.enterpriseSso.loginRoute;
       if (enterpriseSignInLink.href !== expectedEnterpriseRoute + '?returnUrl=' + expectedReturn) throw new Error('expected enterprise sign-in link to preserve returnUrl for ' + scenario.name + ', got ' + enterpriseSignInLink.href);
       if (enterpriseSignInLink.target !== '_self') throw new Error('expected enterprise sign-in link to stay in same shell for ' + scenario.name);
@@ -495,14 +536,14 @@ const scenarios = [
       if (accessRetryLink) throw new Error('did not expect access-update retry link for auth-required scenario ' + scenario.name);
     } else if (scenario.status === 401 && scenario.operatorContext?.authRuntime?.tenetManagedLogin?.active) {
       if (!managedSignInLink) throw new Error('expected managed sign-in recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
-      const expectedReturn = encodeURIComponent('/' + initialSearch);
+      const expectedReturn = encodeURIComponent('/' + initialSearch + initialHash);
       if (managedSignInLink.href !== '/auth/login/github?returnUrl=' + expectedReturn) throw new Error('expected managed sign-in link to preserve returnUrl for ' + scenario.name + ', got ' + managedSignInLink.href);
       if (managedSignInLink.target !== '_self') throw new Error('expected managed sign-in link to stay in same shell for ' + scenario.name);
       if (signInRetryLink) throw new Error('did not expect front-door retry link when managed login is active for ' + scenario.name);
       if (accessRetryLink) throw new Error('did not expect access-update retry link for auth-required scenario ' + scenario.name);
     } else if (scenario.status === 401) {
       if (!signInRetryLink) throw new Error('expected front-door sign-in retry recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
-      if (signInRetryLink.href !== '/' + initialSearch) throw new Error('expected sign-in retry link to preserve bookmarkable URL for ' + scenario.name + ', got ' + signInRetryLink.href);
+      if (signInRetryLink.href !== '/' + initialSearch + initialHash) throw new Error('expected sign-in retry link to preserve bookmarkable URL for ' + scenario.name + ', got ' + signInRetryLink.href);
       if (signInRetryLink.target !== '_self') throw new Error('expected sign-in retry link to stay in same shell for ' + scenario.name);
       if (accessRetryLink) throw new Error('did not expect access-update retry link for auth-required scenario ' + scenario.name);
     } else if (signInRetryLink) {
@@ -514,7 +555,7 @@ const scenarios = [
       if (operatorContextLink.href !== expectedContextHref) throw new Error('expected operator-context recovery link for ' + scenario.name + ' to preserve query and add details hash, got ' + operatorContextLink.href);
       if (operatorContextLink.target !== '_self') throw new Error('expected operator-context recovery link to stay in same shell for ' + scenario.name);
       if (!accessRetryLink) throw new Error('expected access-update retry link for ' + scenario.name + ': ' + JSON.stringify(links));
-      if (accessRetryLink.href !== '/' + initialSearch) throw new Error('expected access-update retry link to preserve bookmarkable URL for ' + scenario.name + ', got ' + accessRetryLink.href);
+      if (accessRetryLink.href !== '/' + initialSearch + initialHash) throw new Error('expected access-update retry link to preserve bookmarkable URL for ' + scenario.name + ', got ' + accessRetryLink.href);
       if (accessRetryLink.target !== '_self') throw new Error('expected access-update retry link to stay in same shell for ' + scenario.name);
     } else if (operatorContextLink) {
       throw new Error('did not expect operator-context recovery link for auth-required scenario ' + scenario.name);
@@ -618,6 +659,8 @@ async function render(operatorResponses, initialHash = '', controllerRefreshResp
 }
 (async () => {
   const firstContext = { trustedHeaders: { enabled: true }, enforcement: { mode: 'trusted_front_door_read_write', summary: 'trusted front-door identity, roles, and deployment allowlists are enforcing guarded operator read/write routes' }, identity: { authenticated: true, name: 'Front Door Operator', email: 'frontdoor@example.com' }, identityHeaderSupport: { canonical: ['X-Tenet-Authenticated-Id', 'X-Tenet-Authenticated-Name', 'X-Tenet-Authenticated-Email'], aliases: ['X-User-ID', 'X-User-Name', 'X-User-Email'] }, identityProvenance: { idSource: 'canonical', nameSource: 'alias', emailSource: 'absent' }, actor: { available: true, id: 'actor-123', name: 'Release Operator', email: 'release@example.com' }, actorHeaderSupport: { canonical: ['X-Tenet-Actor-Id', 'X-Tenet-Actor-Name', 'X-Tenet-Actor-Email'], aliases: ['X-User-ID', 'X-User-Name', 'X-User-Email'] }, actorProvenance: { idSource: 'canonical', nameSource: 'alias', emailSource: 'absent' }, actorAttribution: { available: true, source: 'explicit_actor_headers', summary: 'persisted plan/apply/audit actor fields will use explicit X-Tenet-Actor-* headers, with X-User-* actor aliases only filling missing actor fields' }, roles: { names: ['viewer', 'operator'], supportedNames: ['viewer', 'operator', 'admin'], supportedHeaderNames: ['X-Tenet-Authenticated-Roles'], recognizedNames: ['viewer', 'operator'], unrecognizedNames: [], canRead: true, canWrite: true, provenance: { source: 'canonical' } }, deploymentAccess: { enforced: true, forwarded: true, supportedHeaderNames: ['X-Tenet-Authorized-Deployments', 'X-Tenet-Authorized-Projects', 'X-Tenet-Authorized-Environments'], names: ['payments-api-prod', 'worker-prod'], scopes: { forwarded: true, projects: ['payments', 'worker'], environments: ['prod'] }, summary: { available: true, forwardedCount: 2, matchedCount: 2, accountCount: 1, projectCount: 1, environmentCount: 2, unmatchedNames: [], projectEnvironmentExamples: [{ appRef: 'payments', environmentRef: 'prod', region: 'us-west-2', awsAccountId: '123456789012', deploymentCount: 1, exampleDeployments: ['payments-api-prod'] }, { appRef: 'worker', environmentRef: 'prod', region: 'us-west-2', awsAccountId: '123456789012', deploymentCount: 1, exampleDeployments: ['worker-prod'] }] } }, authRuntime: { tenetManagedLogin: { configured: true, active: false, provider: 'github', requiredSettings: ['TENET_AUTH_PROVIDER', 'TENET_GITHUB_OAUTH_CLIENT_ID', 'TENET_GITHUB_OAUTH_CLIENT_SECRET', 'TENET_AUTH_STATE_STORE_PATH', 'TENET_AUTH_IDENTITY_STORE_PATH', 'TENET_AUTH_SESSION_SECRET'], missingSettings: [], loginRoute: '/auth/login', callbackRoute: '/auth/callback', sessionCookieName: 'tenet_session', sessionCookiePath: '/', sessionCookieHttpOnly: true, sessionCookieSameSite: 'Lax', sessionCookieSecureOverride: false, sessionCookieSecureForRequest: false, sessionCookieSecureSources: [], oauthStateTtlSeconds: 600, sessionTtlSeconds: 43200, sessionExpiryEnforced: true, providerAccessTokenStored: false, providerAccessTokenReturned: false, providerTokenRefreshSupported: false, providerTokenRevocationSupported: false, logoutClearsSessionCookie: false, logoutRevokesProviderToken: false, stateStoreConfigured: true, identityStoreConfigured: true, sessionSecretConfigured: true, unavailableReason: 'login/callback/session routes are not wired yet' } }, desiredStateSource: { configured: true, kind: 'github', github: { repository: 'DevopsArtFactory/tenet', ref: 'refs/heads/main', path: 'catalog', baseUrl: 'https://api.github.com' }, controllerRefresh: { configured: true, available: true, backend: 'redis', channel: 'tenet:controller-refresh', status: 'available', reason: 'GitHub desired-state source can publish accepted matching push webhooks to the Redis controller-refresh handoff', diagnosticOnly: true }, webhookMatchStatuses: ['matched', 'repository_mismatch', 'ref_mismatch', 'path_untouched', 'filesystem_source', 'not_configured'], webhookProcessedFalseReasons: ['deleted_ref_ignored', 'repository_mismatch', 'ref_mismatch', 'path_untouched', 'filesystem_source', 'controller_refresh_unavailable'] }, accessVerdicts: { operatorRead: { allowed: true, reason: 'guarded operator read prerequisites are satisfied for this request', requiresAuthenticatedIdentity: true, requiresViewerCapableRole: true, exampleRoutes: ['GET /v1/overview/applications', 'GET /v1/status/deployments', 'GET /v1/catalog/deployments', 'GET /v1/audit-logs'], requiredTrustedHeaders: ['X-Tenet-Authenticated-Id', 'X-User-ID', 'X-Tenet-Authenticated-Roles'] }, operatorWrite: { allowed: true, reason: 'guarded operator write prerequisites are satisfied for this request', requiresAuthenticatedIdentity: true, requiresOperatorRole: true, exampleRoutes: ['POST /v1/plans/deployments/{deploymentName}', 'POST /v1/applies/plans/{planId}', 'POST /v1/applies/{applyId}/transitions'], requiredTrustedHeaders: ['X-Tenet-Authenticated-Id', 'X-User-ID', 'X-Tenet-Authenticated-Roles'] }, deploymentScopedRead: { allowed: true, reason: 'deployment-scoped reads can pass for deployments named in X-Tenet-Authorized-Deployments or matched by X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments', requiresAuthenticatedIdentity: true, requiresViewerCapableRole: true, requiresExactDeploymentAllowlistMatch: true, acceptsProjectEnvironmentScopes: true, exampleRoutes: ['GET /v1/overview/deployments/{deploymentName}', 'GET /v1/status/deployments/{deploymentName}', 'GET /v1/audit-logs?deployment={deploymentName}'], requiredTrustedHeaders: ['X-Tenet-Authenticated-Id', 'X-User-ID', 'X-Tenet-Authenticated-Roles', 'X-Tenet-Authorized-Deployments', 'X-Tenet-Authorized-Projects', 'X-Tenet-Authorized-Environments'] }, deploymentScopedWrite: { allowed: true, reason: 'deployment-scoped writes can pass for deployments named in X-Tenet-Authorized-Deployments or matched by X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments', requiresAuthenticatedIdentity: true, requiresOperatorRole: true, requiresExactDeploymentAllowlistMatch: true, acceptsProjectEnvironmentScopes: true, exampleRoutes: ['POST /v1/plans/deployments/{deploymentName}', 'POST /v1/applies/plans/{planId}'], requiredTrustedHeaders: ['X-Tenet-Authenticated-Id', 'X-User-ID', 'X-Tenet-Authenticated-Roles', 'X-Tenet-Authorized-Deployments', 'X-Tenet-Authorized-Projects', 'X-Tenet-Authorized-Environments'] }, collectionRead: { allowed: true, reason: 'collection reads are filtered to the union of exact deployment grants and project/environment-scoped catalog matches', requiresAuthenticatedIdentity: true, requiresViewerCapableRole: true, filtersCollectionsByDeploymentAccess: true, exampleRoutes: ['GET /v1/overview/applications', 'GET /v1/status/deployments', 'GET /v1/catalog/deployments', 'GET /v1/overview/accounts', 'GET /v1/audit-logs'], requiredTrustedHeaders: ['X-Tenet-Authenticated-Id', 'X-User-ID', 'X-Tenet-Authenticated-Roles', 'X-Tenet-Authorized-Deployments', 'X-Tenet-Authorized-Projects', 'X-Tenet-Authorized-Environments'] }, catalogRead: { allowed: true, reason: 'raw catalog reads are filtered to deployment-visible desired-state metadata before returning catalog collections or summaries', requiresAuthenticatedIdentity: true, requiresViewerCapableRole: true, filtersCollectionsByDeploymentAccess: true, exampleRoutes: ['GET /v1/catalog/deployments', 'GET /v1/catalog/accounts', 'GET /v1/catalog/placements', 'GET /v1/catalog/topology', 'GET /v1/catalog/summary'], requiredTrustedHeaders: ['X-Tenet-Authenticated-Id', 'X-User-ID', 'X-Tenet-Authenticated-Roles', 'X-Tenet-Authorized-Deployments', 'X-Tenet-Authorized-Projects', 'X-Tenet-Authorized-Environments'] } } };
+  const repositoryPolicyContext = { ...firstContext, enforcement: { mode: 'repository_policy_authorization', summary: 'trusted front-door identity and groups feed repository RBAC policy evaluation for guarded operator route authorization' }, repositoryPolicy: { configured: true, available: true, source: 'repository', version: 'v1', diagnosticOnly: false, supportedGroupHeaderNames: ['X-Tenet-Authenticated-Groups'], matchedUsers: [{ kind: 'user', name: 'operator-123', match: 'id' }], matchedGroups: [{ kind: 'group', name: 'platform-admins', match: 'name' }], roles: { names: ['viewer', 'operator'] }, deploymentAccess: { names: ['payments-api-prod'] }, projectEnvironmentScopes: { projects: ['payments'], environments: ['prod'] }, canRead: true, canWrite: true, summary: 'repository RBAC policy matched 2 subject grant(s): roles=2 deployments=1 projects=1 environments=1' } };
+  const unavailableRepositoryPolicyContext = { ...firstContext, enforcement: { mode: 'repository_policy_authorization', summary: 'trusted front-door identity and groups feed repository RBAC policy evaluation for guarded operator route authorization' }, repositoryPolicy: { configured: true, available: false, source: 'repository', version: 'v1', diagnosticOnly: false, supportedGroupHeaderNames: ['X-Tenet-Authenticated-Groups'], summary: 'repository RBAC policy is invalid', unavailableReason: 'invalid policy: users[0].id is required' } };
   const unmatchedContext = { ...firstContext, deploymentAccess: { enforced: true, forwarded: true, names: ['payments-api-prod', 'stale-api', 'archived-api'], summary: { available: true, forwardedCount: 3, matchedCount: 1, unmatchedCount: 2, accountCount: 1, projectCount: 1, environmentCount: 1, unmatchedNames: ['archived-api', 'stale-api'] } } };
   const truncatedUnmatchedContext = { ...firstContext, deploymentAccess: { enforced: true, forwarded: true, names: ['payments-api-prod', 'stale-a', 'stale-b', 'stale-c', 'stale-d'], summary: { available: true, forwardedCount: 29, matchedCount: 1, unmatchedCount: 28, unmatchedNamesTruncated: true, accountCount: 1, projectCount: 1, environmentCount: 1, unmatchedNames: ['stale-a', 'stale-b'] } } };
   const staleScopeContext = { ...firstContext, deploymentAccess: { ...firstContext.deploymentAccess, summary: { ...firstContext.deploymentAccess.summary, forwardedProjectCount: 3, forwardedEnvironmentCount: 4, unmatchedProjectCount: 1, unmatchedProjects: ['legacy-payments'], unmatchedEnvironmentCount: 2, unmatchedEnvironments: ['old-prod', 'qa-apne2'], unmatchedEnvironmentsTruncated: true } } };
@@ -733,6 +776,22 @@ async function render(operatorResponses, initialHash = '', controllerRefreshResp
   if (!ready.compactText().includes('Desired state: GitHub catalog · Redis controller-refresh handoff available')) throw new Error('expected compact desired-state/controller-refresh readiness cue');
   if (ready.compactText().includes('Desired-state source:') || ready.compactText().includes('Controller refresh:') || ready.liveStatusText().includes('Desired state:') || ready.liveStatusText().includes('Webhook match statuses:')) throw new Error('verbose desired-state source diagnostics should stay out of compact live status');
   if (!ready.detailsText().includes('Required trusted headers: X-Tenet-Authenticated-Id')) throw new Error('expected required trusted headers inside expanded access details');
+
+  const policyReady = await render({ ok: true, json: () => Promise.resolve(repositoryPolicyContext) }, { search: '?q=payments', hash: '#operator-context-access-details-panel' });
+  if (policyReady.window.location.search !== '?q=payments' || policyReady.window.location.hash !== '#operator-context-access-details-panel') throw new Error('expected policy context render to preserve bookmarkable search/hash');
+  if (!policyReady.compactText().includes('Repository policy source: repository v1 · enforcing route authorization')) throw new Error('expected compact repository policy source cue');
+  if (!policyReady.detailsText().includes('Repository policy status: enforcing from repository v1. repository RBAC policy matched 2 subject grant(s): roles=2 deployments=1 projects=1 environments=1')) throw new Error('expected expanded repository policy status summary');
+  if (!policyReady.detailsText().includes('Repository policy matched users: operator-123 (id)')) throw new Error('expected matched repository policy user grants');
+  if (!policyReady.detailsText().includes('Repository policy matched groups: platform-admins (name)')) throw new Error('expected matched repository policy group grants');
+  if (!policyReady.detailsText().includes('Repository policy grants: roles viewer, operator; deployments payments-api-prod; projects payments; environments prod; can read yes; can write yes')) throw new Error('expected derived repository policy grant diagnostics');
+  if (!policyReady.detailsText().includes('Supported repository policy group headers: X-Tenet-Authenticated-Groups')) throw new Error('expected repository policy group header diagnostic');
+  if (policyReady.liveStatusText().includes('Repository policy matched users:') || policyReady.liveStatusText().includes('platform-admins')) throw new Error('repository policy grant diagnostics should stay out of compact live status');
+
+  const unavailablePolicy = await render({ ok: true, json: () => Promise.resolve(unavailableRepositoryPolicyContext) });
+  if (!unavailablePolicy.compactText().includes('Repository policy source: repository v1 · unavailable')) throw new Error('expected compact unavailable repository policy source cue');
+  if (!unavailablePolicy.detailsText().includes('Repository policy unavailable: repository RBAC policy is invalid — invalid policy: users[0].id is required')) throw new Error('expected repository policy invalid/unavailable diagnostic');
+  const unavailablePolicyPill = findFirst(unavailablePolicy.document.getElementById('operator-context'), (node) => String(node.className || '').includes('operator-context-warning') && node.textContent.includes('Repository policy unavailable:'));
+  if (!unavailablePolicyPill) throw new Error('expected unavailable repository policy warning pill');
 
   const deepLinked = await render({ ok: true, json: () => Promise.resolve(firstContext) }, '#operator-context-access-details-panel');
   if (!deepLinked.details().open) throw new Error('operator context access details should open from #operator-context-access-details-panel');

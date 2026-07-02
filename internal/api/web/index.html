@@ -1024,6 +1024,67 @@
         if (!supportedHeaders.length) return null;
         return `Supported deployment access headers: ${supportedHeaders.join(', ')}`;
       };
+      const operatorContextRepositoryPolicy = (context) => context?.repositoryPolicy || {};
+      const operatorContextRepositoryPolicyModeActive = (context = operatorContextState.context) =>
+        context?.enforcement?.mode === 'repository_policy_authorization' || operatorContextRepositoryPolicy(context).diagnosticOnly === false;
+      const operatorContextRepositoryPolicySourceText = (policy) => {
+        const source = String(policy?.source || 'repository policy').trim();
+        const version = String(policy?.version || '').trim();
+        return `${source}${version ? ` ${version}` : ''}`;
+      };
+      const operatorContextRepositoryPolicySourceLabel = (context) => {
+        const policy = operatorContextRepositoryPolicy(context);
+        if (!policy.configured && !operatorContextRepositoryPolicyModeActive(context)) return null;
+        if (!policy.configured) return 'Repository policy source: not configured';
+        const source = operatorContextRepositoryPolicySourceText(policy);
+        if (!policy.available) return `Repository policy source: ${source} · unavailable`;
+        const mode = operatorContextRepositoryPolicyModeActive(context) ? 'enforcing route authorization' : 'diagnostic only';
+        return `Repository policy source: ${source} · ${mode}`;
+      };
+      const operatorContextRepositoryPolicyStatusLabel = (context) => {
+        const policy = operatorContextRepositoryPolicy(context);
+        if (!policy.configured && !operatorContextRepositoryPolicyModeActive(context)) return null;
+        const source = operatorContextRepositoryPolicySourceText(policy);
+        const summary = policy.summary || 'no repository RBAC policy summary reported';
+        if (!policy.configured) return `Repository policy status: not configured. ${summary}`;
+        if (!policy.available) {
+          return `Repository policy unavailable: ${summary}${policy.unavailableReason ? ` — ${policy.unavailableReason}` : ''}`;
+        }
+        const mode = operatorContextRepositoryPolicyModeActive(context) ? 'enforcing' : 'diagnostic only';
+        return `Repository policy status: ${mode} from ${source}. ${summary}`;
+      };
+      const operatorContextRepositoryPolicyMatchedSubjectsLabel = (policy, field, label) => {
+        const subjects = Array.isArray(policy?.[field]) ? policy[field].filter(Boolean) : [];
+        if (!subjects.length) return null;
+        const values = subjects.slice(0, 4).map((subject) => {
+          const name = subject?.name || subject?.id || 'unnamed subject';
+          const match = subject?.match ? ` (${subject.match})` : '';
+          return `${name}${match}`;
+        });
+        return `${label}: ${values.join(', ')}${subjects.length > values.length ? ', …' : ''}`;
+      };
+      const operatorContextRepositoryPolicyGrantsLabel = (context) => {
+        const policy = operatorContextRepositoryPolicy(context);
+        if (!policy.configured || !policy.available) return null;
+        const roles = operatorContextRoleNames(policy.roles || {}, 'names');
+        const deployments = Array.isArray(policy.deploymentAccess?.names) ? policy.deploymentAccess.names.filter(Boolean) : [];
+        const scopes = policy.projectEnvironmentScopes || {};
+        const projects = Array.isArray(scopes.projects) ? scopes.projects.filter(Boolean) : [];
+        const environments = Array.isArray(scopes.environments) ? scopes.environments.filter(Boolean) : [];
+        const valueOrNone = (values) => values.length ? values.slice(0, 4).join(', ') + (values.length > 4 ? ', …' : '') : 'none';
+        return `Repository policy grants: roles ${valueOrNone(roles)}; deployments ${valueOrNone(deployments)}; projects ${valueOrNone(projects)}; environments ${valueOrNone(environments)}; can read ${policy.canRead ? 'yes' : 'no'}; can write ${policy.canWrite ? 'yes' : 'no'}`;
+      };
+      const operatorContextRepositoryPolicyGroupHeadersLabel = (context) => {
+        const headers = Array.isArray(operatorContextRepositoryPolicy(context).supportedGroupHeaderNames)
+          ? operatorContextRepositoryPolicy(context).supportedGroupHeaderNames.filter(Boolean)
+          : [];
+        if (!headers.length) return null;
+        return `Supported repository policy group headers: ${headers.join(', ')}`;
+      };
+      const operatorContextRepositoryPolicyClass = (context) => {
+        const policy = operatorContextRepositoryPolicy(context);
+        return policy.configured && policy.available === false ? 'operator-context-warning' : '';
+      };
       const operatorContextRecognizedRolesLabel = (context) => {
         const roles = context?.roles || {};
         const recognized = operatorContextRoleNames(roles, 'recognizedNames');
@@ -1369,6 +1430,7 @@
           trusted_front_door_read_only: 'read routes guarded',
           trusted_front_door_write_only: 'write routes guarded',
           trusted_front_door_read_write: 'read/write guarded',
+          repository_policy_authorization: 'repository policy authorization',
         };
         return `Enforcement mode: ${labels[mode] || mode || 'unknown'}`;
       };
@@ -1743,6 +1805,10 @@
           if (desiredStateReadinessLabel) {
             meta.append(createElement('span', operatorContextDesiredStateReadinessClass(context), desiredStateReadinessLabel));
           }
+          const repositoryPolicySourceLabel = operatorContextRepositoryPolicySourceLabel(context);
+          if (repositoryPolicySourceLabel) {
+            meta.append(createElement('span', operatorContextRepositoryPolicyClass(context), repositoryPolicySourceLabel));
+          }
           const lastCheckedLabel = operatorContextLastCheckedLabel(operatorContextState.lastCheckedAt);
           const deploymentAccessSummary = operatorContextDeploymentAccessSummaryLabel(context);
           if (operatorContextState.refreshing) {
@@ -1836,6 +1902,27 @@
           if (supportedDeploymentAccessHeaders) {
             detailsMeta.append(createElement('span', '', supportedDeploymentAccessHeaders));
           }
+          const policy = operatorContextRepositoryPolicy(context);
+          const repositoryPolicyStatus = operatorContextRepositoryPolicyStatusLabel(context);
+          if (repositoryPolicyStatus) {
+            detailsMeta.append(createElement('span', operatorContextRepositoryPolicyClass(context), repositoryPolicyStatus));
+          }
+          const matchedUsers = operatorContextRepositoryPolicyMatchedSubjectsLabel(policy, 'matchedUsers', 'Repository policy matched users');
+          if (matchedUsers) {
+            detailsMeta.append(createElement('span', '', matchedUsers));
+          }
+          const matchedGroups = operatorContextRepositoryPolicyMatchedSubjectsLabel(policy, 'matchedGroups', 'Repository policy matched groups');
+          if (matchedGroups) {
+            detailsMeta.append(createElement('span', '', matchedGroups));
+          }
+          const repositoryPolicyGrants = operatorContextRepositoryPolicyGrantsLabel(context);
+          if (repositoryPolicyGrants) {
+            detailsMeta.append(createElement('span', '', repositoryPolicyGrants));
+          }
+          const repositoryPolicyGroupHeaders = operatorContextRepositoryPolicyGroupHeadersLabel(context);
+          if (repositoryPolicyGroupHeaders) {
+            detailsMeta.append(createElement('span', '', repositoryPolicyGroupHeaders));
+          }
           const recognizedRoles = operatorContextRecognizedRolesLabel(context);
           if (recognizedRoles) {
             detailsMeta.append(createElement('span', '', recognizedRoles));
@@ -1923,7 +2010,7 @@
           .then((context) => {
             operatorContextState = { status: 'ready', context, error: null, refreshing: false, lastCheckedAt: new Date(), controllerRefresh: previousControllerRefresh };
             renderOperatorContextBanner();
-            if (activeOperatorReadFailurePage && operatorReadAuthRequiredState(activeOperatorReadFailurePage.error)) {
+            if (activeOperatorReadFailurePage && (operatorReadAuthRequiredState(activeOperatorReadFailurePage.error) || operatorReadForbiddenState(activeOperatorReadFailurePage.error))) {
               renderOperatorReadFailurePage(activeOperatorReadFailurePage.pageLabel, activeOperatorReadFailurePage.route, activeOperatorReadFailurePage.error);
             }
             return context;
@@ -8657,6 +8744,7 @@
         return `Tenet rejected ${route} because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login, enterprise SSO login, or Tenet-managed browser session from this page; reopen this same bookmarkable URL through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.`;
       };
       const operatorReadRoleRequiredMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity because this operator read route requires a trusted forwarded viewer/operator/admin role. Open Operator context details (#operator-context-access-details-panel) and check roles.provenance.source, roles.canRead, and the forwarded X-Tenet-Authenticated-Roles value; ask the front-door/RBAC admin to forward viewer, operator, or admin, then retry this same bookmarkable page.`;
+      const operatorReadPolicyForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized by the repository RBAC policy for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare repositoryPolicy.summary, matchedUsers, matchedGroups, repositoryPolicy.roles, repositoryPolicy.deploymentAccess, repositoryPolicy.projectEnvironmentScopes, and the policy source for this route; ask an admin to add the matching deployment, project, or environment grant in rbac/policy.json, rbac/policy.yaml, or rbac/policy.yml, then retry this same bookmarkable page.`;
       const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.`;
       const operatorReadFailureHeading = (error) => {
         if (operatorReadAuthRequiredState(error)) {
@@ -8682,7 +8770,7 @@
         } else if (operatorReadRoleRequiredState(error)) {
           message = operatorReadRoleRequiredMessage(route);
         } else if (operatorReadForbiddenState(error)) {
-          message = operatorReadForbiddenMessage(route);
+          message = operatorContextRepositoryPolicyModeActive() ? operatorReadPolicyForbiddenMessage(route) : operatorReadForbiddenMessage(route);
         } else {
           message = error?.message || 'unknown error';
         }
