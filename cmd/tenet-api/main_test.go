@@ -255,6 +255,24 @@ func TestOperatorDeploymentReadAuthorizationEnforced(t *testing.T) {
 	})
 }
 
+func TestRepositoryPolicyAuthorizationEnforced(t *testing.T) {
+	t.Run("defaults to false", func(t *testing.T) {
+		t.Setenv("TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY", "")
+
+		if repositoryPolicyAuthorizationEnforced() {
+			t.Fatal("expected repository policy authorization to be disabled by default")
+		}
+	})
+
+	t.Run("accepts true", func(t *testing.T) {
+		t.Setenv("TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY", "true")
+
+		if !repositoryPolicyAuthorizationEnforced() {
+			t.Fatal("expected repository policy authorization to be enabled")
+		}
+	})
+}
+
 func TestAuthSessionCookieSecureEnabled(t *testing.T) {
 	t.Run("defaults to false", func(t *testing.T) {
 		t.Setenv("TENET_AUTH_SESSION_COOKIE_SECURE", "")
@@ -592,6 +610,7 @@ func TestNewAPIOptionsIncludesAuthenticatedIdentityConfigFromEnv(t *testing.T) {
 	t.Setenv("TENET_API_ENFORCE_AUTHENTICATED_IDENTITY", "true")
 	t.Setenv("TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION", "true")
 	t.Setenv("TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION", "true")
+	t.Setenv("TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY", "true")
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
 
@@ -606,6 +625,9 @@ func TestNewAPIOptionsIncludesAuthenticatedIdentityConfigFromEnv(t *testing.T) {
 	}
 	if !options.RequireDeploymentReadAuthorization {
 		t.Fatalf("expected deployment read authorization to be enabled, got %+v", options)
+	}
+	if !options.AuthorizeWithRepositoryPolicy {
+		t.Fatalf("expected repository policy authorization to be enabled, got %+v", options)
 	}
 }
 

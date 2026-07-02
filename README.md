@@ -241,7 +241,14 @@ trusted values. The auth/RBAC toggles are boolean, non-secret settings, so use
 operator-readable examples such as `TENET_API_TRUST_AUTHENTICATED_HEADERS=true`,
 `TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`,
 `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true`, and
-`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`; keep credential-bearing
+`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`. Filesystem catalog
+sources may additionally opt into repository-backed RBAC grants with
+`TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true`; when enabled, the
+existing guarded read/write routes keep the same identity requirements but use
+`rbac/policy.json`, `rbac/policy.yaml`, or `rbac/policy.yml` grants evaluated
+against trusted identity plus `X-Tenet-Authenticated-Groups` instead of trusted
+role/deployment grant headers. Leave it unset to preserve the default
+trusted-header authorization path. Keep credential-bearing
 settings such as tokens redacted.
 
 ## Validation

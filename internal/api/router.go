@@ -457,33 +457,90 @@ func requireAuthenticatedIdentity(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
-func requireOperatorRoleForWrite(w http.ResponseWriter, r *http.Request, enabled bool) bool {
-	if !enabled {
+func repositoryPolicyEvaluationForAuthorization(ctx context.Context, options Options) (rbacpolicy.Evaluation, bool) {
+	if !options.AuthorizeWithRepositoryPolicy {
+		return rbacpolicy.Evaluation{}, false
+	}
+	evaluation := rbacpolicy.Evaluation{
+		Configured:        false,
+		Available:         false,
+		Summary:           "repository RBAC policy authorization is enabled but no policy provider is configured",
+		UnavailableReason: "repository RBAC policy provider is not configured",
+	}
+	if options.RepositoryPolicy == nil {
+		return evaluation, true
+	}
+	resolved, err := options.RepositoryPolicy(ctx, requestactor.AuthenticatedIdentityFromContext(ctx), requestactor.AuthenticatedGroupsFromContext(ctx))
+	if err != nil {
+		evaluation = resolved
+		if evaluation.Summary == "" {
+			evaluation.Summary = "repository RBAC policy evaluation failed"
+		}
+		if evaluation.UnavailableReason == "" {
+			evaluation.UnavailableReason = err.Error()
+		}
+		return evaluation, true
+	}
+	return resolved, true
+}
+
+func authenticatedRolesForAuthorization(ctx context.Context, options Options) requestactor.AuthenticatedRoles {
+	if evaluation, ok := repositoryPolicyEvaluationForAuthorization(ctx, options); ok {
+		if evaluation.Available {
+			return evaluation.Roles
+		}
+		return requestactor.AuthenticatedRoles{}
+	}
+	return requestactor.AuthenticatedRolesFromContext(ctx)
+}
+
+func authorizedDeploymentsForAuthorization(ctx context.Context, options Options) requestactor.AuthorizedDeployments {
+	if evaluation, ok := repositoryPolicyEvaluationForAuthorization(ctx, options); ok {
+		if evaluation.Available {
+			return evaluation.DeploymentAccess
+		}
+		return requestactor.AuthorizedDeployments{}
+	}
+	return requestactor.AuthorizedDeploymentsFromContext(ctx)
+}
+
+func authorizedProjectEnvironmentScopesForAuthorization(ctx context.Context, options Options) requestactor.AuthorizedProjectEnvironmentScopes {
+	if evaluation, ok := repositoryPolicyEvaluationForAuthorization(ctx, options); ok {
+		if evaluation.Available {
+			return evaluation.ProjectEnvironmentScopes
+		}
+		return requestactor.AuthorizedProjectEnvironmentScopes{}
+	}
+	return requestactor.AuthorizedProjectEnvironmentScopesFromContext(ctx)
+}
+
+func requireOperatorRoleForWrite(w http.ResponseWriter, r *http.Request, options Options) bool {
+	if !options.RequireOperatorRoleForWrite {
 		return true
 	}
 	if !requireAuthenticatedIdentity(w, r) {
 		return false
 	}
-	if requestactor.AuthenticatedRolesFromContext(r.Context()).AllowsOperatorWrite() {
+	if authenticatedRolesForAuthorization(r.Context(), options).AllowsOperatorWrite() {
 		return true
 	}
 	respondForbiddenError(w, "forbidden: authenticated operator role is required for this operator write route")
 	return false
 }
 
-func requireOperatorRoleForRead(w http.ResponseWriter, r *http.Request, enabled bool) bool {
-	if !enabled {
+func requireOperatorRoleForRead(w http.ResponseWriter, r *http.Request, options Options) bool {
+	if !options.RequireOperatorRoleForRead {
 		return true
 	}
-	if requestactor.AuthenticatedRolesFromContext(r.Context()).AllowsOperatorRead() {
+	if authenticatedRolesForAuthorization(r.Context(), options).AllowsOperatorRead() {
 		return true
 	}
 	respondForbiddenError(w, "forbidden: authenticated viewer-capable role is required for this operator read route")
 	return false
 }
 
-func requireDeploymentReadIdentity(w http.ResponseWriter, r *http.Request, identityEnabled bool, roleEnabled bool) bool {
-	if !identityEnabled {
+func requireDeploymentReadIdentity(w http.ResponseWriter, r *http.Request, options Options) bool {
+	if !options.RequireDeploymentReadAuthorization {
 		return true
 	}
 	identity := requestactor.AuthenticatedIdentityFromContext(r.Context())
@@ -491,7 +548,7 @@ func requireDeploymentReadIdentity(w http.ResponseWriter, r *http.Request, ident
 		respondUnauthenticatedError(w, "unauthenticated: authenticated identity is required for this operator read route")
 		return false
 	}
-	return requireOperatorRoleForRead(w, r, roleEnabled)
+	return requireOperatorRoleForRead(w, r, options)
 }
 
 func requireDeploymentReadAccess(w http.ResponseWriter, r *http.Request, enabled bool, deploymentName string) bool {
@@ -509,7 +566,7 @@ func requireDeploymentReadAccessWithOptions(w http.ResponseWriter, r *http.Reque
 	if !options.RequireDeploymentReadAuthorization {
 		return true
 	}
-	if requestHasDeploymentAccess(r.Context(), options, deploymentName, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context()), nil) {
+	if requestHasDeploymentAccess(r.Context(), options, deploymentName, authorizedDeploymentsForAuthorization(r.Context(), options), authorizedProjectEnvironmentScopesForAuthorization(r.Context(), options), nil) {
 		return true
 	}
 	respondForbiddenError(w, "forbidden: operator does not have access to this deployment")
@@ -517,7 +574,7 @@ func requireDeploymentReadAccessWithOptions(w http.ResponseWriter, r *http.Reque
 }
 
 func requireDeploymentReadAuthorization(w http.ResponseWriter, r *http.Request, options Options, deploymentName string) bool {
-	if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+	if !requireDeploymentReadIdentity(w, r, options) {
 		return false
 	}
 	return requireDeploymentReadAccessWithOptions(w, r, options, deploymentName)
@@ -563,6 +620,8 @@ func requestHasDeploymentAccess(ctx context.Context, options Options, deployment
 }
 
 func authorizedDeploymentNameSet(ctx context.Context, options Options, deployments requestactor.AuthorizedDeployments, scopes requestactor.AuthorizedProjectEnvironmentScopes) map[string]struct{} {
+	deployments = authorizedDeploymentsForAuthorization(ctx, options)
+	scopes = authorizedProjectEnvironmentScopesForAuthorization(ctx, options)
 	visible := make(map[string]struct{}, len(deployments.Names))
 	for _, name := range deployments.Names {
 		visible[name] = struct{}{}
@@ -821,11 +880,12 @@ type controllerRefreshStatusReceipt struct {
 }
 
 type operatorContextTrustedHeaders struct {
-	Enabled                             bool `json:"enabled"`
-	AuthenticatedIdentityRequired       bool `json:"authenticatedIdentityRequired"`
-	DeploymentReadAuthorizationEnforced bool `json:"deploymentReadAuthorizationEnforced"`
-	OperatorReadRoleEnforced            bool `json:"operatorReadRoleEnforced"`
-	OperatorWriteRoleEnforced           bool `json:"operatorWriteRoleEnforced"`
+	Enabled                               bool `json:"enabled"`
+	AuthenticatedIdentityRequired         bool `json:"authenticatedIdentityRequired"`
+	DeploymentReadAuthorizationEnforced   bool `json:"deploymentReadAuthorizationEnforced"`
+	OperatorReadRoleEnforced              bool `json:"operatorReadRoleEnforced"`
+	OperatorWriteRoleEnforced             bool `json:"operatorWriteRoleEnforced"`
+	RepositoryPolicyAuthorizationEnforced bool `json:"repositoryPolicyAuthorizationEnforced"`
 }
 
 type operatorContextIdentityHeaderSupport struct {
@@ -841,6 +901,7 @@ type operatorContextEnforcement struct {
 	DeploymentReadAuthorizationEnforced    bool   `json:"deploymentReadAuthorizationEnforced"`
 	OperatorReadRoleEnforced               bool   `json:"operatorReadRoleEnforced"`
 	OperatorWriteRoleEnforced              bool   `json:"operatorWriteRoleEnforced"`
+	RepositoryPolicyAuthorizationEnforced  bool   `json:"repositoryPolicyAuthorizationEnforced"`
 	ReadRoutesGuarded                      bool   `json:"readRoutesGuarded"`
 	WriteRoutesGuarded                     bool   `json:"writeRoutesGuarded"`
 	DeploymentScopedRoutesRequireAllowlist bool   `json:"deploymentScopedRoutesRequireAllowlist"`
@@ -953,22 +1014,23 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 	actorHeaders := requestactor.FromHeaders(r.Header)
 	actorProvenance := requestactor.ActorProvenanceFromHeaders(r.Header)
 	identityProvenance := requestactor.AuthenticatedIdentityProvenanceFromContext(r.Context())
-	roles := requestactor.AuthenticatedRolesFromContext(r.Context())
+	roles := authenticatedRolesForAuthorization(r.Context(), options)
 	rolesProvenance := requestactor.NormalizeAuthenticatedRolesProvenance(requestactor.AuthenticatedRolesProvenance{})
 	if options.TrustAuthenticatedHeaders {
 		rolesProvenance = requestactor.AuthenticatedRolesProvenanceFromHeaders(r.Header)
 	}
-	deployments := requestactor.AuthorizedDeploymentsFromContext(r.Context())
-	scopes := requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())
+	deployments := authorizedDeploymentsForAuthorization(r.Context(), options)
+	scopes := authorizedProjectEnvironmentScopesForAuthorization(r.Context(), options)
 	summary := buildOperatorContextAccessSummary(r.Context(), options, deployments, scopes)
 	repositoryPolicy := buildOperatorContextRepositoryPolicy(r.Context(), options, identity, requestactor.AuthenticatedGroupsFromContext(r.Context()))
 	return operatorContextResponse{
 		TrustedHeaders: operatorContextTrustedHeaders{
-			Enabled:                             options.TrustAuthenticatedHeaders,
-			AuthenticatedIdentityRequired:       options.RequireAuthenticatedIdentity,
-			DeploymentReadAuthorizationEnforced: options.RequireDeploymentReadAuthorization,
-			OperatorReadRoleEnforced:            options.RequireOperatorRoleForRead,
-			OperatorWriteRoleEnforced:           options.RequireOperatorRoleForWrite,
+			Enabled:                               options.TrustAuthenticatedHeaders,
+			AuthenticatedIdentityRequired:         options.RequireAuthenticatedIdentity,
+			DeploymentReadAuthorizationEnforced:   options.RequireDeploymentReadAuthorization,
+			OperatorReadRoleEnforced:              options.RequireOperatorRoleForRead,
+			OperatorWriteRoleEnforced:             options.RequireOperatorRoleForWrite,
+			RepositoryPolicyAuthorizationEnforced: options.AuthorizeWithRepositoryPolicy,
 		},
 		AuthRuntime: buildAuthRuntimeDiagnosticForRequest(r, options),
 		Enforcement: buildOperatorContextEnforcement(options),
@@ -1281,7 +1343,7 @@ func buildOperatorContextRepositoryPolicy(ctx context.Context, options Options, 
 	return operatorContextRepositoryPolicy{
 		Evaluation:                evaluation,
 		SupportedGroupHeaderNames: requestactor.SupportedAuthenticatedGroupHeaderNames(),
-		DiagnosticOnly:            true,
+		DiagnosticOnly:            !options.AuthorizeWithRepositoryPolicy,
 	}
 }
 
@@ -1465,6 +1527,7 @@ func buildOperatorContextEnforcement(options Options) operatorContextEnforcement
 		DeploymentReadAuthorizationEnforced:    options.RequireDeploymentReadAuthorization,
 		OperatorReadRoleEnforced:               options.RequireOperatorRoleForRead,
 		OperatorWriteRoleEnforced:              options.RequireOperatorRoleForWrite,
+		RepositoryPolicyAuthorizationEnforced:  options.AuthorizeWithRepositoryPolicy,
 		ReadRoutesGuarded:                      readRoutesGuarded,
 		WriteRoutesGuarded:                     writeRoutesGuarded,
 		DeploymentScopedRoutesRequireAllowlist: options.RequireDeploymentReadAuthorization,
@@ -1476,6 +1539,11 @@ func buildOperatorContextEnforcement(options Options) operatorContextEnforcement
 	if !readRoutesGuarded && !writeRoutesGuarded {
 		enforcement.Mode = "trusted_headers_observed_only"
 		enforcement.Summary = "trusted front-door headers are accepted for diagnostics and actor projection, but guarded operator route enforcement is disabled"
+		return enforcement
+	}
+	if options.AuthorizeWithRepositoryPolicy {
+		enforcement.Mode = "repository_policy_authorization"
+		enforcement.Summary = "trusted front-door identity and groups feed repository RBAC policy evaluation for guarded operator route authorization"
 		return enforcement
 	}
 	if readRoutesGuarded && writeRoutesGuarded {
@@ -2238,6 +2306,7 @@ type Options struct {
 	RequireOperatorRoleForRead           bool
 	RequireOperatorRoleForWrite          bool
 	RequireDeploymentReadAuthorization   bool
+	AuthorizeWithRepositoryPolicy        bool
 	RepositoryPolicy                     func(context.Context, requestactor.AuthenticatedIdentity, requestactor.AuthenticatedGroups) (rbacpolicy.Evaluation, error)
 	GitHubWebhookDesiredStateSource      githubwebhook.DesiredStateSourceConfig
 	GitHubWebhookRefreshPublisher        controllerrefresh.Publisher
@@ -2393,7 +2462,7 @@ func NewRouter(options Options) http.Handler {
 		if options.RequireAuthenticatedIdentity && !requireAuthenticatedIdentity(w, r) {
 			return
 		}
-		if !requireOperatorRoleForWrite(w, r, options.RequireOperatorRoleForWrite) {
+		if !requireOperatorRoleForWrite(w, r, options) {
 			return
 		}
 		requestedAt := githubWebhookNow()
@@ -2412,7 +2481,7 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
-		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+		if !requireDeploymentReadIdentity(w, r, options) {
 			return
 		}
 		if options.AuditLogs == nil {
@@ -2436,7 +2505,7 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
-		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+		if !requireDeploymentReadIdentity(w, r, options) {
 			return
 		}
 		if options.RequireDeploymentReadAuthorization {
@@ -2475,7 +2544,7 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
-		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+		if !requireDeploymentReadIdentity(w, r, options) {
 			return
 		}
 		if options.CatalogDeployments == nil {
@@ -2499,7 +2568,7 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
-		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+		if !requireDeploymentReadIdentity(w, r, options) {
 			return
 		}
 		if options.CatalogEnvironments == nil {
@@ -2522,7 +2591,7 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
-		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+		if !requireDeploymentReadIdentity(w, r, options) {
 			return
 		}
 		if options.CatalogAccounts == nil {
@@ -2545,7 +2614,7 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
-		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+		if !requireDeploymentReadIdentity(w, r, options) {
 			return
 		}
 		if options.CatalogPlacements == nil {
@@ -2569,7 +2638,7 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
-		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+		if !requireDeploymentReadIdentity(w, r, options) {
 			return
 		}
 		if options.CatalogTopology == nil {
@@ -2593,7 +2662,7 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
-		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+		if !requireDeploymentReadIdentity(w, r, options) {
 			return
 		}
 		if options.OverviewApplications == nil {
@@ -2641,7 +2710,7 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
-		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+		if !requireDeploymentReadIdentity(w, r, options) {
 			return
 		}
 		if options.OverviewAccounts == nil {
@@ -2673,7 +2742,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "overview account unavailable", http.StatusServiceUnavailable)
 				return
 			}
-			if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+			if !requireDeploymentReadIdentity(w, r, options) {
 				return
 			}
 			detail, err := options.OverviewAccount(r.Context(), segments[0])
@@ -2697,7 +2766,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "overview project environment unavailable", http.StatusServiceUnavailable)
 				return
 			}
-			if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+			if !requireDeploymentReadIdentity(w, r, options) {
 				return
 			}
 			detail, err := options.OverviewProjectEnvironment(r.Context(), segments[0], segments[2], segments[4])
@@ -2964,7 +3033,7 @@ func NewRouter(options Options) http.Handler {
 			}
 			query.Limit = limit
 		}
-		if query.DeploymentName == "" && !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+		if query.DeploymentName == "" && !requireDeploymentReadIdentity(w, r, options) {
 			return
 		}
 		providerQuery := query
@@ -2996,7 +3065,7 @@ func NewRouter(options Options) http.Handler {
 		if options.RequireAuthenticatedIdentity && !requireAuthenticatedIdentity(w, r) {
 			return
 		}
-		if !requireOperatorRoleForWrite(w, r, options.RequireOperatorRoleForWrite) {
+		if !requireOperatorRoleForWrite(w, r, options) {
 			return
 		}
 		if options.CreateDeploymentPlanPreview == nil {
@@ -3047,7 +3116,7 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "invalid plan id", http.StatusBadRequest)
 			return
 		}
-		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+		if !requireDeploymentReadIdentity(w, r, options) {
 			return
 		}
 		record, err := options.PlanPreview(r.Context(), id)
@@ -3068,7 +3137,7 @@ func NewRouter(options Options) http.Handler {
 		if options.RequireAuthenticatedIdentity && !requireAuthenticatedIdentity(w, r) {
 			return
 		}
-		if !requireOperatorRoleForWrite(w, r, options.RequireOperatorRoleForWrite) {
+		if !requireOperatorRoleForWrite(w, r, options) {
 			return
 		}
 		if options.CreateApplyRequest == nil {
@@ -3118,7 +3187,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "apply request unavailable", http.StatusServiceUnavailable)
 				return
 			}
-			if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+			if !requireDeploymentReadIdentity(w, r, options) {
 				return
 			}
 			record, err := options.ApplyRequest(r.Context(), segments[0])
@@ -3138,7 +3207,7 @@ func NewRouter(options Options) http.Handler {
 			if (options.RequireAuthenticatedIdentity || options.RequireDeploymentReadAuthorization) && !requireAuthenticatedIdentity(w, r) {
 				return
 			}
-			if !requireOperatorRoleForWrite(w, r, options.RequireOperatorRoleForWrite) {
+			if !requireOperatorRoleForWrite(w, r, options) {
 				return
 			}
 			if options.RequireDeploymentReadAuthorization {
@@ -3185,7 +3254,7 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
-		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+		if !requireDeploymentReadIdentity(w, r, options) {
 			return
 		}
 		if options.DeploymentStatuses == nil {
@@ -3232,7 +3301,7 @@ func NewRouter(options Options) http.Handler {
 	handler = panicRecoveryMiddleware(logger, handler)
 	handler = requestTimeoutMiddleware(options.RequestTimeout, handler)
 	handler = requestLoggingMiddleware(logger, handler)
-	handler = requestActorMiddleware(options.TrustAuthenticatedHeaders || options.RequireAuthenticatedIdentity || options.RequireOperatorRoleForRead || options.RequireOperatorRoleForWrite || options.RequireDeploymentReadAuthorization, authSession, handler)
+	handler = requestActorMiddleware(options.TrustAuthenticatedHeaders || options.RequireAuthenticatedIdentity || options.RequireOperatorRoleForRead || options.RequireOperatorRoleForWrite || options.RequireDeploymentReadAuthorization || options.AuthorizeWithRepositoryPolicy, authSession, handler)
 	handler = requestIDMiddleware(handler)
 	return handler
 }

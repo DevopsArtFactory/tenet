@@ -537,17 +537,17 @@ func TestResourceUnavailableSmokeMatrixDocsAndScripts(t *testing.T) {
 			docs:   []string{"ASG console logs", "selected-instance echo", "malformed `instanceId` rejected with `400`"},
 		},
 		{
-			name:   "traffic routing no log source",
-			local:  []string{"traffic_resource_logs", "production_listener_rule_resource_logs", "active_target_group_resource_logs", "candidate_target_group_resource_logs", "no_log_source"},
-			docker: []string{"traffic_resource_logs", "production_listener_rule_resource_logs", "active_target_group_resource_logs", "candidate_target_group_resource_logs", "no_log_source"},
-			docs:   []string{"Traffic-routing no-log-source", "resultScope.truncationStatus=not_applicable"},
+			name:      "traffic routing no log source",
+			local:     []string{"traffic_resource_logs", "production_listener_rule_resource_logs", "active_target_group_resource_logs", "candidate_target_group_resource_logs", "no_log_source"},
+			docker:    []string{"traffic_resource_logs", "production_listener_rule_resource_logs", "active_target_group_resource_logs", "candidate_target_group_resource_logs", "no_log_source"},
+			docs:      []string{"Traffic-routing no-log-source", "resultScope.truncationStatus=not_applicable"},
 			uiHarness: []string{"Recent logs are unavailable for this resource.", "This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet."},
 		},
 		{
-			name:   "live inspection unavailable reasons",
-			local:  []string{"worker_resource_inspection", "selected_worker_resource_inspection", "bootstrap_resource_inspection", "selected_bootstrap_resource_inspection", "aws_unavailable"},
-			docker: []string{"worker_resource_inspection", "selected_worker_resource_inspection", "bootstrap_resource_inspection", "selected_bootstrap_resource_inspection", "aws_unavailable"},
-			docs:   []string{"Live inspection copy", "available`, `unavailableReason`, `lookupContext`, `resultScope`, `clusterArn`, `instanceId"},
+			name:      "live inspection unavailable reasons",
+			local:     []string{"worker_resource_inspection", "selected_worker_resource_inspection", "bootstrap_resource_inspection", "selected_bootstrap_resource_inspection", "aws_unavailable"},
+			docker:    []string{"worker_resource_inspection", "selected_worker_resource_inspection", "bootstrap_resource_inspection", "selected_bootstrap_resource_inspection", "aws_unavailable"},
+			docs:      []string{"Live inspection copy", "available`, `unavailableReason`, `lookupContext`, `resultScope`, `clusterArn`, `instanceId"},
 			uiHarness: []string{"AWS access is currently unavailable for live inspection.", "No running tasks were found for this ECS service."},
 		},
 	}
@@ -602,6 +602,7 @@ func TestAuthToggleDocsUseReadableBooleanExamples(t *testing.T) {
 		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true` requires authenticated identity",
 		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true` trusts `X-Tenet-Authenticated-Roles`",
 		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` trusts `X-Tenet-Authorized-Deployments`",
+		"`TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true`",
 	} {
 		if !strings.Contains(localRuntimeText, fragment) {
 			t.Fatalf("expected local runtime docs to include readable boolean auth-toggle example %q", fragment)
