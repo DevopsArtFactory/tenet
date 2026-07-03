@@ -760,10 +760,14 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"workspace-callout-factors resource-read-route",
 		"resourceInspectionReadRoute(deploymentName, resource)",
 		"resourceLogsReadRoute(deploymentName, resource)",
+		"const selectedResourceEvidenceCalloutText = (supportsInspection, supportsLogs, routeBits) => {",
+		"Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection.",
+		"Use the Live inspection handoff below to refresh focused evidence for this exact resource selection.",
+		"Use the Recent logs handoff below to refresh focused evidence for this exact resource selection.",
+		"No focused evidence handoffs are available for this resource type yet. Use the current resource read above for this selection.",
 		"const evidenceLinks = createElement('div', 'row-links selected-resource-context-links');",
 		"createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', routeParams), 'Jump to live inspection', '_self')",
 		"createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', routeParams), 'Jump to recent logs', '_self')",
-		"Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection.",
 		"createSelectedResourceContextCallout(detail, resource)",
 		"const resourceTroubleshootingSummaryByResourceKey = new Map();",
 		"const renderResourceTroubleshootingSummary = (section, detail, resource) => {",
@@ -3771,6 +3775,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert \"workspace-callout-factors resource-read-route\" in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert resource detail read route body cue")
+	}
+	if !strings.Contains(text, "assert \"const selectedResourceEvidenceCalloutText = (supportsInspection, supportsLogs, routeBits) => {\" in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert capability-aware selected-resource evidence copy")
 	}
 	if !strings.Contains(text, "assert 'Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…' in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains resource detail refresh loading copy")

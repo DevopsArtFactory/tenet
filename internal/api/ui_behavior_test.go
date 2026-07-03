@@ -5188,6 +5188,132 @@ const runUI = async (search, detailBody) => {
 	runNodeHarness(t, nodeProgram)
 }
 
+func TestSelectedResourceContextCalloutOmitsUnsupportedEvidenceHandoffsWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":           "payments-api-prod",
+		"accountName":    "prod-core",
+		"awsAccountId":   "123456789012",
+		"region":         "ap-northeast-2",
+		"appRef":         "payments",
+		"environmentRef": "prod",
+		"targetType":     "ec2",
+		"strategy":       "canary",
+		"executionMode":  "custom",
+		"sync":           map[string]any{"state": "Synced"},
+		"health":         map[string]any{"overall": "Healthy"},
+		"rollout": map[string]any{
+			"phase":       "Succeeded",
+			"currentStep": "Complete",
+			"execution": []map[string]any{
+				{"name": "payments-api-prod-legacy-hook", "resource": "legacyHook", "description": "Legacy rollout hook without evidence panels"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const resourceId = 'legacyHook::payments-api-prod-legacy-hook::Legacy rollout hook without evidence panels';
+const window = { location: { pathname: '/', search: '?' + new URLSearchParams({
+  page: 'resource',
+  deployment: 'payments-api-prod',
+  resourceType: 'legacyHook',
+  resourceId,
+}).toString(), hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathAndQuery, hash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (String(url).includes('/resource-inspection?resourceType=legacyHook')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, unavailableReason: 'unsupported_resource_type' }) });
+  if (String(url).includes('/resource-logs?resourceType=legacyHook')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, unavailableReason: 'unsupported_resource_type', entries: [] }) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+(async () => {
+  await settle();
+  await settle();
+  if (!fetchCalls.includes('/v1/overview/deployments/payments-api-prod')) throw new Error('expected resource page to load deployment detail, got ' + fetchCalls.join(', '));
+  const accounts = document.getElementById('accounts');
+  const callout = collectNodes(accounts, (node) => String(node.className || '').split(/\s+/).includes('selected-resource-context'))[0];
+  if (!callout) throw new Error('expected selected-resource callout');
+  const text = collectText(callout).join(' | ');
+  if (!text.includes('Selected resource context')) throw new Error('expected selected-resource callout: ' + text);
+  if (!text.includes('Current resource read: GET /v1/overview/deployments/payments-api-prod.')) throw new Error('expected selected-resource callout to keep top-level resource read: ' + text);
+  if (!text.includes('No focused evidence handoffs are available for this resource type yet. Use the current resource read above for this selection.')) throw new Error('expected unsupported resource copy to avoid unavailable panels: ' + text);
+  for (const forbidden of [
+    'Use the Live inspection and Recent logs handoffs below',
+    'Use the Live inspection handoff below',
+    'Use the Recent logs handoff below',
+    'Backing reads:',
+    'resource-inspection?resourceType=legacyHook',
+    'resource-logs?resourceType=legacyHook',
+  ]) {
+    if (text.includes(forbidden)) throw new Error('selected-resource callout should not include unsupported evidence copy ' + forbidden + ': ' + text);
+  }
+  const links = collectNodes(accounts, (node) => node.tagName === 'A');
+  if (links.find((node) => node.textContent === 'Jump to live inspection' || node.textContent === 'Jump to recent logs')) throw new Error('expected unsupported resource callout to omit evidence jump links');
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}
+
 func TestResourceDetailPageWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")

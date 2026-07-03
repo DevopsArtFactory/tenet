@@ -836,7 +836,7 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"top-level `Selected resource context` callout",
-		"the exact live-inspection/recent-log backing reads operators can refresh below",
+		"the supported live-inspection/recent-log backing reads operators can refresh below",
 		"GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}",
 		"GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}",
 	} {
