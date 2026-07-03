@@ -2054,24 +2054,33 @@
       const copyReadRouteToClipboard = (routeText) => {
         return copyTextToClipboard(routeText);
       };
+      const markCopyStatusButton = (button) => {
+        const status = createElement('span', 'copy-status-label', button.textContent || '');
+        status.setAttribute('role', 'status');
+        status.setAttribute('aria-live', 'polite');
+        status.setAttribute('aria-atomic', 'true');
+        button.replaceChildren(status);
+        return status;
+      };
       const createCopyReadRouteButton = (routeText, label = 'Copy read route') => {
         if (!routeText) return null;
         const button = createElement('button', 'toolbar-button copy-read-route', label);
+        const status = markCopyStatusButton(button);
         button.type = 'button';
         button.setAttribute('aria-label', `Copy ${routeText}`);
         button.addEventListener('click', () => {
           button.disabled = true;
           copyReadRouteToClipboard(routeText)
             .then(() => {
-              button.textContent = 'Copied';
+              status.textContent = 'Copied';
             })
             .catch(() => {
-              button.textContent = 'Copy failed';
+              status.textContent = 'Copy failed';
             })
             .finally(() => {
               setTimeout(() => {
                 button.disabled = false;
-                button.textContent = label;
+                status.textContent = label;
               }, 1600);
             });
         });
@@ -2086,21 +2095,22 @@
       const createCopyLinkButton = (href, label = 'Copy link', ariaLabel = '') => {
         if (!href) return null;
         const button = createElement('button', 'toolbar-button copy-link', label);
+        const status = markCopyStatusButton(button);
         button.type = 'button';
         button.setAttribute('aria-label', ariaLabel || label);
         button.addEventListener('click', () => {
           button.disabled = true;
           copyTextToClipboard(href)
             .then(() => {
-              button.textContent = 'Copied';
+              status.textContent = 'Copied';
             })
             .catch(() => {
-              button.textContent = 'Copy failed';
+              status.textContent = 'Copy failed';
             })
             .finally(() => {
               setTimeout(() => {
                 button.disabled = false;
-                button.textContent = label;
+                status.textContent = label;
               }, 1600);
             });
         });
