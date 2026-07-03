@@ -4743,7 +4743,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"representative live-inspection read plus correlated bookmarkable shell reads for the application drill-down, account drill-down, drift workspace, deployment-scoped audit workspace, and bookmarkable plan/apply workspace",
 			"CodeDeploy application, task-set target-group, and weighted production listener-rule resource shells",
 			"bookmarkable application-detail status summary shell",
-			"The raw embedded shell/docs contract also keeps the labels `Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `recent-log-lookup-context-card`, `Lookup path ·`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff present",
+			"The raw embedded shell/docs contract also keeps the labels `Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Runtime event navigation`, `Recent logs`, `Resolved backing resource`, `recent-log-lookup-context-card`, `Lookup path ·`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff present",
 			"resource is a valid drill-down target but has no independent recent-log stream yet",
 			"temp files via the shared `write_payload` helper",
 			"The compose-backed smoke now covers shipped resource drill-down shells directly",

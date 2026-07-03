@@ -333,9 +333,37 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 			"invalid source query",
 			"invalid limit query",
 			"source-filtered",
+			"Runtime event navigation",
+			"Newest visible event",
+			"Oldest visible event",
+			"Jump to newest event",
+			"Jump to oldest visible event",
+			"eventLimit",
+			"eventSource",
 		} {
 			if !strings.Contains(doc.text, fragment) {
 				t.Fatalf("expected %s deployment-events docs to include %q", doc.name, fragment)
+			}
+		}
+	}
+
+	for _, doc := range []struct {
+		name string
+		text string
+	}{
+		{name: "direct-process smoke", text: smokeLocalText},
+		{name: "Docker smoke", text: smokeDockerText},
+	} {
+		for _, fragment := range []string{
+			"Runtime event navigation",
+			"Newest visible event",
+			"Oldest visible event",
+			"Jump to newest event",
+			"Jump to oldest visible event",
+			"const createDeploymentEventsNavigation = (deploymentName, eventRows, limit, source) => {",
+		} {
+			if !strings.Contains(doc.text, fragment) {
+				t.Fatalf("expected %s deployment-events smoke contract to include %q", doc.name, fragment)
 			}
 		}
 	}
