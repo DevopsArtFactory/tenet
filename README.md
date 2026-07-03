@@ -35,7 +35,9 @@ Additional operator workspaces are linked from that flow: account detail, drift,
 plan/apply, audit timeline, deployment events, recent logs, and live inspection.
 Resource-detail quick navigation keeps `_self` links back to the Applications
 overview and parent Application detail page before operators pivot into focused
-log or inspection evidence.
+log or inspection evidence; non-click current destination/section chips expose
+`aria-current` so assistive technology receives the same orientation cues as the
+visual shell.
 The plan/apply workspace keeps disabled mutation controls explanatory: `Create Plan`
 is available for the currently reviewed deployment, while `Apply Plan` and
 record refreshes activate after persisted plan/apply records are loaded. If

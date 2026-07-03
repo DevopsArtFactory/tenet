@@ -1857,7 +1857,7 @@ assert_fragments("account_ui", account_ui, (
     "No section is currently targeted.",
     "On this page",
     "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')",
-    "createQuickNavChip('Account detail', 'Current destination: Account detail')",
+    "createQuickNavChip('Account detail', 'Current destination: Account detail', 'page')",
     "Account detail read refreshed ·",
     "Account detail read not refreshed yet",
     "account-detail-freshness",
@@ -1872,7 +1872,7 @@ assert_fragments("account_ui", account_ui, (
     "Use the applications overview to confirm whether filters hide deployments, or open the account JSON payload to inspect the raw catalog response.",
     "emptyStateActions.append(createNavLink(buildPageURL('applications'), 'Applications overview', '_self'));",
     "emptyStateActions.append(createNavLink(`/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}`, 'Account JSON'));",
-    "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)",
+    "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')",
     "detailSummary.id = 'account-summary';",
     "detailPanel.id = `account-deployment-detail-${sectionIDSegment(account.awsAccountId, 'account')}-${sectionIDSegment(deployment.name, 'deployment')}`;",
     "toggle.setAttribute('aria-controls', detailPanel.id);",
@@ -2035,7 +2035,7 @@ for fragment in (
     "const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {",
     "const trackCurrentSection = Boolean(currentSectionEmptyLabel) && sectionLinks.some((sectionLink) => sectionLink?.sectionID);",
     "(mode === 'drift' || mode === 'plan') ? 'No section is currently targeted.' : '',",
-    "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)",
+    "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')",
     "No section is currently targeted.",
     "No linked resources are available in this workspace yet.",
     "Current source: controller-authored managedDrift rows.",
@@ -2195,7 +2195,7 @@ assert_fragments("application_ui", application_ui, (
     "Current section",
     "No section is currently targeted.",
     "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')",
-    "createQuickNavChip('Application detail', 'Current destination: Application detail')",
+    "createQuickNavChip('Application detail', 'Current destination: Application detail', 'page')",
 ))
 
 for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_application_resource_ui, blue_task_set_target_group_resource_ui, production_listener_rule_resource_ui):
@@ -2238,7 +2238,7 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
         "pushResourceSection(troubleshootingSection, 'resource-troubleshooting-summary', 'Troubleshooting summary');",
         "Quick navigation",
         "Current section",
-        "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)",
+        "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')",
         "No section is currently targeted.",
         "No additional section links are available for this resource.",
     ):
