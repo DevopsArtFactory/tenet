@@ -1876,6 +1876,8 @@ assert '${workspaceLabel} read not refreshed yet' in ui, ui
 assert "const deploymentDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;" in ui, ui
 assert "Current workspace read: ${deploymentDetailReadRoute(deploymentName)}." in ui, ui
 assert 'Clear drift filters' in ui, ui
+assert "emptyActions.append(createRefreshButton('Clear drift filters', false, clearDriftFilters));" in ui, ui
+assert "driftTableWrap.replaceChildren(stateNode, emptyActions);" in ui, ui
 assert "params.set('driftQuery', normalized.query);" in ui, ui
 assert "params.set('driftSeverity', normalized.severity);" in ui, ui
 assert "params.set('driftSort', normalized.sort);" in ui, ui
