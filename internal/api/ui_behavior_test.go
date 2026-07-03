@@ -6412,6 +6412,7 @@ func TestResourceDetailPageRecentLogsWithNodeHarness(t *testing.T) {
 			"execution": []map[string]any{
 				{"name": "payments-api-staging Deployment Group", "resource": "codeDeployDeploymentGroup", "description": "Linear traffic shifting deployment group"},
 				{"name": "payments-api-staging-service", "resource": "ecsService", "description": "Primary ECS service"},
+				{"name": "arn:aws:ecs:ap-northeast-2:210987654321:task/payments-api-staging/abc123", "resource": "ecsTask", "description": "Selected ECS task"},
 			},
 		},
 	})
@@ -6471,11 +6472,12 @@ async function settle() { await Promise.resolve(); await new Promise((resolve) =
 const resourceID = 'codeDeployDeploymentGroup::payments-api-staging Deployment Group::Linear traffic shifting deployment group';
 async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=' + encodeURIComponent(resourceID)) {
   const document = createDocument();
-  const window = { location: { pathname: '/', search, hash: '' } };
+  const clipboardWrites = [];
+  const window = { location: { pathname: '/', search, hash: '' }, navigator: { clipboard: { writeText: (text) => { clipboardWrites.push(String(text)); return Promise.resolve(); } } } };
   const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetchImpl, history, Element, InputElement);
   await settle();
-  return { document, window };
+  return { document, window, clipboardWrites };
 }
 
 (async () => {
@@ -6496,6 +6498,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
     if (!loadingText.includes(fragment)) throw new Error('expected recent-log loading context ' + fragment + ', got ' + loadingText);
   });
   if (loadingText.includes('Share log entry')) throw new Error('expected loading recent logs state not to render share links');
+  if (loadingText.includes('Copy log entry link')) throw new Error('expected loading recent logs state not to render copy row links');
   const loadingLimitSelect = collectNodes(loadingRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Log limit')[0];
   if (!loadingLimitSelect) throw new Error('expected recent logs panel to expose the log limit select while loading');
   if (!loadingLimitSelect.disabled) throw new Error('expected recent logs limit select to be disabled while logs are loading');
@@ -6516,6 +6519,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   if (!unavailableLookupCardText.includes('Lookup path · ap-northeast-2 · control 123456789012 → target 210987654321 · cross-account lookup · observer role not configured')) throw new Error('expected unavailable lookup-context card summary, got ' + unavailableLookupCardText);
   if (!unavailableText.includes('Recent logs are unavailable for this resource.')) throw new Error('expected resource page unavailable recent logs state');
   if (unavailableText.includes('Share log entry')) throw new Error('expected unavailable recent logs state not to render share links');
+  if (unavailableText.includes('Copy log entry link')) throw new Error('expected unavailable recent logs state not to render copy row links');
   if (!unavailableText.includes('Ask the platform owner to configure the observer role for this target account, then retry Recent logs after the account wiring is updated.')) throw new Error('expected unavailable recent logs state to surface friendly provider guidance');
   if (!unavailableText.includes('Lookup path · ap-northeast-2 · control 123456789012 → target 210987654321 · cross-account lookup · observer role not configured')) throw new Error('expected unavailable recent logs state to summarize the lookup path, got ' + unavailableText);
   if (!unavailableText.includes('Lookup region')) throw new Error('expected unavailable recent logs state to label lookup region');
@@ -6553,6 +6557,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   if (!emptyLookupCardText.includes('Lookup path · ap-northeast-2 · account 210987654321 · same-account lookup · observer role configured')) throw new Error('expected empty lookup-context card summary, got ' + emptyLookupCardText);
   if (!emptyText.includes('No recent logs are available for this resource.')) throw new Error('expected resource page empty recent logs state');
   if (emptyText.includes('Share log entry')) throw new Error('expected empty recent logs state not to render share links');
+  if (emptyText.includes('Copy log entry link')) throw new Error('expected empty recent logs state not to render copy row links');
   if (!emptyText.includes('Tenet reached the recent-log provider, but no events were found in the selected bounded window.')) throw new Error('expected empty recent logs state to explain no_recent_events, got ' + emptyText);
   if (emptyText.includes('no_recent_events')) throw new Error('expected empty recent logs state not to expose raw emptyReason code');
   if (!emptyText.includes('Lookup path · ap-northeast-2 · account 210987654321 · same-account lookup · observer role configured')) throw new Error('expected empty recent logs state to summarize same-account lookup path, got ' + emptyText);
@@ -6645,6 +6650,13 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   if (shareLinks[0].href.includes(expectedLegacyLogAnchor)) throw new Error('expected backend entryId to replace client-derived fallback anchor, got ' + shareLinks[0].href);
   if (shareLinks[0].target !== '_self') throw new Error('expected share log link to stay in embedded UI flow');
   if (shareLinks[0].rel) throw new Error('expected share log link not to carry new-tab rel attributes');
+  const copyLogButtons = collectNodes(populatedRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Copy log entry link');
+  if (copyLogButtons.length !== 1) throw new Error('expected one copy button for the rendered log entry, got ' + copyLogButtons.length);
+  if (copyLogButtons[0].getAttribute('aria-label') !== 'Copy log entry share link') throw new Error('expected copy log entry button to describe the copied handoff');
+  copyLogButtons[0].dispatch('click');
+  await settle();
+  if (populatedRun.clipboardWrites.join(', ') !== shareLinks[0].href) throw new Error('expected copy log entry link to copy the adjacent share-link URL, got ' + populatedRun.clipboardWrites.join(', ') + ' for share URL ' + shareLinks[0].href);
+  if (copyLogButtons[0].textContent !== 'Copied') throw new Error('expected copy log entry button success label');
   const anchoredLogEntry = collectNodes(populatedRun.document.getElementById('accounts'), (node) => node.tagName === 'LI' && node.getAttribute('id') === expectedBackendLogAnchor)[0];
   if (!anchoredLogEntry) throw new Error('expected rendered log row to expose backend entryId anchor id ' + expectedBackendLogAnchor);
   if (!populatedText.includes('<img src=x onerror=1> rollback check passed')) throw new Error('expected populated recent logs section to render raw log message text safely');
@@ -6662,8 +6674,38 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   const legacyShareLinks = collectNodes(legacyRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Share log entry');
   if (legacyShareLinks.length !== 1) throw new Error('expected one legacy share link, got ' + legacyShareLinks.length);
   if (legacyShareLinks[0].href !== expectedResourceRoute + '#' + expectedLegacyLogAnchor) throw new Error('expected legacy recent-log payloads without entryId to keep deterministic fallback anchor, got ' + legacyShareLinks[0].href);
+  const legacyCopyLogButtons = collectNodes(legacyRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Copy log entry link');
+  if (legacyCopyLogButtons.length !== 1) throw new Error('expected one legacy copy button, got ' + legacyCopyLogButtons.length);
+  legacyCopyLogButtons[0].dispatch('click');
+  await settle();
+  if (legacyRun.clipboardWrites.join(', ') !== legacyShareLinks[0].href) throw new Error('expected copy log entry link to copy the adjacent fallback-anchor URL, got ' + legacyRun.clipboardWrites.join(', ') + ' for share URL ' + legacyShareLinks[0].href);
   const legacyAnchoredLogEntry = collectNodes(legacyRun.document.getElementById('accounts'), (node) => node.tagName === 'LI' && node.getAttribute('id') === expectedLegacyLogAnchor)[0];
   if (!legacyAnchoredLogEntry) throw new Error('expected legacy recent-log row to expose fallback anchor id ' + expectedLegacyLogAnchor);
+
+  const taskClusterArn = 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-api-staging';
+  const taskResourceID = 'ecsTask::arn:aws:ecs:ap-northeast-2:210987654321:task/payments-api-staging/abc123::Selected ECS task';
+  const taskSearch = '?page=resource&deployment=payments-api-staging&resourceType=ecsTask&resourceId=' + encodeURIComponent(taskResourceID) + '&containerName=api&instanceId=i-0abc123def4567890&clusterArn=' + encodeURIComponent(taskClusterArn) + '&resourceLogLimit=25';
+  const taskLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Atask%2Fpayments-api-staging%2Fabc123&containerName=api&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-api-staging&limit=25';
+  const selectorFetchCalls = [];
+  const selectorRun = await renderWithFetch((url) => {
+    selectorFetchCalls.push(String(url));
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === taskLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', entries: [{ entryId: 'rlog_task_selected_scope', timestamp: '2026-04-16T07:12:00Z', containerName: 'api', instanceId: 'i-0abc123def4567890', message: 'selected task scope log' }] }) });
+    throw new Error('unexpected selected-scope fetch url: ' + url);
+  }, taskSearch);
+  await settle();
+  if (!selectorFetchCalls.includes(taskLogsURL)) throw new Error('expected selected-scope recent-log fetch to preserve selectors and limit, got ' + selectorFetchCalls.join(', '));
+  const selectorShareLinks = collectNodes(selectorRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Share log entry');
+  if (selectorShareLinks.length !== 1) throw new Error('expected one selector share link, got ' + selectorShareLinks.length);
+  const selectorShareHref = selectorShareLinks[0].href;
+  ['containerName=api', 'instanceId=i-0abc123def4567890', 'clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-api-staging', 'resourceLogLimit=25', '#resource-log-rlog-task-selected-scope'].forEach((fragment) => {
+    if (!selectorShareHref.includes(fragment)) throw new Error('expected selector share link to preserve ' + fragment + ', got ' + selectorShareHref);
+  });
+  const selectorCopyLogButtons = collectNodes(selectorRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Copy log entry link');
+  if (selectorCopyLogButtons.length !== 1) throw new Error('expected one selector copy button, got ' + selectorCopyLogButtons.length);
+  selectorCopyLogButtons[0].dispatch('click');
+  await settle();
+  if (selectorRun.clipboardWrites.join(', ') !== selectorShareHref) throw new Error('expected selected-scope copy log entry link to copy the adjacent share-link URL, got ' + selectorRun.clipboardWrites.join(', ') + ' for share URL ' + selectorShareHref);
 })();
 `
 
