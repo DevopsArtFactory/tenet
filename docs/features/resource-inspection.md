@@ -76,7 +76,7 @@ Common response fields:
 - optional `resultScope`
 - `unavailableReason` on unavailable responses
 
-Unavailable responses keep the selected route explicit with `available=false`, `unavailableReason`, `lookupContext`, and any accepted selector echo such as `clusterArn` or `instanceId`. This makes local/no-AWS, missing-provider, cross-account, stale-resource,
+Unavailable responses keep the selected route explicit with `available=false`, `unavailableReason`, `lookupContext`, and any accepted selector echo such as `clusterArn` or `instanceId`. The API also backfills the resolved deployment/resource envelope (`deploymentName`, `resourceType`, `resourceName`, and rollout `resourceDescription` when known) after provider lookup so sparse provider results still remain self-describing evidence. This makes local/no-AWS, missing-provider, cross-account, stale-resource,
 and unsupported-resource states useful evidence instead of vague provider
 failures. If the API instance was started without resource-inspection provider
 wiring, Tenet still validates the deployment/resource selectors first, preserves

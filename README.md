@@ -203,7 +203,7 @@ Primary operator APIs:
   `ec2InstanceStatus` status-check evidence beside sampled/selected EC2 host
   details when AWS `DescribeInstanceStatus` is available)
 
-Resource drill-down Recent logs and Live inspection panels summarize lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract. Use
+Resource drill-down Recent logs and Live inspection panels summarize lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract. Live inspection responses keep the resolved deployment/resource identity and accepted selectors (such as `clusterArn` or `instanceId`) in the top-level envelope even when a provider returns sparse evidence. Use
 `docs/features/resource-recent-logs.md` and
 `docs/features/resource-inspection.md` for the exact route selectors, response
 fields, operator labels, and smoke-test expectations; use

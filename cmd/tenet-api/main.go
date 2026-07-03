@@ -866,8 +866,29 @@ func newOverviewDeploymentResourceInspectionProvider(
 		if err != nil {
 			return resourceinspection.Result{}, err
 		}
+		if result.DeploymentName == "" {
+			result.DeploymentName = request.DeploymentName
+		}
+		if result.ResourceType == "" {
+			result.ResourceType = request.ResourceType
+		}
+		if result.ResourceName == "" {
+			result.ResourceName = request.ResourceName
+		}
 		if result.ResourceDescription == "" {
 			result.ResourceDescription = strings.TrimSpace(request.ResourceDescription)
+		}
+		if result.InstanceID == "" {
+			result.InstanceID = resourceinspection.InstanceIDFromContext(ctx)
+		}
+		if result.ClusterARN == "" {
+			result.ClusterARN = resourceinspection.ClusterARNFromContext(ctx)
+		}
+		if result.BackingResourceType == "" {
+			result.BackingResourceType = strings.TrimSpace(request.BackingResourceType)
+		}
+		if result.BackingResourceName == "" {
+			result.BackingResourceName = strings.TrimSpace(request.BackingResourceName)
 		}
 		return result, nil
 	}
