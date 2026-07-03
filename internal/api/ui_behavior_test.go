@@ -4619,8 +4619,20 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   const driftHandoff = runtimeEventLinks.find((node) => node.textContent === 'Open field-level drift' && node.href === '/?page=drift&deployment=payments-api-staging#drift-field-level');
   if (!driftHandoff || driftHandoff.target !== '_self' || driftHandoff.rel) throw new Error('expected runtime-events managed-drift handoff to open the field-level drift workspace section in shell');
   const expectedEventAnchor = 'runtime-event-2026-04-16t07-10-00z-shifttrafficlinear-shifted-50-percent-of-traffic-controller';
+  const expectedOldestEventAnchor = 'runtime-event-2026-04-16t07-05-00z-createcodedeploydeployment-created-deployment-group-revision-for-v2-controller';
   const runtimeEventItems = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'LI');
   if (!runtimeEventItems.find((node) => node.id === expectedEventAnchor)) throw new Error('expected runtime event row to expose a stable timestamp/step/summary/source anchor id');
+  if (!runtimeEventItems.find((node) => node.id === expectedOldestEventAnchor)) throw new Error('expected oldest runtime event row to expose a stable timestamp/step/summary/source anchor id');
+  const eventNavigation = collectNodes(loadingView.document.getElementById('accounts'), (node) => String(node.className || '').includes('deployment-events-navigation'))[0];
+  if (!eventNavigation) throw new Error('expected runtime event navigation strip when events are loaded');
+  const eventNavigationText = collectText(eventNavigation).join(' | ');
+  if (!eventNavigationText.includes('Runtime event navigation')) throw new Error('expected runtime event navigation label');
+  if (!eventNavigationText.includes('Newest visible event · 2026-04-16T07:10:00Z · Shifted 50 percent of traffic')) throw new Error('expected newest visible runtime event cue, got ' + eventNavigationText);
+  if (!eventNavigationText.includes('Oldest visible event · 2026-04-16T07:05:00Z · Created deployment group revision for v2')) throw new Error('expected oldest visible runtime event cue, got ' + eventNavigationText);
+  const newestJump = runtimeEventLinks.find((node) => node.textContent === 'Jump to newest event' && node.href === '/?page=application&deployment=payments-api-staging#' + expectedEventAnchor);
+  if (!newestJump || newestJump.target !== '_self' || newestJump.rel) throw new Error('expected runtime event navigation newest jump to target the newest visible event in shell');
+  const oldestJump = runtimeEventLinks.find((node) => node.textContent === 'Jump to oldest visible event' && node.href === '/?page=application&deployment=payments-api-staging#' + expectedOldestEventAnchor);
+  if (!oldestJump || oldestJump.target !== '_self' || oldestJump.rel) throw new Error('expected runtime event navigation oldest jump to target the oldest visible event in shell');
   const shareEventLinks = runtimeEventLinks.filter((node) => node.textContent === 'Share event');
   if (shareEventLinks.length !== 2) throw new Error('expected every runtime event row to expose a share event link');
   const firstShareLink = shareEventLinks.find((node) => node.href === '/?page=application&deployment=payments-api-staging#' + expectedEventAnchor);
@@ -4676,6 +4688,9 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   if (!selectedWindowSelect || selectedWindowSelect.value !== '25') throw new Error('expected Event window selector to reflect bookmarked eventLimit query param');
   const selectedWindowShareLink = collectNodes(selectedWindowView.document.getElementById('accounts'), (node) => node.tagName === 'A').find((node) => node.textContent === 'Share event' && node.href === '/?page=application&eventLimit=25&deployment=payments-api-staging#' + expectedEventAnchor);
   if (!selectedWindowShareLink) throw new Error('expected bookmarked Event window share links to preserve the non-default eventLimit');
+  const selectedWindowNavigationLinks = collectNodes(selectedWindowView.document.getElementById('accounts'), (node) => node.tagName === 'A' && String(node.textContent || '').startsWith('Jump to '));
+  if (!selectedWindowNavigationLinks.find((node) => node.textContent === 'Jump to newest event' && node.href === '/?page=application&eventLimit=25&deployment=payments-api-staging#' + expectedEventAnchor && node.target === '_self' && !node.rel)) throw new Error('expected bookmarked Event window newest navigation link to preserve eventLimit');
+  if (!selectedWindowNavigationLinks.find((node) => node.textContent === 'Jump to oldest visible event' && node.href === '/?page=application&eventLimit=25&deployment=payments-api-staging#' + expectedOldestEventAnchor && node.target === '_self' && !node.rel)) throw new Error('expected bookmarked Event window oldest navigation link to preserve eventLimit');
   if (selectedWindowView.window.location.search !== '?page=application&deployment=payments-api-staging&eventLimit=25') throw new Error('expected bookmarked Event window route to remain stable after rendering');
 
   const selectedSourceView = await render((url) => {
@@ -4695,6 +4710,15 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   if (eventSourceSelect.value !== 'controller') throw new Error('expected Event source selector to reflect bookmarked eventSource query param');
   const selectedSourceShare = collectNodes(selectedSourceView.document.getElementById('accounts'), (node) => node.tagName === 'A').find((node) => node.textContent === 'Share event' && node.href.endsWith('#' + expectedEventAnchor));
   if (!selectedSourceShare) throw new Error('expected source-filtered runtime event share link');
+  const selectedSourceNavigationLinks = collectNodes(selectedSourceView.document.getElementById('accounts'), (node) => node.tagName === 'A' && String(node.textContent || '').startsWith('Jump to '));
+  const selectedSourceNewestJump = selectedSourceNavigationLinks.find((node) => node.textContent === 'Jump to newest event' && node.href.endsWith('#' + expectedEventAnchor));
+  if (!selectedSourceNewestJump || selectedSourceNewestJump.target !== '_self' || selectedSourceNewestJump.rel) throw new Error('expected source-filtered newest navigation link');
+  const [selectedSourceNewestJumpURL, selectedSourceNewestJumpHash = ''] = selectedSourceNewestJump.href.split('#');
+  const selectedSourceNewestJumpParams = new URLSearchParams(selectedSourceNewestJumpURL.split('?')[1] || '');
+  for (const [key, value] of [['page', 'application'], ['q', 'payments'], ['sync', 'OutOfSync'], ['account', '210987654321'], ['deployment', 'payments-api-staging'], ['eventLimit', '25'], ['eventSource', 'controller']]) {
+    if (selectedSourceNewestJumpParams.get(key) !== value) throw new Error('expected source-filtered navigation link to preserve ' + key + ', got ' + selectedSourceNewestJump.href);
+  }
+  if (selectedSourceNewestJumpHash !== expectedEventAnchor) throw new Error('expected source-filtered navigation link to target newest event anchor, got ' + selectedSourceNewestJump.href);
   const [selectedSourceShareURL, selectedSourceShareHash = ''] = selectedSourceShare.href.split('#');
   const selectedSourceShareParams = new URLSearchParams(selectedSourceShareURL.split('?')[1] || '');
   for (const [key, value] of [['page', 'application'], ['q', 'payments'], ['sync', 'OutOfSync'], ['account', '210987654321'], ['deployment', 'payments-api-staging'], ['eventLimit', '25'], ['eventSource', 'controller']]) {

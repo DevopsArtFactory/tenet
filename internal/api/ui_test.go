@@ -214,6 +214,26 @@ func TestEmbeddedUIRendersDeploymentEventSourceSummaryChipsSafely(t *testing.T) 
 	}
 }
 
+func TestEmbeddedUIRendersDeploymentEventNavigationSafely(t *testing.T) {
+	script := embeddedUIScriptForTest(t)
+	for _, want := range []string{
+		"const createDeploymentEventsNavigation = (deploymentName, eventRows, limit, source) => {",
+		"detail-callout deployment-events-navigation",
+		"Runtime event navigation",
+		"`Newest visible event · ${textOrDash(newest.event?.timestamp)} · ${newest.summaryText}`",
+		"`Oldest visible event · ${textOrDash(oldest.event?.timestamp)} · ${oldest.summaryText}`",
+		"createNavLink(runtimeEventAnchorURL(deploymentName, newest.eventID, limit, source), 'Jump to newest event', '_self')",
+		"createNavLink(runtimeEventAnchorURL(deploymentName, oldest.eventID, limit, source), 'Jump to oldest visible event', '_self')",
+		"const eventRows = events.map((event) => {",
+		"const eventNavigation = createDeploymentEventsNavigation(deploymentName, eventRows, selectedLimit, selectedSource);",
+		"...(eventNavigation ? [eventNavigation] : [])",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("expected embedded UI event-navigation contract %q", want)
+		}
+	}
+}
+
 func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 	body := string(indexHTML)
 

@@ -7452,6 +7452,25 @@
         const fetchedAt = resourcePanelFetchedAtText(result);
         return fetchedAt ? createElement('div', 'detail-condition-meta deployment-events-freshness', `Last refreshed · ${fetchedAt}`) : null;
       };
+      const createDeploymentEventsNavigation = (deploymentName, eventRows, limit, source) => {
+        if (!eventRows.length) return null;
+        const newest = eventRows[0];
+        const oldest = eventRows[eventRows.length - 1];
+        const navigation = createElement('div', 'detail-callout deployment-events-navigation');
+        navigation.setAttribute('aria-label', 'Runtime event navigation');
+        const links = createElement('div', 'quick-nav-links');
+        links.append(
+          createNavLink(runtimeEventAnchorURL(deploymentName, newest.eventID, limit, source), 'Jump to newest event', '_self'),
+          createNavLink(runtimeEventAnchorURL(deploymentName, oldest.eventID, limit, source), 'Jump to oldest visible event', '_self'),
+        );
+        navigation.append(
+          createElement('strong', '', 'Runtime event navigation'),
+          createElement('span', 'detail-condition-meta', `Newest visible event · ${textOrDash(newest.event?.timestamp)} · ${newest.summaryText}`),
+          createElement('span', 'detail-condition-meta', `Oldest visible event · ${textOrDash(oldest.event?.timestamp)} · ${oldest.summaryText}`),
+          links,
+        );
+        return navigation;
+      };
       const shortRevision = (value) => {
         const text = String(value || '').trim();
         return text ? text.slice(0, 12) : '';
@@ -7573,13 +7592,17 @@
         const driftSummary = createElement('div', 'detail-condition-meta', deploymentEventsManagedDriftSummary(result));
         const eventList = createElement('ol', 'detail-list');
         const seenEventAnchors = new Map();
-
-        events.forEach((event) => {
-          const item = createElement('li');
+        const eventRows = events.map((event) => {
           const eventID = uniqueRuntimeEventAnchorID(event, seenEventAnchors);
+          const summaryText = textOrDash(event.summary) === '—' ? 'Controller runtime event' : textOrDash(event.summary);
+          return { event, eventID, summaryText };
+        });
+        const eventNavigation = createDeploymentEventsNavigation(deploymentName, eventRows, selectedLimit, selectedSource);
+
+        eventRows.forEach(({ event, eventID, summaryText }) => {
+          const item = createElement('li');
           item.id = eventID;
           item.setAttribute('id', eventID);
-          const summaryText = textOrDash(event.summary) === '—' ? 'Controller runtime event' : textOrDash(event.summary);
           const eventHeading = createElement('div', 'detail-history-meta');
           eventHeading.append(
             createElement('strong', '', summaryText),
@@ -7635,7 +7658,7 @@
           eventList.append(item);
         });
 
-        section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), ...(sourceSummaryChips ? [sourceSummaryChips] : []), ordering, driftSummary, eventList);
+        section.replaceChildren(heading, intro, ...(eventNavigation ? [eventNavigation] : []), ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), ...(sourceSummaryChips ? [sourceSummaryChips] : []), ordering, driftSummary, eventList);
       };
       const renderDeploymentEventsSection = (section, deploymentName, options = {}) => {
         const force = Boolean(options?.force);
