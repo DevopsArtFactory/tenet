@@ -1,6 +1,6 @@
 # Tenet v1 enterprise SSO boundary
 
-This note defines the intended boundary for the first enterprise SSO provider work in Tenet. It is a quality gate for issue #662: provider integration should add identity/session inputs without changing Tenet's existing trusted-front-door authorization contract or the shipped repository-backed RBAC policy diagnostics foundation.
+This note defines the intended boundary for the first enterprise SSO provider work in Tenet. It is a quality gate for issue #662: provider integration should add identity/session inputs without changing Tenet's existing trusted-front-door authorization contract or the shipped repository-backed RBAC policy foundation, including the explicit filesystem-catalog route-authorization opt-in.
 
 ## Goal
 
@@ -96,7 +96,7 @@ Recommended mapping:
 | `name` | profile/display-name claim | display-name attribute/claim |
 | groups | OIDC/SAML group claims when configured | Okta group attributes/claims |
 
-Group claims are identity input only. Tenet now exposes repository-backed RBAC policy diagnostics that can map users/groups to Tenet roles and deployment/project/environment scopes, but provider group names still do not directly grant route access unless a future enforcement slice explicitly opts into policy-backed authorization.
+Group claims are identity input only. Tenet exposes repository-backed RBAC policy evaluation that can map users/groups to Tenet roles and deployment/project/environment scopes, but provider group names still do not directly grant route access unless filesystem catalog operators explicitly enable `TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true`.
 
 ## Precedence and authorization safety
 
@@ -105,7 +105,7 @@ Enterprise SSO must not weaken existing fail-safe behavior.
 - Trusted front-door identity remains authoritative when a request arrives through a configured trusted front door that forwards `X-Tenet-Authenticated-*` identity headers.
 - Browser-supplied identity, role, group, or scope headers are never trusted directly; production front doors must strip spoofable inbound headers before forwarding trusted values.
 - Provider login creates authenticated identity/session evidence, not implicit deployment access.
-- Route authorization still depends on Tenet's existing trusted role/deployment/project/environment enforcement toggles; repository-backed RBAC policy evaluation is currently exposed as diagnostic evidence through `GET /v1/operator/context.repositoryPolicy` rather than as the route-enforcement source.
+- Route authorization still depends on Tenet's existing trusted role/deployment/project/environment enforcement toggles by default; when filesystem catalog operators explicitly enable `TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true`, repository-backed RBAC policy evaluation becomes the guarded route authorization source while `GET /v1/operator/context.repositoryPolicy` remains the troubleshooting evidence for those derived grants.
 - Missing, unknown, or unsupported provider roles/groups fail closed for route access unless the trusted front door forwards supported Tenet roles/scopes; repository policy diagnostics can show how configured users/groups would map to `viewer`, `operator`, or `admin` and concrete scopes.
 
 ## Operator diagnostics
@@ -144,4 +144,4 @@ This issue is not the RBAC policy redesign. Keep these concerns separate:
 - no automatic access grant from raw provider group names
 - no removal of trusted-front-door header support
 
-Repository-backed policy parsing/evaluation for users/groups, Tenet roles, and deployment/project/environment scopes is already shipped as the first diagnostic policy foundation through `GET /v1/operator/context.repositoryPolicy`. Remaining work is provider-token/group lifecycle hardening and an explicit future decision to wire policy-derived grants into route enforcement.
+Repository-backed policy parsing/evaluation for users/groups, Tenet roles, and deployment/project/environment scopes is already shipped through `GET /v1/operator/context.repositoryPolicy`, and filesystem catalog runs can explicitly opt into using those policy-derived grants for guarded route authorization with `TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true`. Remaining work is provider-token/group lifecycle hardening and any future provider-specific group synchronization beyond the current request-scoped `X-Tenet-Authenticated-Groups` input.
