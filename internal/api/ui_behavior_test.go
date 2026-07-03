@@ -243,6 +243,18 @@ const scenarios = [
     recoveryLink: { text: 'Back to applications', href: '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' },
   },
   {
+    name: 'resource bookmark without deployment renders recovery link without fetching detail',
+    search: '?page=resource&resourceType=ecsService&resourceId=ecsService%3A%3Apayments-api-staging&q=payments&sync=OutOfSync&health=Progressing&account=210987654321',
+    expectedFetchCount: 0,
+    expected: [
+      'Resource detail bookmark is missing required context',
+      'This bookmark needs a deployment query parameter before Tenet can open the resource detail page.',
+      'Return to the applications overview to choose a valid drill-down target without losing the current search, sync, health, or account filters.',
+      'Back to applications',
+    ],
+    recoveryLink: { text: 'Back to applications', href: '/?page=applications&q=payments&sync=OutOfSync&health=Progressing&account=210987654321' },
+  },
+  {
     name: 'applications overview 401 explains trusted front door retry',
     search: '?q=payments&sync=OutOfSync&account=210987654321',
     route: '/v1/overview/applications',
