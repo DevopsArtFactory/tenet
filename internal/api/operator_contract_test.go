@@ -267,7 +267,8 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		"keeps GitHub OAuth, Google Workspace OIDC, and Okta OIDC as active managed-login providers only when explicitly configured",
 		"keeps Okta SAML diagnostic-only",
 		"repository-backed RBAC policy diagnostics as the shipped first policy foundation",
-		"policy-backed route enforcement remain future work",
+		"Repository-backed policy route authorization is shipped as an explicit filesystem-catalog opt-in",
+		"`TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true`",
 		"`TENET_AUTH_PROVIDER=github`",
 		"`TENET_AUTH_PROVIDER=google_oidc`",
 		"`TENET_AUTH_PROVIDER=okta_oidc`",
@@ -316,16 +317,28 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		"Trusted front-door identity remains authoritative",
 		"Diagnostics must not expose client secrets, raw ID/access/refresh tokens, SAML assertions, authorization codes, private keys, or provider cookies.",
 		"Group claims are identity input only.",
-		"repository-backed RBAC policy diagnostics that can map users/groups to Tenet roles and deployment/project/environment scopes",
-		"Route authorization still depends on Tenet's existing trusted role/deployment/project/environment enforcement toggles",
+		"repository-backed RBAC policy evaluation that can map users/groups to Tenet roles and deployment/project/environment scopes",
+		"Route authorization still depends on Tenet's existing trusted role/deployment/project/environment enforcement toggles by default",
+		"repository-backed RBAC policy evaluation becomes the guarded route authorization source",
 		"This issue is not the RBAC policy redesign.",
-		"Repository-backed policy parsing/evaluation for users/groups, Tenet roles, and deployment/project/environment scopes is already shipped as the first diagnostic policy foundation",
-		"Remaining work is provider-token/group lifecycle hardening and an explicit future decision to wire policy-derived grants into route enforcement.",
+		"Repository-backed policy parsing/evaluation for users/groups, Tenet roles, and deployment/project/environment scopes is already shipped through `GET /v1/operator/context.repositoryPolicy`",
+		"Remaining work is provider-token/group lifecycle hardening and any future provider-specific group synchronization beyond the current request-scoped `X-Tenet-Authenticated-Groups` input.",
 	} {
 		if !strings.Contains(doc, fragment) {
 			t.Fatalf("expected enterprise SSO docs to include %q", fragment)
 		}
 	}
+
+	for _, stale := range []string{
+		"policy-backed route enforcement remain future work",
+		"future enforcement slice explicitly opts into policy-backed authorization",
+		"explicit future decision to wire policy-derived grants into route enforcement",
+	} {
+		if strings.Contains(operatorContractsDoc, stale) || strings.Contains(doc, stale) {
+			t.Fatalf("expected enterprise SSO/operator docs to avoid stale repository-policy enforcement wording %q", stale)
+		}
+	}
+
 	for _, source := range []struct {
 		name string
 		body string
