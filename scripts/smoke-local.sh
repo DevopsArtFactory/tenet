@@ -1803,6 +1803,10 @@ assert "const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/
 assert "failure: 'applications overview request failed'," in ui, ui
 assert 'No visible applications' in ui, ui
 assert 'Open Operator context details' in ui, ui
+assert "const renderMissingRouteParameterState = (pageLabel, missingParam) => {" in ui, ui
+assert '${pageLabel} bookmark is missing required context' in ui, ui
+assert "createNavLink(buildPageURL('applications'), 'Back to applications', '_self')" in ui, ui
+assert 'without losing the current search, sync, health, or account filters' in ui, ui
 assert 'currentBookmarkableURL(operatorContextAccessDetailsPanelID)' in ui, ui
 assert "return 'Applications overview';" in ui, ui
 assert "const setEmbeddedBrowserTitle = (...parts) => {" in ui, ui

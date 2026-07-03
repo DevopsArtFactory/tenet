@@ -220,6 +220,29 @@ const policyOperatorContext = {
 };
 const scenarios = [
   {
+    name: 'account bookmark without accountId renders recovery link without fetching detail',
+    search: '?page=account&q=payments&sync=OutOfSync',
+    expectedFetchCount: 0,
+    expected: [
+      'Account detail bookmark is missing required context',
+      'This bookmark needs a accountId query parameter before Tenet can open the account detail page.',
+      'Return to the applications overview to choose a valid drill-down target without losing the current search, sync, health, or account filters.',
+      'Back to applications',
+    ],
+    recoveryLink: { text: 'Back to applications', href: '/?page=applications&q=payments&sync=OutOfSync' },
+  },
+  {
+    name: 'application bookmark without deployment renders recovery link without fetching detail',
+    search: '?page=application&q=payments&sync=OutOfSync&account=210987654321',
+    expectedFetchCount: 0,
+    expected: [
+      'Application detail bookmark is missing required context',
+      'This bookmark needs a deployment query parameter before Tenet can open the application detail page.',
+      'Back to applications',
+    ],
+    recoveryLink: { text: 'Back to applications', href: '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' },
+  },
+  {
     name: 'applications overview 401 explains trusted front door retry',
     search: '?q=payments&sync=OutOfSync&account=210987654321',
     route: '/v1/overview/applications',
@@ -498,7 +521,7 @@ const scenarios = [
     await settle();
     await settle();
     await settle();
-    const expectedFetchCount = scenario.operatorContext ? 2 : 1;
+    const expectedFetchCount = scenario.expectedFetchCount ?? (scenario.operatorContext ? 2 : 1);
     if (fetchCount !== expectedFetchCount) throw new Error('expected ' + expectedFetchCount + ' fetches for ' + scenario.name + ', got ' + fetchCount);
     if (window.location.search !== initialSearch) throw new Error('expected bookmarkable URL to stay unchanged for ' + scenario.name + ', got ' + window.location.search);
     if (window.location.hash !== initialHash) throw new Error('expected bookmarkable hash to stay unchanged for ' + scenario.name + ', got ' + window.location.hash);
@@ -526,6 +549,12 @@ const scenarios = [
     const enterpriseSignInLink = links.find((link) => link.text.includes('Sign in with Google Workspace SSO') || link.text.includes('Sign in with Okta SSO'));
     const accessRetryLink = links.find((link) => link.text.includes('Retry current page after access update'));
     const operatorContextLink = links.find((link) => link.text.includes('Open Operator context details'));
+    if (scenario.recoveryLink) {
+      const recoveryLink = links.find((link) => link.text === scenario.recoveryLink.text);
+      if (!recoveryLink) throw new Error('expected recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
+      if (recoveryLink.href !== scenario.recoveryLink.href) throw new Error('expected recovery link href for ' + scenario.name + ' to be ' + scenario.recoveryLink.href + ', got ' + recoveryLink.href);
+      if (recoveryLink.target !== '_self') throw new Error('expected recovery link to stay in same shell for ' + scenario.name);
+    }
     if (scenario.status === 401 && scenario.operatorContext?.authRuntime?.enterpriseSso?.active) {
       if (!enterpriseSignInLink) throw new Error('expected enterprise SSO sign-in recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
       const expectedReturn = encodeURIComponent('/' + initialSearch + initialHash);

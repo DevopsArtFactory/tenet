@@ -4941,6 +4941,22 @@
         empty.setAttribute('aria-atomic', 'true');
         document.getElementById('accounts').replaceChildren(empty);
       };
+      const renderMissingRouteParameterState = (pageLabel, missingParam) => {
+        const root = document.getElementById('accounts');
+        const empty = createElement('div', 'empty');
+        empty.setAttribute('role', 'status');
+        empty.setAttribute('aria-live', 'polite');
+        empty.setAttribute('aria-atomic', 'true');
+        const actions = createElement('div', 'row-links');
+        actions.append(createNavLink(buildPageURL('applications'), 'Back to applications', '_self'));
+        empty.append(
+          createElement('h2', 'account-name', `${pageLabel} bookmark is missing required context`),
+          createElement('div', 'account-meta', `This bookmark needs a ${missingParam} query parameter before Tenet can open the ${pageLabel.toLowerCase()} page.`),
+          createElement('div', 'account-meta', 'Return to the applications overview to choose a valid drill-down target without losing the current search, sync, health, or account filters.'),
+          actions,
+        );
+        root.replaceChildren(empty);
+      };
       const embeddedPageTitle = (page) => {
         switch (page) {
           case 'applications':
@@ -10156,7 +10172,7 @@
         loadAuditLogsPage().catch(() => {});
       } else if (currentPageState.page === 'account') {
         if (!currentPageState.accountId) {
-          renderEmptyState('account page is missing an accountId query parameter');
+          renderMissingRouteParameterState(embeddedPageTitle(currentPageState.page), 'accountId');
         } else {
           fetchAccountDetail(currentPageState.accountId)
             .then((account) => {
@@ -10203,7 +10219,7 @@
         }
       } else {
         if (!currentPageState.deployment) {
-          renderEmptyState('deployment page is missing a deployment query parameter');
+          renderMissingRouteParameterState(embeddedPageTitle(currentPageState.page), 'deployment');
         } else {
           const applicationDetail = currentPageState.page === 'application' ? fetchApplicationDetail(currentPageState.deployment) : fetchDeploymentDetail(currentPageState.deployment);
           applicationDetail
