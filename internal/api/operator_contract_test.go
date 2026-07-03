@@ -283,6 +283,7 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 	}
 
 	doc := readRepoFile(t, "docs/architecture/tenet-v1-enterprise-sso.md")
+	localRuntimeDoc := readRepoFile(t, "docs/architecture/tenet-v1-local-runtime.md")
 	for _, fragment := range []string{
 		"Google Workspace/Gmail means identity login only",
 		"It does not grant Tenet Gmail mailbox, Drive, Calendar, or other Google API access.",
@@ -333,9 +334,22 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		"policy-backed route enforcement remain future work",
 		"future enforcement slice explicitly opts into policy-backed authorization",
 		"explicit future decision to wire policy-derived grants into route enforcement",
+		"guarded routes still evaluate the request-scoped identity, roles, and exact deployment allowlist independently",
 	} {
-		if strings.Contains(operatorContractsDoc, stale) || strings.Contains(doc, stale) {
-			t.Fatalf("expected enterprise SSO/operator docs to avoid stale repository-policy enforcement wording %q", stale)
+		if strings.Contains(operatorContractsDoc, stale) || strings.Contains(doc, stale) || strings.Contains(localRuntimeDoc, stale) {
+			t.Fatalf("expected enterprise SSO/operator/local-runtime docs to avoid stale repository-policy enforcement wording %q", stale)
+		}
+	}
+
+	for _, source := range []struct {
+		name string
+		body string
+	}{
+		{name: "docs/architecture/tenet-v1-operator-contracts.md", body: operatorContractsDoc},
+		{name: "docs/architecture/tenet-v1-local-runtime.md", body: localRuntimeDoc},
+	} {
+		if !strings.Contains(source.body, "guarded route authorization is still evaluated by Tenet on the server, using trusted front-door headers by default or repository-policy-derived roles and grants only when repository-policy authorization is explicitly enabled") {
+			t.Fatalf("expected %s to clarify repository-policy authorization source", source.name)
 		}
 	}
 
