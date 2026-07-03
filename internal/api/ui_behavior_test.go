@@ -2096,7 +2096,9 @@ async function render(search, fetchImpl) {
   overviewCopyButton.dispatch('click');
   await settle();
   if (applicationsView.clipboardWrites.join(', ') !== 'GET /v1/overview/applications') throw new Error('expected applications overview copy route, got ' + applicationsView.clipboardWrites.join(', '));
-  if (overviewCopyButton.textContent !== 'Copied') throw new Error('expected applications overview copy button success label');
+  const overviewCopyStatus = overviewCopyButton.children[0];
+  if (!overviewCopyStatus || overviewCopyStatus.getAttribute('role') !== 'status' || overviewCopyStatus.getAttribute('aria-live') !== 'polite' || overviewCopyStatus.getAttribute('aria-atomic') !== 'true') throw new Error('expected applications overview copy button to expose polite atomic live status');
+  if (overviewCopyStatus.textContent !== 'Copied') throw new Error('expected applications overview copy button success label');
 
   const accountView = await render('?page=account&accountId=210987654321&q=payments&sync=OutOfSync&account=210987654321', (url) => {
     if (url === '/v1/overview/accounts/210987654321') return Promise.resolve({ ok: true, json: () => Promise.resolve(accountDetail) });
@@ -6668,7 +6670,9 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   copyLogButtons[0].dispatch('click');
   await settle();
   if (populatedRun.clipboardWrites.join(', ') !== shareLinks[0].href) throw new Error('expected copy log entry link to copy the adjacent share-link URL, got ' + populatedRun.clipboardWrites.join(', ') + ' for share URL ' + shareLinks[0].href);
-  if (copyLogButtons[0].textContent !== 'Copied') throw new Error('expected copy log entry button success label');
+  const copyLogStatus = copyLogButtons[0].children[0];
+  if (!copyLogStatus || copyLogStatus.getAttribute('role') !== 'status' || copyLogStatus.getAttribute('aria-live') !== 'polite' || copyLogStatus.getAttribute('aria-atomic') !== 'true') throw new Error('expected copy log entry button to expose polite atomic live status');
+  if (copyLogStatus.textContent !== 'Copied') throw new Error('expected copy log entry button success label');
   const anchoredLogEntry = collectNodes(populatedRun.document.getElementById('accounts'), (node) => node.tagName === 'LI' && node.getAttribute('id') === expectedBackendLogAnchor)[0];
   if (!anchoredLogEntry) throw new Error('expected rendered log row to expose backend entryId anchor id ' + expectedBackendLogAnchor);
   if (!populatedText.includes('<img src=x onerror=1> rollback check passed')) throw new Error('expected populated recent logs section to render raw log message text safely');

@@ -57,6 +57,41 @@ func TestEmbeddedUIResourceLazyPanelStatesAreStatusRegions(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUICopyControlsAnnounceLabelChangesPolitely(t *testing.T) {
+	body := string(indexHTML)
+
+	contracts := []string{
+		"const markCopyStatusButton = (button) => {",
+		"const status = createElement('span', 'copy-status-label', button.textContent || '');",
+		"status.setAttribute('role', 'status');",
+		"status.setAttribute('aria-live', 'polite');",
+		"status.setAttribute('aria-atomic', 'true');",
+		"button.replaceChildren(status);",
+		"return status;",
+		"const copyReadRouteToClipboard = (routeText) => {\n        return copyTextToClipboard(routeText);",
+		"const createCopyReadRouteButton = (routeText, label = 'Copy read route') => {",
+		"const button = createElement('button', 'toolbar-button copy-read-route', label);",
+		"const status = markCopyStatusButton(button);",
+		"button.setAttribute('aria-label', `Copy ${routeText}`);",
+		"copyReadRouteToClipboard(routeText)",
+		"const createCopyLinkButton = (href, label = 'Copy link', ariaLabel = '') => {",
+		"const button = createElement('button', 'toolbar-button copy-link', label);",
+		"copyTextToClipboard(href)",
+		"status.textContent = 'Copied';",
+		"status.textContent = 'Copy failed';",
+		"status.textContent = label;",
+		"currentPageSectionURL(sectionID),",
+		"'Copy section link',",
+		"`Copy ${label || 'resource detail'} section link`,",
+		"createCopyLinkButton(logAnchorURL, 'Copy log entry link', 'Copy log entry share link')",
+	}
+	for _, contract := range contracts {
+		if !strings.Contains(body, contract) {
+			t.Fatalf("expected embedded UI copy-control live status contract %q", contract)
+		}
+	}
+}
+
 func TestEmbeddedUIResourceUnavailableAndEmptyStateReleaseGuard(t *testing.T) {
 	script := embeddedUIScriptForTest(t)
 

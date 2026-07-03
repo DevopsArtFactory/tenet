@@ -1635,6 +1635,15 @@ assert 'Copy read route' in ui, ui
 assert "createCopyReadRouteButton(applicationsOverviewReadRoute())" in ui, ui
 assert "return copyTextToClipboard(routeText);" in ui, ui
 assert "navigator.clipboard.writeText(text)" in ui, ui
+assert "const markCopyStatusButton = (button) => {" in ui, ui
+assert "const status = createElement('span', 'copy-status-label', button.textContent || '');" in ui, ui
+assert "status.setAttribute('role', 'status');" in ui, ui
+assert "status.setAttribute('aria-live', 'polite');" in ui, ui
+assert "status.setAttribute('aria-atomic', 'true');" in ui, ui
+assert "button.replaceChildren(status);" in ui, ui
+assert "const status = markCopyStatusButton(button);" in ui, ui
+assert "status.textContent = 'Copied';" in ui, ui
+assert "status.textContent = 'Copy failed';" in ui, ui
 assert "detailPanel.id = `account-deployment-detail-${sectionIDSegment(account.awsAccountId, 'account')}-${sectionIDSegment(deployment.name, 'deployment')}`;" in ui, ui
 assert "toggle.setAttribute('aria-controls', detailPanel.id);" in ui, ui
 assert 'Workspace JSON' in ui, ui
