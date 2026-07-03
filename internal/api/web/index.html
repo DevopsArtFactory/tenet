@@ -9412,19 +9412,20 @@
           let driftQueryInput = null;
           let driftSeveritySelect = null;
           let driftSortSelect = null;
+          const clearDriftFilters = () => {
+            driftQuery = defaultDriftFilters.query;
+            driftSeverity = defaultDriftFilters.severity;
+            driftSort = defaultDriftFilters.sort;
+            syncDriftFilters();
+            if (driftQueryInput) driftQueryInput.value = driftQuery;
+            if (driftSeveritySelect) driftSeveritySelect.value = driftSeverity;
+            if (driftSortSelect) driftSortSelect.value = driftSort;
+            renderDriftRows();
+          };
           const clearDriftFiltersButton = createRefreshButton(
             'Clear drift filters',
             !hasActiveDriftFilters(),
-            () => {
-              driftQuery = defaultDriftFilters.query;
-              driftSeverity = defaultDriftFilters.severity;
-              driftSort = defaultDriftFilters.sort;
-              syncDriftFilters();
-              if (driftQueryInput) driftQueryInput.value = driftQuery;
-              if (driftSeveritySelect) driftSeveritySelect.value = driftSeverity;
-              if (driftSortSelect) driftSortSelect.value = driftSort;
-              renderDriftRows();
-            },
+            clearDriftFilters,
           );
           const renderDriftRows = () => {
             const driftAnchorIDs = new Map();
@@ -9469,7 +9470,13 @@
                 : driftSource.empty;
               const stateNode = createElement('div', 'detail-state', emptyMessage);
               markPoliteStatusNode(stateNode);
-              driftTableWrap.replaceChildren(stateNode);
+              if (driftRows.length) {
+                const emptyActions = createElement('div', 'toolbar-actions');
+                emptyActions.append(createRefreshButton('Clear drift filters', false, clearDriftFilters));
+                driftTableWrap.replaceChildren(stateNode, emptyActions);
+              } else {
+                driftTableWrap.replaceChildren(stateNode);
+              }
               return;
             }
 

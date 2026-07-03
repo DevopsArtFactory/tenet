@@ -10033,6 +10033,13 @@ async function render(detail, search, hash = '') {
   const filteredEmptyText = collectText(run.document.getElementById('accounts')).join(' | ');
   if (!filteredEmptyText.includes('Filters currently hide all 7 drift rows.')) throw new Error('expected filtered-empty summary copy');
   if (!filteredEmptyText.includes('No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.')) throw new Error('expected filtered-empty table message');
+  const filteredEmptyClearButton = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Clear drift filters' && !node.disabled)[0];
+  if (!filteredEmptyClearButton) throw new Error('expected filtered-empty inline Clear drift filters action');
+  filteredEmptyClearButton.dispatch('click');
+  await settle();
+  const inlineClearText = collectText(run.document.getElementById('accounts')).join(' | ');
+  if (!inlineClearText.includes('Showing all 7 drift rows.')) throw new Error('expected inline filtered-empty clear action to restore drift rows');
+  if (run.window.location.search !== '?page=drift&deployment=api-prod') throw new Error('expected inline filtered-empty clear action to remove drift params and preserve route');
 
   const emptyRun = await render(emptyDetail);
   const emptyText = collectText(emptyRun.document.getElementById('accounts')).join(' | ');

@@ -2050,6 +2050,8 @@ for fragment in (
     "Severity",
     "No controller-authored field-level drift was reported for this deployment.",
     "No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.",
+    "emptyActions.append(createRefreshButton('Clear drift filters', false, clearDriftFilters));",
+    "driftTableWrap.replaceChildren(stateNode, emptyActions);",
 ):
     assert fragment in drift_ui, fragment
 
