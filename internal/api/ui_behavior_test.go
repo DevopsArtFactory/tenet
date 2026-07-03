@@ -2222,7 +2222,7 @@ async function render(search, fetchImpl, clipboardImpl) {
   const resourceToolbarText = collectText(resourceView.document.getElementById('toolbar')).join(' | ');
   if (!resourceBodyText.includes('Current resource read: GET /v1/overview/deployments/payments-api-staging')) throw new Error('expected resource detail body to show the top-level read route');
   if (resourceToolbarText.includes('Current resource read: GET /v1/overview/deployments/payments-api-staging')) throw new Error('expected current resource read route outside toolbar');
-  const resourceReadRouteCue = collectNodes(resourceView.document.getElementById('accounts'), (node) => String(node.className || '').split(/\s+/).includes('resource-read-route')).find((node) => node.textContent === 'Current resource read: GET /v1/overview/deployments/payments-api-staging.');
+  const resourceReadRouteCue = collectNodes(resourceView.document.getElementById('accounts'), (node) => String(node.className || '').split(/\s+/).includes('resource-read-route')).find((node) => node.textContent === 'Current resource read: GET /v1/overview/deployments/payments-api-staging. Loaded before focused Recent logs and Live inspection reads.');
   if (!resourceReadRouteCue) throw new Error('expected resource detail body read-route cue node');
 })();
 `
@@ -8517,6 +8517,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   let refreshInspection = buttons.find((node) => node.textContent === 'Refresh live inspection');
   if (!refreshLogs || !refreshInspection) throw new Error('expected resource refresh buttons while sections are loading');
   if (!refreshLogs.disabled || !refreshInspection.disabled) throw new Error('expected resource refresh buttons disabled while initial fetches are in flight');
+  const readCue = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('resource-current-read-cue'))[0];
+  if (!readCue) throw new Error('expected current resource read cue before lazy panels resolve');
+  if (readCue.textContent !== 'Current resource read: GET /v1/overview/deployments/payments-api-staging. Loaded before focused Recent logs and Live inspection reads.') throw new Error('expected current resource read cue to show deployment-detail route before lazy panels resolve');
   if (!text.includes('Loading recent logs…')) throw new Error('expected initial loading state for recent logs');
   if (!text.includes('Loading live inspection…')) throw new Error('expected initial loading state for live inspection');
   const initialStatusNodes = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('detail-state'));

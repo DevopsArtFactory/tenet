@@ -777,8 +777,9 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"selectedResourceScopeText(resource)",
 		"const createSelectedResourceContextCallout = (detail, resource) => {",
 		"'Selected resource context'",
-		"Current resource read: ${resourceDetailReadRoute(deploymentName)}.",
-		"workspace-callout-factors resource-read-route",
+		"const createCurrentResourceReadCue = (deploymentName) =>",
+		"Current resource read: ${resourceDetailReadRoute(deploymentName)}. Loaded before focused Recent logs and Live inspection reads.",
+		"workspace-callout-factors resource-read-route resource-current-read-cue",
 		"resourceInspectionReadRoute(deploymentName, resource)",
 		"resourceLogsReadRoute(deploymentName, resource)",
 		"const selectedResourceEvidenceCalloutText = (supportsInspection, supportsLogs, routeBits) => {",
@@ -1173,7 +1174,7 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;",
 		"const createResourceDetailActions = (resourceState = null, detail = null, resource = null) => [",
 		"createNavLink(`/v1/overview/deployments/${encodeURIComponent(detail?.name || resourceState?.detail?.name || currentPageState.deployment)}`, 'Resource JSON')",
-		"Current resource read: ${resourceDetailReadRoute(deploymentName)}.",
+		"Current resource read: ${resourceDetailReadRoute(deploymentName)}. Loaded before focused Recent logs and Live inspection reads.",
 		"Refresh resource detail",
 		"Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…",
 		"Current resource detail remains visible below.",
@@ -3797,7 +3798,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createCopyReadRouteButton(resourceDetailReadRoute(detail?.name || resourceState?.detail?.name || currentPageState.deployment))\" in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert resource detail copy route contract")
 	}
-	if !strings.Contains(text, "assert \"workspace-callout-factors resource-read-route\" in body, body") {
+	if !strings.Contains(text, "assert \"workspace-callout-factors resource-read-route resource-current-read-cue\" in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert resource detail read route body cue")
 	}
 	if !strings.Contains(text, "assert \"const selectedResourceEvidenceCalloutText = (supportsInspection, supportsLogs, routeBits) => {\" in body, body") {
@@ -5042,8 +5043,8 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"const renderResourceDetailPage = (detail, resourceState = null) => {\",",
 		"\"const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;\",",
 		"\"const createResourceDetailActions = (resourceState = null, detail = null, resource = null) => [\",",
-		"\"Current resource read: ${resourceDetailReadRoute(deploymentName)}.\",",
-		"\"workspace-callout-factors resource-read-route\",",
+		"\"Current resource read: ${resourceDetailReadRoute(deploymentName)}. Loaded before focused Recent logs and Live inspection reads.\",",
+		"\"workspace-callout-factors resource-read-route resource-current-read-cue\",",
 		"\"Refresh resource detail\",",
 		"\"Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…\",",
 		"\"Current resource detail remains visible below.\",",

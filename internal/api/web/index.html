@@ -3856,6 +3856,8 @@
         createClearSelectedClusterButton(detail, resource, resourceState),
         createClearSelectedInstanceButton(detail, resource, resourceState),
       ];
+      const createCurrentResourceReadCue = (deploymentName) =>
+        createElement('div', 'workspace-callout-factors resource-read-route resource-current-read-cue', `Current resource read: ${resourceDetailReadRoute(deploymentName)}. Loaded before focused Recent logs and Live inspection reads.`);
       const createSelectedResourceContextCallout = (detail, resource) => {
         const deploymentName = detail.name || currentPageState.deployment || '';
         const scopeText = selectedResourceScopeText(resource);
@@ -3892,7 +3894,7 @@
         callout.append(
           head,
           createElement('div', 'workspace-callout-copy', summaryParts.length ? summaryParts.join(' · ') : 'Resource selection is derived from the current bookmarkable route.'),
-          createElement('div', 'workspace-callout-factors resource-read-route', `Current resource read: ${resourceDetailReadRoute(deploymentName)}.`),
+          createCurrentResourceReadCue(deploymentName),
           createElement('div', 'workspace-callout-factors', selectedResourceEvidenceCalloutText(supportsInspection, supportsLogs, routeBits)),
         );
         if (evidenceLinks.children.length) {
