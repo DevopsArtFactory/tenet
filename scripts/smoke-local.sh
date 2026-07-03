@@ -2350,9 +2350,10 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;" in body, body
     assert "const createResourceDetailActions = (resourceState = null, detail = null, resource = null) => [" in body, body
     assert "const createSelectedResourceContextCallout = (detail, resource) => {" in body, body
+    assert "const createCurrentResourceReadCue = (deploymentName) =>" in body, body
     assert 'Selected resource context' in body, body
-    assert "workspace-callout-factors resource-read-route" in body, body
-    assert "Current resource read: ${resourceDetailReadRoute(deploymentName)}." in body, body
+    assert "workspace-callout-factors resource-read-route resource-current-read-cue" in body, body
+    assert "Current resource read: ${resourceDetailReadRoute(deploymentName)}. Loaded before focused Recent logs and Live inspection reads." in body, body
     assert "const selectedResourceEvidenceCalloutText = (supportsInspection, supportsLogs, routeBits) => {" in body, body
     assert 'Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection.' in body, body
     assert 'Use the Live inspection handoff below to refresh focused evidence for this exact resource selection.' in body, body

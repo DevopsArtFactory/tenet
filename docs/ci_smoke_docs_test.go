@@ -828,6 +828,7 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 	for _, fragment := range []string{
 		"The bookmarkable resource page (`/?page=resource...`)",
 		"compact `Troubleshooting summary`",
+		"before lazy Recent logs or Live inspection panels load",
 		"selected lookup scope (`containerName`, `clusterArn`, or `instanceId`)",
 		"latest lazy Recent logs and Live inspection panel states",
 		"empty-log and unavailable-provider next-step guidance",
@@ -843,6 +844,7 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 		"latest completed Live inspection state and the latest completed Recent logs panel state",
 		"selected lookup scope (`containerName`, `clusterArn`, or `instanceId`)",
 		"Current resource read: GET /v1/overview/deployments/{deploymentName}",
+		"visible before lazy Recent logs or Live inspection reads resolve",
 	} {
 		if !strings.Contains(overviewUIText, fragment) {
 			t.Fatalf("expected overview UI docs to include resource-detail troubleshooting summary contract %q", fragment)
@@ -852,6 +854,7 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 	overviewDashboardText := readTextFile(t, "features/overview-dashboard.md")
 	for _, fragment := range []string{
 		"compact `Selected resource context` callout",
+		"visible before the lazy Recent logs and Live inspection panels load",
 		"the final resource page also renders a compact `Troubleshooting summary`",
 		"any selected lookup scope (`containerName`, `clusterArn`, or `instanceId`)",
 		"available, loading, empty, unavailable, and fetch-error evidence states",
