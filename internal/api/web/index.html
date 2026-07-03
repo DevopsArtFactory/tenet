@@ -3858,9 +3858,11 @@
       const createSelectedResourceContextCallout = (detail, resource) => {
         const deploymentName = detail.name || currentPageState.deployment || '';
         const scopeText = selectedResourceScopeText(resource);
+        const supportsInspection = resourceSupportsLiveInspection(resource);
+        const supportsLogs = resourceSupportsRecentLogs(resource);
         const routeBits = [
-          resourceInspectionReadRoute(deploymentName, resource),
-          resourceLogsReadRoute(deploymentName, resource),
+          supportsInspection ? resourceInspectionReadRoute(deploymentName, resource) : '',
+          supportsLogs ? resourceLogsReadRoute(deploymentName, resource) : '',
         ].filter(Boolean);
         const callout = createElement('div', 'workspace-callout selected-resource-context');
         const head = createElement('div', 'workspace-callout-head');
@@ -3880,24 +3882,34 @@
           clusterArn: routeState.routeClusterArn,
           ...resourcePanelLimitURLParams(deploymentName, resource),
         };
-        if (resourceSupportsLiveInspection(resource)) {
+        if (supportsInspection) {
           evidenceLinks.append(createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', routeParams), 'Jump to live inspection', '_self'));
         }
-        if (resourceSupportsRecentLogs(resource)) {
+        if (supportsLogs) {
           evidenceLinks.append(createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', routeParams), 'Jump to recent logs', '_self'));
         }
         callout.append(
           head,
           createElement('div', 'workspace-callout-copy', summaryParts.length ? summaryParts.join(' · ') : 'Resource selection is derived from the current bookmarkable route.'),
           createElement('div', 'workspace-callout-factors resource-read-route', `Current resource read: ${resourceDetailReadRoute(deploymentName)}.`),
-          createElement('div', 'workspace-callout-factors', routeBits.length
-            ? `Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection. Backing reads: ${routeBits.join(' and ')}.`
-            : 'Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection.'),
+          createElement('div', 'workspace-callout-factors', selectedResourceEvidenceCalloutText(supportsInspection, supportsLogs, routeBits)),
         );
         if (evidenceLinks.children.length) {
           callout.append(evidenceLinks);
         }
         return callout;
+      };
+      const selectedResourceEvidenceCalloutText = (supportsInspection, supportsLogs, routeBits) => {
+        if (supportsInspection && supportsLogs) {
+          return `Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection. Backing reads: ${routeBits.join(' and ')}.`;
+        }
+        if (supportsInspection) {
+          return `Use the Live inspection handoff below to refresh focused evidence for this exact resource selection. Backing read: ${routeBits.join('')}.`;
+        }
+        if (supportsLogs) {
+          return `Use the Recent logs handoff below to refresh focused evidence for this exact resource selection. Backing read: ${routeBits.join('')}.`;
+        }
+        return 'No focused evidence handoffs are available for this resource type yet. Use the current resource read above for this selection.';
       };
       const resourceTroubleshootingSummaryKey = (deploymentName, resource) => resourceLogCacheKey(deploymentName, resource);
       const registerResourceTroubleshootingSummary = (section, detail, resource) => {

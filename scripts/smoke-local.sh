@@ -2344,7 +2344,11 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert 'Selected resource context' in body, body
     assert "workspace-callout-factors resource-read-route" in body, body
     assert "Current resource read: ${resourceDetailReadRoute(deploymentName)}." in body, body
+    assert "const selectedResourceEvidenceCalloutText = (supportsInspection, supportsLogs, routeBits) => {" in body, body
     assert 'Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection.' in body, body
+    assert 'Use the Live inspection handoff below to refresh focused evidence for this exact resource selection.' in body, body
+    assert 'Use the Recent logs handoff below to refresh focused evidence for this exact resource selection.' in body, body
+    assert 'No focused evidence handoffs are available for this resource type yet. Use the current resource read above for this selection.' in body, body
     assert "createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', routeParams), 'Jump to live inspection', '_self')" in body, body
     assert "createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', routeParams), 'Jump to recent logs', '_self')" in body, body
     assert 'createSelectedResourceContextCallout(detail, resource)' in body, body
