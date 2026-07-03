@@ -12590,7 +12590,11 @@ document.byID.set('toolbar', document.createElement('section'));
 document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const fetchCalls = [];
-const window = { location: { pathname: '/console', search: '?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2', hash: '' } };
+let copiedText = '';
+const window = {
+  location: { pathname: '/console', search: '?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2', hash: '' },
+  navigator: { clipboard: { writeText(text) { copiedText = String(text); return Promise.resolve(); } } },
+};
 const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/console'; window.location.search = query ? '?' + query : ''; } };
 const expandedAuditLogs = Object.assign({}, auditLogs, {
   resultScope: Object.assign({}, auditLogs.resultScope, { limit: 5, limited: false, returnedEntryCount: 2, totalEntryCount: 2 })
@@ -12666,6 +12670,12 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const auditJSONLink = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A')
     .find((node) => node.href === '/v1/audit-logs?deployment=payments-api-prod&limit=2' && node.textContent === 'Audit JSON');
   if (!auditJSONLink || auditJSONLink.target !== '_blank' || auditJSONLink.rel !== 'noreferrer noopener') throw new Error('expected scoped audit JSON handoff link');
+  const auditCopyButton = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'BUTTON')
+    .find((node) => node.textContent === 'Copy audit read route');
+  if (!auditCopyButton || auditCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/audit-logs?deployment=payments-api-prod&limit=2') throw new Error('expected scoped audit copy read-route button');
+  auditCopyButton.dispatch('click');
+  await settle();
+  if (copiedText !== 'GET /v1/audit-logs?deployment=payments-api-prod&limit=2') throw new Error('expected audit copy button to copy current scoped read route, got ' + copiedText);
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
   const backLink = toolbarLinks.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Back to application' && node.target === '_self');
   if (!backLink || backLink.rel) throw new Error('expected deployment-scoped audit toolbar back link to return to application while preserving filters');

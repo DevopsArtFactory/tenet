@@ -7744,18 +7744,22 @@
         return intro;
       };
       const auditDeploymentName = () => currentPageState.deployment || '';
-      const createAuditLogsActions = (isLoading = false) => [
-        createRefreshButton(
-          'Refresh audit log',
-          isLoading,
-          () => loadAuditLogsPage({ force: true }).catch(() => {}),
-        ),
-        createNavLink(buildAuditLogsRoute({
+      const createAuditLogsActions = (isLoading = false) => {
+        const auditLogsRoute = buildAuditLogsRoute({
           deploymentName: currentPageState.deployment,
           action: currentPageState.auditAction,
           limit: currentPageState.auditLimit,
-        }), 'Audit JSON'),
-      ];
+        });
+        return [
+          createRefreshButton(
+            'Refresh audit log',
+            isLoading,
+            () => loadAuditLogsPage({ force: true }).catch(() => {}),
+          ),
+          createCopyReadRouteButton(`GET ${auditLogsRoute}`, 'Copy audit read route'),
+          createNavLink(auditLogsRoute, 'Audit JSON'),
+        ];
+      };
       const auditLogsRefreshStateText = (auditState) => {
         if (auditState?.status === 'loading') {
           return 'Refreshing audit log from GET /v1/audit-logs…';
