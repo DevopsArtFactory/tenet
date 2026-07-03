@@ -246,6 +246,8 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
+	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
+	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
 	localRuntimeText := readTextFile(t, "architecture/tenet-v1-local-runtime.md")
 	smokeLocalText := readTextFile(t, "../scripts/smoke-local.sh")
 	smokeDockerText := readTextFile(t, "../scripts/smoke-docker.sh")
@@ -317,6 +319,24 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 	} {
 		if !strings.Contains(localRuntimeText, fragment) {
 			t.Fatalf("expected local runtime smoke docs to include %q", fragment)
+		}
+	}
+
+	for _, doc := range []struct {
+		name string
+		text string
+	}{
+		{name: "overview UI architecture docs", text: overviewUIText},
+		{name: "operator contract docs", text: operatorContractsText},
+	} {
+		for _, fragment := range []string{
+			"invalid source query",
+			"invalid limit query",
+			"source-filtered",
+		} {
+			if !strings.Contains(doc.text, fragment) {
+				t.Fatalf("expected %s deployment-events docs to include %q", doc.name, fragment)
+			}
 		}
 	}
 }
