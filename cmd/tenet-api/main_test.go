@@ -1933,8 +1933,14 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionWiresObserverRoleAndPlace
 	if !result.Available {
 		t.Fatalf("expected wired provider result, got %+v", result)
 	}
+	if result.DeploymentName != "api-prod" || result.ResourceType != "ecsService" || result.ResourceName != "api-prod-live-service" {
+		t.Fatalf("expected selected resource identity to be echoed in inspection result, got %+v", result)
+	}
 	if result.ResourceDescription != "live ECS service" {
 		t.Fatalf("expected selected resource description to be echoed in inspection result, got %+v", result)
+	}
+	if result.ClusterARN != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments" {
+		t.Fatalf("expected accepted clusterArn selector to be echoed in inspection result, got %+v", result)
 	}
 	want := resourceinspection.Request{
 		DeploymentName:           "api-prod",
@@ -1989,7 +1995,7 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionPassesSelectedInstanceID(
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
 	ctx := resourceinspection.ContextWithInstanceID(context.Background(), " i-0abc123def4567890 ")
-	_, err := options.OverviewDeploymentResourceInspection(ctx, "api-prod", "candidateAutoScalingGroup", "api-prod-candidate", 0)
+	result, err := options.OverviewDeploymentResourceInspection(ctx, "api-prod", "candidateAutoScalingGroup", "api-prod-candidate", 0)
 	if err != nil {
 		t.Fatalf("OverviewDeploymentResourceInspection returned error: %v", err)
 	}
@@ -1998,6 +2004,9 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionPassesSelectedInstanceID(
 	}
 	if provider.lastRequest.InstanceID != "i-0abc123def4567890" {
 		t.Fatalf("expected selected instanceId to reach resource inspection request, got %+v", provider.lastRequest)
+	}
+	if result.InstanceID != "i-0abc123def4567890" {
+		t.Fatalf("expected accepted instanceId selector to be echoed in inspection result, got %+v", result)
 	}
 }
 
