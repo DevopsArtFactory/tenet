@@ -48,8 +48,17 @@ means the recognized caller lacks a write-capable role or deployment scope.
 ## 3. Request or trace a refresh through audit
 
 After a manual refresh request, stay on the same bookmarked page and use the
-success/no-op/unavailable banner as the immediate handoff result. Then open the
-bookmarkable audit timeline (`/?page=audit`):
+success/no-op/unavailable banner as the immediate handoff result. From a
+deployment-scoped application, resource, drift, or plan page, the embedded
+Operator context keeps a compact `Last refresh requested` cue, plus a same-shell
+audit handoff to the exact deployment-filtered refresh audit route without
+rewriting the current bookmarkable route:
+
+```text
+/?page=audit&deployment={deploymentName}&action=controller.refresh.requested
+```
+
+For global refresh triage, open the bookmarkable audit timeline (`/?page=audit`):
 
 ```text
 /?page=audit
