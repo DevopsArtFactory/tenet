@@ -2057,11 +2057,12 @@ async function settle() { await Promise.resolve(); await new Promise((resolve) =
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
 const collectText = (node) => [node.textContent || '', ...(node.children || []).flatMap(collectText)].filter(Boolean);
 
-async function render(search, fetchImpl) {
+async function render(search, fetchImpl, clipboardImpl) {
   const document = createDocument();
   const clipboardWrites = [];
+  const writeText = clipboardImpl || ((text) => { clipboardWrites.push(text); return Promise.resolve(); });
   const [searchPart, hashPart = ''] = String(search).split('#');
-  const window = { location: { pathname: '/console', search: searchPart, hash: hashPart ? '#' + hashPart : '' }, navigator: { clipboard: { writeText: (text) => { clipboardWrites.push(text); return Promise.resolve(); } } } };
+  const window = { location: { pathname: '/console', search: searchPart, hash: hashPart ? '#' + hashPart : '' }, navigator: { clipboard: { writeText } } };
   const history = { replaceState(_state, _title, url) { const [pathAndQuery, nextHash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = nextHash ? '#' + nextHash : ''; } };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetchImpl, history, Element, InputElement);
   await settle();
@@ -2099,6 +2100,23 @@ async function render(search, fetchImpl) {
   const overviewCopyStatus = overviewCopyButton.children[0];
   if (!overviewCopyStatus || overviewCopyStatus.getAttribute('role') !== 'status' || overviewCopyStatus.getAttribute('aria-live') !== 'polite' || overviewCopyStatus.getAttribute('aria-atomic') !== 'true') throw new Error('expected applications overview copy button to expose polite atomic live status');
   if (overviewCopyStatus.textContent !== 'Copied') throw new Error('expected applications overview copy button success label');
+
+  const failedCopyAttempts = [];
+  const failedCopyView = await render('?q=payments&sync=OutOfSync&account=210987654321', (url) => {
+    if (url === '/v1/overview/applications') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleApplications) });
+    throw new Error('unexpected failed-copy applications fetch url: ' + url);
+  }, (text) => {
+    failedCopyAttempts.push(String(text));
+    return Promise.reject(new Error('clipboard denied'));
+  });
+  const failedCopyButton = collectNodes(failedCopyView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Copy read route');
+  if (!failedCopyButton) throw new Error('expected applications overview copy button in failure scenario');
+  failedCopyButton.dispatch('click');
+  await settle();
+  if (failedCopyAttempts.join(', ') !== 'GET /v1/overview/applications') throw new Error('expected failed copy attempt to use applications overview read route, got ' + failedCopyAttempts.join(', '));
+  const failedCopyStatus = failedCopyButton.children[0];
+  if (!failedCopyStatus || failedCopyStatus.getAttribute('role') !== 'status' || failedCopyStatus.getAttribute('aria-live') !== 'polite' || failedCopyStatus.getAttribute('aria-atomic') !== 'true') throw new Error('expected failed copy button to retain polite atomic live status');
+  if (failedCopyStatus.textContent !== 'Copy failed') throw new Error('expected applications overview copy failure label, got ' + (failedCopyStatus && failedCopyStatus.textContent));
 
   const accountView = await render('?page=account&accountId=210987654321&q=payments&sync=OutOfSync&account=210987654321', (url) => {
     if (url === '/v1/overview/accounts/210987654321') return Promise.resolve({ ok: true, json: () => Promise.resolve(accountDetail) });
