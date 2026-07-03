@@ -697,7 +697,8 @@ func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 	for _, fragment := range []string{
 		"const nonEmptyResourceSections = (detail) => groupResourceSections(detail).filter((group) => Array.isArray(group?.resources) && group.resources.length > 0);",
 		"const createNavLink = (href, text, target = '_blank') => {",
-		"const createQuickNavChip = (text, ariaLabel) => {",
+		"const createQuickNavChip = (text, ariaLabel, ariaCurrent) => {",
+		"if (ariaCurrent) chip.setAttribute('aria-current', ariaCurrent);",
 		"link.target = target;",
 		"link.rel = target === '_blank' ? 'noreferrer noopener' : '';",
 		"link.href = href;",
@@ -749,7 +750,7 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self')",
 		"createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self')",
 		"createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self')",
-		"createQuickNavChip(resource.name, `Current resource: ${resource.name}`)",
+		"createQuickNavChip(resource.name, `Current resource: ${resource.name}`, 'location')",
 		"selectedResourceScopeEntries(resource).forEach(([label, value]) => {",
 		"createQuickNavChip(`${label} · ${value}`, `${label}: ${value}`)",
 		"...selectedResourceScopeEntries(resource),",
@@ -781,7 +782,7 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"resourceTroubleshootingState(states.inspectionState, resourceTroubleshootingInspectionLabel)",
 		"refreshResourceTroubleshootingSummary(deploymentName, resource);",
 		"const activeSectionID = currentHashTargetID();",
-		"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)",
+		"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')",
 		"createElement('div', 'quick-nav-empty', 'No section is currently targeted.')",
 		"sectionLink?.sectionID !== currentSectionLink?.sectionID",
 		"createElement('div', 'quick-nav-empty', 'No additional section links are available for this resource.')",
@@ -847,7 +848,7 @@ func TestEmbeddedUIIncludesDriftSectionNavigation(t *testing.T) {
 		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {",
 		"const trackCurrentSection = Boolean(currentSectionEmptyLabel) && sectionLinks.some((sectionLink) => sectionLink?.sectionID);",
 		"createElement('div', 'quick-nav-label', 'Current section')",
-		"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)",
+		"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')",
 		"createElement('div', 'quick-nav-empty', currentSectionEmptyLabel)",
 		"sectionLink?.sectionID !== currentSectionLink?.sectionID",
 		"sectionID: 'drift-runtime-signals',",
@@ -879,11 +880,11 @@ func TestEmbeddedUIIncludesApplicationSectionNavigation(t *testing.T) {
 		"createElement('div', 'quick-nav-label', 'Hierarchy')",
 		"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')",
 		"createElement('div', 'quick-nav-label', 'Current destination')",
-		"createQuickNavChip('Application detail', 'Current destination: Application detail')",
+		"createQuickNavChip('Application detail', 'Current destination: Application detail', 'page')",
 		"createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · Application detail`),",
 		"createElement('div', 'quick-nav-label', 'Current section')",
 		"const activeSectionID = currentHashTargetID();",
-		"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)",
+		"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')",
 		"createElement('div', 'quick-nav-empty', 'No section is currently targeted.')",
 		"sectionLink?.sectionID !== currentSectionLink?.sectionID",
 		"createElement('div', 'quick-nav-empty', 'No additional section links are available for this application.')",
@@ -918,11 +919,11 @@ func TestEmbeddedUIIncludesAccountQuickNavigation(t *testing.T) {
 		"createElement('div', 'quick-nav-label', 'Hierarchy')",
 		"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')",
 		"createElement('div', 'quick-nav-label', 'Current destination')",
-		"createQuickNavChip('Account detail', 'Current destination: Account detail')",
+		"createQuickNavChip('Account detail', 'Current destination: Account detail', 'page')",
 		"createElement('div', 'quick-nav-current', `${accountLabel} · Account detail`),",
 		"createElement('div', 'quick-nav-label', 'Current section')",
 		"createElement('div', 'quick-nav-label', 'On this page')",
-		"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)",
+		"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')",
 		"createElement('div', 'quick-nav-empty', 'No section is currently targeted.')",
 		"createElement('div', 'quick-nav-empty', 'No additional section links are available for this account.')",
 		"const sectionIDSegment = (value, fallback) => {",
@@ -1841,7 +1842,7 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`)",
 		"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')",
 		"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",
-		"createQuickNavChip(currentWorkspace, `Current destination: ${currentWorkspace}`)",
+		"createQuickNavChip(currentWorkspace, `Current destination: ${currentWorkspace}`, 'page')",
 		"if (currentWorkspace !== 'Drift view') {",
 		"createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self')",
 		"if (currentWorkspace !== 'Plan/apply') {",
@@ -3896,10 +3897,10 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')\" in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert account page overview return-link contract")
 	}
-	if !strings.Contains(text, "assert \"createQuickNavChip('Account detail', 'Current destination: Account detail')\" in account_ui, account_ui") {
+	if !strings.Contains(text, "assert \"createQuickNavChip('Account detail', 'Current destination: Account detail', 'page')\" in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert account page current-destination chip contract")
 	}
-	if !strings.Contains(text, "assert \"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)\" in account_ui, account_ui") {
+	if !strings.Contains(text, "assert \"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')\" in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert account page current-section chip contract")
 	}
 	if !strings.Contains(text, "assert \"detailSummary.id = 'account-summary';\" in account_ui, account_ui") {
@@ -3971,7 +3972,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page overview return-link contract")
 	}
-	if !strings.Contains(text, "assert \"createQuickNavChip('Application detail', 'Current destination: Application detail')\" in application_ui, application_ui") {
+	if !strings.Contains(text, "assert \"createQuickNavChip('Application detail', 'Current destination: Application detail', 'page')\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page current-destination chip contract")
 	}
 	if !strings.Contains(text, "assert \"eventsSection.id = 'application-runtime-events';\" in application_ui, application_ui") {
@@ -4001,7 +4002,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Current section' in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert resource page current-section copy")
 	}
-	if !strings.Contains(text, "assert \"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)\" in ui, ui") {
+	if !strings.Contains(text, "assert \"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert resource page current-section chip contract")
 	}
 	if !strings.Contains(text, "assert 'Audit timeline' in audit_ui, audit_ui") {
@@ -4981,7 +4982,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"Applications overview\",",
 		"\"Current destination\",",
 		"\"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')\",",
-		"\"createQuickNavChip('Application detail', 'Current destination: Application detail')\",",
+		"\"createQuickNavChip('Application detail', 'Current destination: Application detail', 'page')\",",
 	} {
 		if !strings.Contains(dockerSmoke, fragment) {
 			t.Fatalf("expected smoke-docker.sh to lock bookmarkable application quick-nav fragment %q", fragment)
@@ -4996,13 +4997,13 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"No section is currently targeted.\",",
 		"\"On this page\",",
 		"\"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')\",",
-		"\"createQuickNavChip('Account detail', 'Current destination: Account detail')\",",
+		"\"createQuickNavChip('Account detail', 'Current destination: Account detail', 'page')\",",
 		"\"Copy account read route\",",
 		"\"Copy group read route\",",
 		"\"accountLinks.append(createCopyReadRouteButton(accountDetailReadRoute(account.awsAccountId), 'Copy account read route'));\",",
 		"\"groupLinks.append(createCopyReadRouteButton(accountGroupDetailReadRoute(account.awsAccountId, group), 'Copy group read route'));\",",
 		"\"const accountGroupDetailReadRoute = (accountID, group) => {\",",
-		"\"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)\",",
+		"\"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')\",",
 		"\"detailSummary.id = 'account-summary';\",",
 		"\"const accountGroupSectionLabel = (group) => {\",",
 		"\"return region === '—' ? `${app} · ${environment}` : `${app} · ${environment} · ${region}`;\",",

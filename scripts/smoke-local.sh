@@ -2028,11 +2028,12 @@ assert "const createDeploymentBreadcrumb = ({ deploymentName = '', awsAccountId 
 assert "head.append(createElement('div', 'breadcrumb-title', 'Breadcrumbs'));" in ui, ui
 assert "awsAccountId ? { label: accountBreadcrumbLabel(accountName, awsAccountId), href: buildPageURL('account', { accountId: awsAccountId }) } : null," in ui, ui
 assert "trail.append(createBreadcrumbCurrentChip(item.label, item.ariaLabel || `Current destination: ${item.label}`));" in ui, ui
-assert "const createQuickNavChip = (text, ariaLabel) => {" in ui, ui
+assert "const createQuickNavChip = (text, ariaLabel, ariaCurrent) => {" in ui, ui
+assert "if (ariaCurrent) chip.setAttribute('aria-current', ariaCurrent);" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Hierarchy')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Current destination')" in ui, ui
 assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in ui, ui
-assert "createQuickNavChip(currentWorkspace, `Current destination: ${currentWorkspace}`)" in ui, ui
+assert "createQuickNavChip(currentWorkspace, `Current destination: ${currentWorkspace}`, 'page')" in ui, ui
 assert "createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self')" in ui, ui
 assert "const createWorkspaceQuickNav = (detail, mode, sectionLinks = null) => {" in ui, ui
 assert "const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';" in ui, ui
@@ -2040,7 +2041,7 @@ assert "const linkedResources = (mode === 'drift' || mode === 'plan') ? groupRes
 assert "const resolvedSectionLinks = mode === 'drift'" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Current section')" in ui, ui
 assert "(mode === 'drift' || mode === 'plan') ? 'No section is currently targeted.' : ''" in ui, ui
-assert "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)" in ui, ui
+assert "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')" in ui, ui
 assert "const buildPageSectionURL = (page, sectionID, extras = {}) => {" in ui, ui
 assert "const scrollToCurrentHashTarget = () => {" in ui, ui
 assert "target.scrollIntoView({ block: 'start', behavior: 'auto' });" in ui, ui
@@ -2082,8 +2083,8 @@ assert "createElement('div', 'quick-nav-label', 'Current section')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'On this page')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Sibling resources')" in ui, ui
 assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in ui, ui
-assert "createQuickNavChip(resource.name, `Current resource: ${resource.name}`)" in ui, ui
-assert "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)" in ui, ui
+assert "createQuickNavChip(resource.name, `Current resource: ${resource.name}`, 'location')" in ui, ui
+assert "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')" in ui, ui
 assert "createElement('div', 'quick-nav-empty', 'No section is currently targeted.')" in ui, ui
 assert "sectionLink?.sectionID !== currentSectionLink?.sectionID" in ui, ui
 assert "const pushResourceSection = (section, sectionID, label) => {" in ui, ui
@@ -2231,7 +2232,7 @@ assert 'No section is currently targeted.' in account_ui, account_ui
 assert 'On this page' in account_ui, account_ui
 assert "const createAccountQuickNav = (account, sectionLinks = []) => {" in account_ui, account_ui
 assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in account_ui, account_ui
-assert "createQuickNavChip('Account detail', 'Current destination: Account detail')" in account_ui, account_ui
+assert "createQuickNavChip('Account detail', 'Current destination: Account detail', 'page')" in account_ui, account_ui
 assert 'Refresh account detail' in account_ui, account_ui
 assert 'Copy account read route' in account_ui, account_ui
 assert 'Copy group read route' in account_ui, account_ui
@@ -2251,7 +2252,7 @@ assert 'No deployments are currently associated with this account.' in account_u
 assert 'Use the applications overview to confirm whether filters hide deployments, or open the account JSON payload to inspect the raw catalog response.' in account_ui, account_ui
 assert "emptyStateActions.append(createNavLink(buildPageURL('applications'), 'Applications overview', '_self'));" in account_ui, account_ui
 assert "emptyStateActions.append(createNavLink(`/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}`, 'Account JSON'));" in account_ui, account_ui
-assert "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)" in account_ui, account_ui
+assert "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')" in account_ui, account_ui
 assert "detailSummary.id = 'account-summary';" in account_ui, account_ui
 assert "const accountGroupSectionLabel = (group) => {" in account_ui, account_ui
 assert "return region === '—' ? `${app} · ${environment}` : `${app} · ${environment} · ${region}`;" in account_ui, account_ui
@@ -2328,8 +2329,8 @@ assert 'No section is currently targeted.' in application_ui, application_ui
 assert 'On this page' in application_ui, application_ui
 assert "const createApplicationQuickNav = (detail, sectionLinks = []) => {" in application_ui, application_ui
 assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in application_ui, application_ui
-assert "createQuickNavChip('Application detail', 'Current destination: Application detail')" in application_ui, application_ui
-assert "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)" in application_ui, application_ui
+assert "createQuickNavChip('Application detail', 'Current destination: Application detail', 'page')" in application_ui, application_ui
+assert "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')" in application_ui, application_ui
 assert "createElement('div', 'quick-nav-empty', 'No additional section links are available for this application.')" in application_ui, application_ui
 assert "eventsSection.id = 'application-runtime-events';" in application_ui, application_ui
 for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_application_resource_ui, blue_task_set_target_group_resource_ui, production_listener_rule_resource_ui):

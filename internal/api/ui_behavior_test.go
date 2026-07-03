@@ -3210,8 +3210,10 @@ const fetch = (url) => {
   const quickNavChips = collectNodes(accounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   const currentDestinationChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current destination: Application detail');
   if (!currentDestinationChip) throw new Error('expected application hash route to keep current-destination chip');
+  if (currentDestinationChip.getAttribute('aria-current') !== 'page') throw new Error('expected application current-destination chip to expose aria-current=page');
   const currentSectionChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current section: Controller runtime events');
   if (!currentSectionChip) throw new Error('expected application hash to render the current-section chip');
+  if (currentSectionChip.getAttribute('aria-current') !== 'location') throw new Error('expected application current-section chip to expose aria-current=location');
   const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#application-'));
   const expectedLinks = [
     ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-current-status', 'Current application status'],
@@ -3232,6 +3234,7 @@ const fetch = (url) => {
   const updatedChips = collectNodes(updatedAccounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   const trafficChip = updatedChips.find((node) => node.getAttribute('aria-label') === 'Current section: Traffic routing (4)');
   if (!trafficChip) throw new Error('expected application hashchange to update the current-section chip');
+  if (trafficChip.getAttribute('aria-current') !== 'location') throw new Error('expected updated application current-section chip to expose aria-current=location');
   const updatedSectionLinks = collectNodes(updatedAccounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#application-'));
   if (updatedSectionLinks.find((node) => node.textContent === 'Traffic routing (4)')) throw new Error('expected updated application current section to be removed from On this page links');
   if (!updatedSectionLinks.find((node) => node.textContent === 'Controller runtime events')) throw new Error('expected previous application current section to return to On this page links after hashchange');
