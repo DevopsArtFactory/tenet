@@ -2083,14 +2083,14 @@
         if (!sectionID) return `${pathname}${search}`;
         return `${pathname}${search}#${sectionID}`;
       };
-      const createCopySectionLinkButton = (sectionID, label) => {
-        if (!sectionID) return null;
-        const button = createElement('button', 'toolbar-button copy-section-link', 'Copy section link');
+      const createCopyLinkButton = (href, label = 'Copy link', ariaLabel = '') => {
+        if (!href) return null;
+        const button = createElement('button', 'toolbar-button copy-link', label);
         button.type = 'button';
-        button.setAttribute('aria-label', `Copy ${label || 'resource detail'} section link`);
+        button.setAttribute('aria-label', ariaLabel || label);
         button.addEventListener('click', () => {
           button.disabled = true;
-          copyTextToClipboard(currentPageSectionURL(sectionID))
+          copyTextToClipboard(href)
             .then(() => {
               button.textContent = 'Copied';
             })
@@ -2100,11 +2100,19 @@
             .finally(() => {
               setTimeout(() => {
                 button.disabled = false;
-                button.textContent = 'Copy section link';
+                button.textContent = label;
               }, 1600);
             });
         });
         return button;
+      };
+      const createCopySectionLinkButton = (sectionID, label) => {
+        if (!sectionID) return null;
+        return createCopyLinkButton(
+          currentPageSectionURL(sectionID),
+          'Copy section link',
+          `Copy ${label || 'resource detail'} section link`,
+        );
       };
       const createResourceSectionHandoff = (sectionID, label) => {
         if (!sectionID) return null;
@@ -5576,7 +5584,10 @@
             logMeta.append(createElement('span', 'detail-condition-meta', `Log instance · ${entry.instanceId}`));
           }
           const rowLinks = createElement('div', 'row-links');
-          rowLinks.append(createNavLink(resourceLogAnchorURL(deploymentName, resource, logID, selectedLimit), 'Share log entry', '_self'));
+          const logAnchorURL = resourceLogAnchorURL(deploymentName, resource, logID, selectedLimit);
+          rowLinks.append(createNavLink(logAnchorURL, 'Share log entry', '_self'));
+          const copyLogLinkButton = createCopyLinkButton(logAnchorURL, 'Copy log entry link', 'Copy log entry share link');
+          if (copyLogLinkButton) rowLinks.append(copyLogLinkButton);
           logItem.append(logMeta, rowLinks);
           logList.append(logItem);
         });
