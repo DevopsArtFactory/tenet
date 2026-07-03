@@ -1890,6 +1890,12 @@ assert 'Visible high' in ui, ui
 assert 'No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.' in ui, ui
 assert 'Controller runtime events' in ui, ui
 assert 'Refresh runtime events' in ui, ui
+assert 'Runtime event navigation' in ui, ui
+assert 'Newest visible event' in ui, ui
+assert 'Oldest visible event' in ui, ui
+assert 'Jump to newest event' in ui, ui
+assert 'Jump to oldest visible event' in ui, ui
+assert "const createDeploymentEventsNavigation = (deploymentName, eventRows, limit, source) => {" in ui, ui
 assert "Controller-derived runtime events from ${deploymentEventsReadRoute('{deploymentName}', limit, source)}. Tenet shows the selected bounded window, newest first; use Event window to change how much controller history this panel reads without leaving the application drill-down. This is not audit/auth history." in ui, ui
 assert 'Event source' in ui, ui
 assert 'Loading controller runtime events…' in ui, ui
