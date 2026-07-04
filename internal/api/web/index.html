@@ -6062,7 +6062,10 @@
         }
         item.append(meta);
         const links = createElement('div', 'row-links');
-        links.append(createNavLink(ecsServiceEventShareURL(event, index), 'Share ECS service event', '_self'));
+        const eventShareURL = ecsServiceEventShareURL(event, index);
+        links.append(createNavLink(eventShareURL, 'Share ECS service event', '_self'));
+        const copyEventLinkButton = createCopyLinkButton(eventShareURL, 'Copy ECS service event link', 'Copy ECS service event share link');
+        if (copyEventLinkButton) links.append(copyEventLinkButton);
         item.append(links);
         return item;
       };

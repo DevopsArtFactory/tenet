@@ -79,25 +79,28 @@ func TestReadmeStaysProductOverview(t *testing.T) {
 func TestECSEventRowHandoffOperatorContract(t *testing.T) {
 	files := map[string][]string{
 		"README.md": {
-			"Use `Share ECS service event` from a Live inspection event row to hand off one ECS service event without changing the resource-page selector state.",
+			"Use `Share ECS service event` or the adjacent `Copy ECS service event link` from a Live inspection event row to hand off one ECS service event without changing the resource-page selector state.",
 		},
 		"docs/features/resource-inspection.md": {
 			"`ecsService.events[].eventId`",
 			"When ECS service events are present",
 			"`Share ECS service event` links to a same-page row anchor for one ECS service event",
+			"`Copy ECS service event link` copies the same stable handoff URL without navigating away",
 			"eventId-backed anchors remain stable across refreshes",
 		},
 		"docs/features/overview-dashboard.md": {
-			"`Share ECS service event` on the Live inspection event row",
+			"`Share ECS service event` or `Copy ECS service event link` on the Live inspection event row",
 			"preserves the current resource page query state and changes only the hash",
 		},
 		"scripts/smoke-local.sh": {
 			"assert_ecs_service_event_ids('worker_resource_inspection', worker_resource_inspection)",
 			"assert_ecs_service_event_ids('selected_worker_resource_inspection', selected_worker_resource_inspection)",
+			"createCopyLinkButton(eventShareURL, 'Copy ECS service event link', 'Copy ECS service event share link')",
 		},
 		"scripts/smoke-docker.sh": {
 			"assert_ecs_service_event_ids(\"worker_resource_inspection\", worker_resource_inspection)",
 			"assert_ecs_service_event_ids(\"selected_worker_resource_inspection\", selected_worker_resource_inspection)",
+			"createCopyLinkButton(eventShareURL, 'Copy ECS service event link', 'Copy ECS service event share link')",
 		},
 	}
 
