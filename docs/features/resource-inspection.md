@@ -187,7 +187,7 @@ Service events use `Recent ECS service events`, `Event timestamp`, optional
 `eventId` values when present and otherwise use a deterministic timestamp/message
 fallback so operators can share a specific ECS service event without losing the
 current resource selector state such as `clusterArn` or `resourceInspectionLimit`.
-When ECS service events are present, `ecsService.events[].eventId` is a stable row identifier for the live-inspection payload. `Share ECS service event` copies a same-page row anchor for one ECS service event; eventId-backed anchors remain stable across refreshes while fallback anchors keep older payloads shareable.
+When ECS service events are present, `ecsService.events[].eventId` is a stable row identifier for the live-inspection payload. `Share ECS service event` links to a same-page row anchor for one ECS service event; eventId-backed anchors remain stable across refreshes while fallback anchors keep older payloads shareable.
 When the fields are absent, those rows stay quiet.
 
 ## Supported Resource Types

@@ -4631,7 +4631,7 @@ func TestResourceInspectionFeatureGuideDocumentsSelectorsAndScope(t *testing.T) 
 		"When ECS service events are present",
 		"`effectiveLimit`, `returnedEventCount`, `truncationStatus`, `truncated`, optional",
 		"the timestamps identify the newest and oldest events retained",
-		"`Share ECS service event` copies a same-page row anchor for one ECS service event",
+		"`Share ECS service event` links to a same-page row anchor for one ECS service event",
 		"eventId-backed anchors remain stable across refreshes",
 		"Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating",
 		"Runtime code remains read-only; this guide documents the shipped live-inspection route contract.",
