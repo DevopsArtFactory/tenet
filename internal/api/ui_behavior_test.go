@@ -12714,6 +12714,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const quickNavTimelineLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-timeline' && node.textContent === 'Audit timeline');
   const quickNavApplyEntryLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-apply-apply-failed-123' && node.textContent === 'Apply requested (apply.requested) · apply apply_failed_123 · 2026-04-18T08:00:00Z');
   const quickNavPlanEntryLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-plan-plan-ready-123' && node.textContent === 'Plan preview created (plan.created) · plan plan_ready_123 · 2026-04-17T09:00:00Z');
+  const newestEntryLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-apply-apply-failed-123' && node.textContent === 'Jump to newest entry');
+  const oldestVisibleEntryLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-plan-plan-ready-123' && node.textContent === 'Jump to oldest visible entry');
   const quickNavChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   const quickNavChip = quickNavChips.find((node) => node.textContent === 'Audit log');
   const applicationLink = links.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Open application drill-down');
@@ -12746,6 +12748,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!applicationBreadcrumb || applicationBreadcrumb.rel) throw new Error('expected audit application breadcrumb link');
   if (!breadcrumbChips.find((node) => node.textContent === 'Audit log')) throw new Error('expected audit current breadcrumb chip');
   if (!accountsText.includes('Quick navigation')) throw new Error('expected deployment-scoped audit quick navigation strip');
+  if (!accountsText.includes('Audit timeline navigation')) throw new Error('expected audit timeline navigation cue');
+  if (!accountsText.includes('Newest visible entry · 2026-04-18T08:00:00Z · Apply requested (apply.requested) · apply apply_failed_123')) throw new Error('expected newest visible audit cue');
+  if (!accountsText.includes('Oldest visible entry · 2026-04-17T09:00:00Z · Plan preview created (plan.created) · plan plan_ready_123')) throw new Error('expected oldest visible audit cue');
   if (!accountsText.includes('Deployment workspaces')) throw new Error('expected deployment-scoped audit quick navigation group label');
   if (!accountsText.includes('Current section')) throw new Error('expected deployment-scoped audit current-section quick-nav group');
   if (!accountsText.includes('No section is currently targeted.')) throw new Error('expected deployment-scoped audit empty current-section copy without hash');
@@ -12758,6 +12763,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!quickNavTimelineLink || quickNavTimelineLink.target !== '_self' || quickNavTimelineLink.rel) throw new Error('expected audit quick navigation timeline section link');
   if (!quickNavApplyEntryLink || quickNavApplyEntryLink.target !== '_self' || quickNavApplyEntryLink.rel) throw new Error('expected audit quick navigation apply row anchor link');
   if (!quickNavPlanEntryLink || quickNavPlanEntryLink.target !== '_self' || quickNavPlanEntryLink.rel) throw new Error('expected audit quick navigation plan row anchor link');
+  if (!newestEntryLink || newestEntryLink.target !== '_self' || newestEntryLink.rel) throw new Error('expected audit newest visible entry link to preserve filters');
+  if (!oldestVisibleEntryLink || oldestVisibleEntryLink.target !== '_self' || oldestVisibleEntryLink.rel) throw new Error('expected audit oldest visible entry link to preserve filters');
   if (quickNavAuditLink) throw new Error('expected audit quick navigation to render active workspace as a chip');
   if (!quickNavChip) throw new Error('expected audit quick navigation chip');
   if (quickNavChips.find((node) => String(node.getAttribute('aria-label') || '').startsWith('Current section: '))) throw new Error('expected audit route without hash not to render a current-section chip');

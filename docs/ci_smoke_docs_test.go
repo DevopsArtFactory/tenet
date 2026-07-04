@@ -793,6 +793,9 @@ func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditC
 		"remaining audit query state",
 		"removes stale `#audit-*` section anchors",
 		"reloads the audit timeline",
+		"newest/oldest visible entry navigation cues",
+		"Jump to newest entry",
+		"Jump to oldest visible entry",
 	} {
 		if !strings.Contains(section, fragment) {
 			t.Fatalf("expected deployment-scoped audit workspace docs to include clearable chip contract %q", fragment)

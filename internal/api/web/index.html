@@ -2256,15 +2256,18 @@
         action: currentPageState.auditAction,
         limit: currentPageState.auditLimit,
       });
-      const auditEntryQuickNavLabel = (entry) => {
+      const auditEntryNavigationSummary = (entry) => {
         const action = auditActionLabel(entry?.action);
         const subject = entry?.applyId
           ? `apply ${entry.applyId}`
           : entry?.planId
             ? `plan ${entry.planId}`
             : (entry?.deploymentName || 'audit entry');
+        return `${action} · ${subject}`;
+      };
+      const auditEntryQuickNavLabel = (entry) => {
         const timestamp = entry?.timestamp ? ` · ${entry.timestamp}` : '';
-        return `${action} · ${subject}${timestamp}`;
+        return `${auditEntryNavigationSummary(entry)}${timestamp}`;
       };
       const runtimeEventAnchorBase = (event) => {
         const backendID = auditAnchorSlug(event?.eventId);
@@ -7988,6 +7991,26 @@
         });
         return summary;
       };
+      const createAuditTimelineNavigation = (auditEntryAnchors) => {
+        const anchors = (auditEntryAnchors || []).filter((anchor) => anchor?.entry && anchor?.anchorID);
+        if (!anchors.length) return null;
+        const newest = anchors[0];
+        const oldest = anchors[anchors.length - 1];
+        const navigation = createElement('div', 'detail-callout audit-timeline-navigation');
+        navigation.setAttribute('aria-label', 'Audit timeline navigation');
+        const links = createElement('div', 'quick-nav-links');
+        links.append(
+          createNavLink(auditEntryAnchorURL(newest.entry, newest.anchorID), 'Jump to newest entry', '_self'),
+          createNavLink(auditEntryAnchorURL(oldest.entry, oldest.anchorID), 'Jump to oldest visible entry', '_self'),
+        );
+        navigation.append(
+          createElement('strong', '', 'Audit timeline navigation'),
+          createElement('span', 'detail-condition-meta', `Newest visible entry · ${textOrDash(newest.entry?.timestamp)} · ${auditEntryNavigationSummary(newest.entry)}`),
+          createElement('span', 'detail-condition-meta', `Oldest visible entry · ${textOrDash(oldest.entry?.timestamp)} · ${auditEntryNavigationSummary(oldest.entry)}`),
+          links,
+        );
+        return navigation;
+      };
       const auditLimitCapHintText = (entries, result = null) => {
         const scope = result?.resultScope;
         const visibleEntries = Array.isArray(entries) ? entries : [];
@@ -8227,9 +8250,11 @@
           ...auditFilterLabels(),
           auditLimitLabel(),
         ];
+        const timelineNavigation = createAuditTimelineNavigation(auditEntryAnchors);
         timelineSection.append(
           createAuditTimelineSummary(entries),
           createElement('div', 'detail-condition-meta', timelineMeta.join(' · ')),
+          ...(timelineNavigation ? [timelineNavigation] : []),
         );
         const limitCapHint = auditLimitCapHintText(entries, result);
         if (limitCapHint) {

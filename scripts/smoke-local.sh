@@ -2523,6 +2523,11 @@ assert "const auditEntryQuickNavLabel = (entry) => {" in audit_ui, audit_ui
 assert "const auditEntryAnchors = entries.map((entry) => ({" in audit_ui, audit_ui
 assert "pushAuditSectionLink(anchor.anchorID, anchor.label);" in audit_ui, audit_ui
 assert "row.setAttribute('id', rowAnchorID);" in audit_ui, audit_ui
+assert 'Audit timeline navigation' in audit_ui, audit_ui
+assert 'Newest visible entry' in audit_ui, audit_ui
+assert 'Oldest visible entry' in audit_ui, audit_ui
+assert "createNavLink(auditEntryAnchorURL(newest.entry, newest.anchorID), 'Jump to newest entry', '_self')" in audit_ui, audit_ui
+assert "createNavLink(auditEntryAnchorURL(oldest.entry, oldest.anchorID), 'Jump to oldest visible entry', '_self')" in audit_ui, audit_ui
 assert "createNavLink(auditEntryAnchorURL(entry, rowAnchorID), 'Share audit entry', '_self')" in audit_ui, audit_ui
 assert 'Share or continue in app' in audit_ui, audit_ui
 assert 'No audit activity has been persisted yet.' in audit_ui, audit_ui
