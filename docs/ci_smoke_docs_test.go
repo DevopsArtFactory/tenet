@@ -812,13 +812,35 @@ func TestAccountDetailReadRouteCopyDocsContract(t *testing.T) {
 		}
 	}
 
+	readmeText := readTextFile(t, "../README.md")
+	for _, fragment := range []string{
+		"deployment rows with meaningful runtime/event evidence add a `_self` `Open runtime events` link",
+		"while preserving `q` / `sync` / `account`",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README docs to include account runtime-events handoff contract %q", fragment)
+		}
+	}
+
+	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
+	for _, fragment := range []string{
+		"rows with meaningful runtime/event evidence add a `_self` `Open runtime events` handoff",
+		"preserving `q` / `sync` / `account`",
+	} {
+		if !strings.Contains(overviewUIText, fragment) {
+			t.Fatalf("expected overview UI docs to include account runtime-events handoff contract %q", fragment)
+		}
+	}
+
 	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"`Applications overview` plus `Account JSON` / `Copy account read route` recovery handoffs",
 		"operators can open or copy the exact scoped read route",
+		"Deployment rows with meaningful runtime/event evidence add a guarded `_self` `Open runtime events` link",
+		"omitting timestamp-only rows",
 	} {
 		if !strings.Contains(operatorContractsText, fragment) {
-			t.Fatalf("expected operator contracts docs to include account empty-state copy-route contract %q", fragment)
+			t.Fatalf("expected operator contracts docs to include account detail contract %q", fragment)
 		}
 	}
 }
