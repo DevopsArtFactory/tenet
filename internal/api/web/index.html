@@ -419,6 +419,24 @@
         return rolloutSignals.slice(0, 2);
       };
       const latestRuntimeSignalText = (deployment) => latestRuntimeSignalParts(deployment).join(' · ');
+      const hasRuntimeEventsLinkEvidence = (deployment) => {
+        if (!deployment?.name) return false;
+        const runtimeSummary = deployment?.runtimeSummary || {};
+        const historyCount = Number(deployment?.runtimeSummary?.historyCount);
+        if (Number.isFinite(historyCount) && historyCount > 0) return true;
+        const runtimeEvidence = [
+          ...changeDetailLabels(runtimeSummary.changeDetails),
+          ...changeLabels(runtimeSummary.changes),
+          runtimeSummary.summary,
+          runtimeSummary.sync?.reason,
+          runtimeSummary.health?.summary,
+          runtimeSummary.source,
+          runtimeConditionsText(runtimeSummary.conditions, ''),
+          runtimeSummary.rolloutPhase,
+          runtimeSummary.currentStep,
+        ].map((value) => String(value || '').trim()).filter((value) => value && value !== '—');
+        return runtimeEvidence.length > 0;
+      };
       const createLatestRuntimeSignal = (deployment) => {
         const signal = latestRuntimeSignalText(deployment);
         if (!signal) return null;
@@ -10057,6 +10075,9 @@
                   createNavLink(`/v1/overview/deployments/${encodeURIComponent(deployment.name)}`, 'Overview JSON'),
                   createNavLink(`/v1/status/deployments/${encodeURIComponent(deployment.name)}`, 'Status JSON'),
                 );
+                if (hasRuntimeEventsLinkEvidence(deployment)) {
+                  detailLinks.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name }), 'Open runtime events', '_self'));
+                }
               }
 
               const detailPanel = createElement('div', 'detail-panel');

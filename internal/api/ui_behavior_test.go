@@ -1382,7 +1382,11 @@ func TestApplicationsOverviewPageWithNodeHarness(t *testing.T) {
 				"executionMode":  "ecsCodeDeploy",
 				"sync":           map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
 				"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
-				"runtimeSummary": map[string]any{"timestamp": "2026-04-16T07:10:00Z"},
+				"runtimeSummary": map[string]any{
+					"timestamp":    "2026-04-16T07:10:00Z",
+					"summary":      "CodeDeploy traffic shift is progressing",
+					"historyCount": 2,
+				},
 			},
 			{
 				"name":           "payments-worker-staging",
@@ -2550,6 +2554,13 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (quickNavChips.find((node) => String(node.getAttribute('aria-label') || '').startsWith('Current section: '))) throw new Error('expected account page without hash not to render a current-section chip');
   if (links.find((node) => node.textContent === 'Account detail')) throw new Error('expected account page current destination to stay non-click');
   if (!links.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Open application' && node.target === '_self')) throw new Error('expected account page open application self link');
+  const runtimeEventsLinks = links.filter((node) => node.textContent === 'Open runtime events');
+  if (runtimeEventsLinks.length !== 1) throw new Error('expected account page to expose one runtime-events handoff only for the row with runtime/event evidence, got ' + runtimeEventsLinks.map((node) => node.href).join(', '));
+  const accountRuntimeEventsLink = runtimeEventsLinks.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-runtime-events');
+  if (!accountRuntimeEventsLink) throw new Error('expected account page runtime-events link to preserve q/sync/account state and target the application runtime-events section');
+  if (accountRuntimeEventsLink.target !== '_self') throw new Error('expected account page runtime-events link to stay in embedded UI flow');
+  if (accountRuntimeEventsLink.rel) throw new Error('expected account page runtime-events link to avoid new-tab rel attributes');
+  if (runtimeEventsLinks.find((node) => node.href.includes('payments-worker-staging'))) throw new Error('expected account page to suppress runtime-events handoff for timestamp-only runtime rows');
   if (!links.find((node) => node.href === '/?page=account&q=payments&sync=OutOfSync&account=210987654321&accountId=210987654321#account-summary' && node.textContent === 'Account summary' && node.target === '_self')) throw new Error('expected account page summary section link');
   if (!links.find((node) => node.href === '/?page=account&q=payments&sync=OutOfSync&account=210987654321&accountId=210987654321#account-group-payments-staging-apne2-ap-northeast-2' && node.textContent === 'payments · staging-apne2 · ap-northeast-2' && node.target === '_self')) throw new Error('expected account page ap-northeast-2 group section link');
   if (!links.find((node) => node.href === '/?page=account&q=payments&sync=OutOfSync&account=210987654321&accountId=210987654321#account-group-payments-staging-apne2-us-west-2' && node.textContent === 'payments · staging-apne2 · us-west-2' && node.target === '_self')) throw new Error('expected account page us-west-2 group section link');

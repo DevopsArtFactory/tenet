@@ -1868,6 +1868,8 @@ assert_fragments("account_ui", account_ui, (
     "const accountGroupDetailReadRoute = (accountID, group) => {",
     "groupLinks.append(createCopyReadRouteButton(accountGroupDetailReadRoute(account.awsAccountId, group), 'Copy group read route'));",
     "return `GET /v1/overview/accounts/${encodedAccountID}/projects/${appRef}/environments/${environmentRef}`;",
+    "const hasRuntimeEventsLinkEvidence = (deployment) => {",
+    "detailLinks.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name }), 'Open runtime events', '_self'));",
     "No deployments are currently associated with this account.",
     "Use the applications overview to confirm whether filters hide deployments, or open the account JSON payload to inspect the raw catalog response.",
     "emptyStateActions.append(createNavLink(buildPageURL('applications'), 'Applications overview', '_self'));",
