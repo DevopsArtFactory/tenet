@@ -37,7 +37,8 @@ Resource-detail quick navigation keeps `_self` links back to the Applications
 overview and parent Application detail page before operators pivot into focused
 log or inspection evidence; non-click current destination/section chips expose
 `aria-current` so assistive technology receives the same orientation cues as the
-visual shell.
+visual shell; section-hash jumps also move focus after scrolling so keyboard and
+screen-reader users land on the same context as visual operators.
 The plan/apply workspace keeps disabled mutation controls explanatory: `Create Plan`
 is available for the currently reviewed deployment, while `Apply Plan` and
 record refreshes activate after persisted plan/apply records are loaded. If

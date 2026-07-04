@@ -2062,6 +2062,8 @@ assert "createQuickNavChip(currentSectionLink.label, `Current section: ${current
 assert "const buildPageSectionURL = (page, sectionID, extras = {}) => {" in ui, ui
 assert "const scrollToCurrentHashTarget = () => {" in ui, ui
 assert "target.scrollIntoView({ block: 'start', behavior: 'auto' });" in ui, ui
+assert "target.focus({ preventScroll: true });" in ui, ui
+assert "focusCurrentHashTarget(target);" in ui, ui
 assert "if (currentPageState.page !== 'application' && currentPageState.page !== 'account' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan' && currentPageState.page !== 'audit') return;" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Deployment workspaces')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'On this page')" in ui, ui

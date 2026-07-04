@@ -3038,6 +3038,13 @@
           activeResourceQuickNavSync();
         }
       };
+      const focusCurrentHashTarget = (target) => {
+        if (!(target instanceof HTMLElement) || typeof target.focus !== 'function') return;
+        if (typeof target.getAttribute !== 'function' || target.getAttribute('tabindex') == null) {
+          target.setAttribute('tabindex', '-1');
+        }
+        target.focus({ preventScroll: true });
+      };
       const scrollToCurrentHashTarget = () => {
         const targetID = currentHashTargetID();
         if (!targetID) return;
@@ -3046,6 +3053,7 @@
         if (typeof target.scrollIntoView === 'function') {
           target.scrollIntoView({ block: 'start', behavior: 'auto' });
         }
+        focusCurrentHashTarget(target);
       };
       if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
         window.addEventListener('hashchange', () => {
