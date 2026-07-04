@@ -84,7 +84,7 @@ func TestECSEventRowHandoffOperatorContract(t *testing.T) {
 		"docs/features/resource-inspection.md": {
 			"`ecsService.events[].eventId`",
 			"When ECS service events are present",
-			"`Share ECS service event` copies a same-page row anchor for one ECS service event",
+			"`Share ECS service event` links to a same-page row anchor for one ECS service event",
 			"eventId-backed anchors remain stable across refreshes",
 		},
 		"docs/features/overview-dashboard.md": {
