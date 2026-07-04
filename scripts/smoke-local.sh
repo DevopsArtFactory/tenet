@@ -2249,6 +2249,8 @@ assert "emptyStateActions.append(createCopyReadRouteButton(accountDetailReadRout
 assert "const accountGroupDetailReadRoute = (accountID, group) => {" in account_ui, account_ui
 assert "groupLinks.append(createCopyReadRouteButton(accountGroupDetailReadRoute(account.awsAccountId, group), 'Copy group read route'));" in account_ui, account_ui
 assert "return `GET /v1/overview/accounts/${encodedAccountID}/projects/${appRef}/environments/${environmentRef}`;" in account_ui, account_ui
+assert "const hasRuntimeEventsLinkEvidence = (deployment) => {" in account_ui, account_ui
+assert "detailLinks.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name }), 'Open runtime events', '_self'));" in account_ui, account_ui
 assert "createAccountDetailActions(accountState).forEach((action) => {" in account_ui, account_ui
 assert "toolbar.replaceChildren(toolbarActions);" in account_ui, account_ui
 assert 'Account detail read refreshed ·' in account_ui, account_ui

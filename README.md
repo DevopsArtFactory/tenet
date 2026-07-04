@@ -170,7 +170,7 @@ group label, and `Applications JSON` / `Copy read route` handoffs for
 from the joined runtime summary, falling back to `Latest runtime status` when no timestamp is present. The secondary account
 drill-down keeps its toolbar `Refresh account detail` action; account/group JSON handoffs include adjacent `Copy account read route`
 / `Copy group read route` controls for exact scoped `GET /v1/overview/accounts/...`
-handoffs. Expandable rows expose their controlled lazy-loaded detail panel with
+handoffs, and deployment rows with meaningful runtime/event evidence add a `_self` `Open runtime events` link to `/?page=application&deployment={deploymentName}#application-runtime-events` while preserving `q` / `sync` / `account`. Expandable rows expose their controlled lazy-loaded detail panel with
 `aria-controls`. Application detail pages show the exact backing read route,
 `Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search
 for grouped linked resources. When that filter is active, each resource section shows

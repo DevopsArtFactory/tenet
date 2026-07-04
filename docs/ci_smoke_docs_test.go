@@ -804,7 +804,7 @@ func TestAccountDetailReadRouteCopyDocsContract(t *testing.T) {
 	overviewDashboardText := readTextFile(t, "features/overview-dashboard.md")
 	quickLinksSection := markdownSection(t, overviewDashboardText, "## Quick links")
 	for _, fragment := range []string{
-		"account detail page: `Account JSON` / `Copy account read route`, `Group JSON` / `Copy group read route`, `_self` `Open application`",
+		"account detail page: `Account JSON` / `Copy account read route`, `Group JSON` / `Copy group read route`, `_self` `Open application`, and a guarded `_self` `Open runtime events` row link",
 		"`Applications overview` plus `Account JSON` / `Copy account read route` recovery handoffs",
 	} {
 		if !strings.Contains(quickLinksSection, fragment) {
