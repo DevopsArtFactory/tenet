@@ -141,6 +141,11 @@ type TransitionRequest struct {
 	Details []string `json:"details,omitempty"`
 }
 
+// ListQuery captures the narrow read filters supported for apply requests.
+type ListQuery struct {
+	Status Status
+}
+
 // Store persists immutable apply-request records.
 type Store interface {
 	Get(context.Context, string) (Record, error)

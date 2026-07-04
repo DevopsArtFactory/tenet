@@ -179,6 +179,73 @@ func TestServiceCreatePersistsImmutableQueuedApplyRequestWhenExecutionIsEnabled(
 	}
 }
 
+func TestServiceListFiltersQueuedApplyRequests(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_running": {
+				ID:             "apply_running",
+				PlanID:         "plan_running",
+				DeploymentName: "api-prod",
+				Status:         StatusRunning,
+				CreatedAt:      "2026-04-18T08:06:00Z",
+			},
+			"apply_queued_b": {
+				ID:             "apply_queued_b",
+				PlanID:         "plan_queued_b",
+				DeploymentName: "worker-prod",
+				Status:         StatusQueued,
+				CreatedAt:      "2026-04-18T08:05:00Z",
+				Operations: []Operation{{
+					Status:  OperationStatusQueued,
+					Phase:   "Promoting",
+					Target:  "worker-prod listener",
+					Summary: "Shift production traffic.",
+				}},
+			},
+			"apply_failed": {
+				ID:             "apply_failed",
+				PlanID:         "plan_failed",
+				DeploymentName: "api-prod",
+				Status:         StatusFailed,
+				CreatedAt:      "2026-04-18T08:00:00Z",
+			},
+			"apply_queued_a": {
+				ID:             "apply_queued_a",
+				PlanID:         "plan_queued_a",
+				DeploymentName: "api-prod",
+				Status:         StatusQueued,
+				CreatedAt:      "2026-04-18T08:04:00Z",
+			},
+		},
+	}
+	service := Service{Store: store}
+
+	records, err := service.List(context.Background(), ListQuery{Status: StatusQueued})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	got := make([]string, 0, len(records))
+	for _, record := range records {
+		got = append(got, record.ID)
+		if record.Status != StatusQueued {
+			t.Fatalf("expected only queued records, got %+v", records)
+		}
+	}
+	if want := []string{"apply_queued_a", "apply_queued_b"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected queued apply records: got %+v want %+v", got, want)
+	}
+	if len(records[1].Operations) != 1 || records[1].Operations[0].ID == "" {
+		t.Fatalf("expected listed records to normalize additive operation ids, got %+v", records[1].Operations)
+	}
+}
+
+func TestServiceListRequiresStore(t *testing.T) {
+	_, err := (Service{}).List(context.Background(), ListQuery{Status: StatusQueued})
+	if err == nil || !strings.Contains(err.Error(), "apply request store is required") {
+		t.Fatalf("expected missing store error, got %v", err)
+	}
+}
+
 func TestServiceCreateCarriesPlanOperationIDsIntoApplyRows(t *testing.T) {
 	store := &memoryStore{}
 	plan := planpreview.Record{

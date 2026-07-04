@@ -137,6 +137,25 @@ func (s Service) Get(ctx context.Context, id string) (Record, error) {
 	return NormalizeOperationIDs(record), nil
 }
 
+// List returns persisted immutable apply requests matching query.
+func (s Service) List(ctx context.Context, query ListQuery) ([]Record, error) {
+	if s.Store == nil {
+		return nil, fmt.Errorf("apply request store is required")
+	}
+	records, err := s.Store.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	listed := make([]Record, 0, len(records))
+	for _, record := range records {
+		if query.Status != "" && record.Status != query.Status {
+			continue
+		}
+		listed = append(listed, NormalizeOperationIDs(record))
+	}
+	return list(listed), nil
+}
+
 // NormalizeOperationIDs returns a copy of record with additive backend-authored operation IDs.
 // Existing non-empty IDs are preserved so immutable stored records do not need to be rewritten.
 func NormalizeOperationIDs(record Record) Record {

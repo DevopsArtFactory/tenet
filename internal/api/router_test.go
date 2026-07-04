@@ -4889,6 +4889,10 @@ func TestRouterOperatorReadRoleAuthorization(t *testing.T) {
 				providerCalls++
 				return applyrequest.Record{ID: id, DeploymentName: "api-prod", Status: applyrequest.StatusQueued, CreatedAt: "2026-04-18T08:05:00Z"}, nil
 			},
+			ApplyRequests: func(context.Context, applyrequest.ListQuery) ([]applyrequest.Record, error) {
+				providerCalls++
+				return []applyrequest.Record{{ID: "apply_queued", DeploymentName: "api-prod", Status: applyrequest.StatusQueued, CreatedAt: "2026-04-18T08:05:00Z"}}, nil
+			},
 			DeploymentStatuses: func(context.Context) ([]statusstore.Snapshot, error) {
 				providerCalls++
 				return []statusstore.Snapshot{{DeploymentName: "api-prod"}}, nil
@@ -4935,6 +4939,7 @@ func TestRouterOperatorReadRoleAuthorization(t *testing.T) {
 		{name: "deployment status detail", path: "/v1/status/deployments/api-prod", authorizedDeployments: "api-prod"},
 		{name: "immutable plan preview read", path: "/v1/plans/plan_1234abcd", authorizedDeployments: "api-prod"},
 		{name: "immutable apply request read", path: "/v1/applies/apply_1234abcd", authorizedDeployments: "api-prod"},
+		{name: "queued immutable apply collection", path: "/v1/applies?status=queued", authorizedDeployments: "api-prod"},
 	}
 
 	for _, tc := range routes {
@@ -12068,6 +12073,198 @@ func TestRouterApplyRequest(t *testing.T) {
 	}
 }
 
+func TestRouterApplyRequestCollection(t *testing.T) {
+	records := []applyrequest.Record{
+		{
+			ID:             "apply_queued_api",
+			PlanID:         "plan_queued_api",
+			DeploymentName: "api-prod",
+			Status:         applyrequest.StatusQueued,
+			CreatedAt:      "2026-04-18T08:05:00Z",
+			Details:        []string{"queued for local-safe executor handoff"},
+			Lifecycle:      applyrequest.Lifecycle{UpdatedAt: "2026-04-18T08:05:00Z", TotalSteps: 1},
+			Operations: []applyrequest.Operation{{
+				ID:      "op_shift_traffic",
+				Status:  applyrequest.OperationStatusQueued,
+				Phase:   "Promoting",
+				Target:  "api-prod listener",
+				Summary: "Shift production traffic.",
+			}},
+			Source: applyrequest.SourceContext{PlanID: "plan_queued_api", Route: "/v1/plans/plan_queued_api", PlanStatus: "ready"},
+		},
+		{
+			ID:             "apply_queued_worker",
+			PlanID:         "plan_queued_worker",
+			DeploymentName: "worker-prod",
+			Status:         applyrequest.StatusQueued,
+			CreatedAt:      "2026-04-18T08:06:00Z",
+			Source:         applyrequest.SourceContext{PlanID: "plan_queued_worker", Route: "/v1/plans/plan_queued_worker", PlanStatus: "ready"},
+		},
+		{
+			ID:             "apply_failed_api",
+			PlanID:         "plan_failed_api",
+			DeploymentName: "api-prod",
+			Status:         applyrequest.StatusFailed,
+			CreatedAt:      "2026-04-18T08:00:00Z",
+			Error:          "apply execution is disabled",
+			Source:         applyrequest.SourceContext{PlanID: "plan_failed_api", Route: "/v1/plans/plan_failed_api", PlanStatus: "ready"},
+		},
+	}
+
+	t.Run("queued payload excludes terminal records and preserves raw json fields", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			ApplyRequests: func(_ context.Context, query applyrequest.ListQuery) ([]applyrequest.Record, error) {
+				if query.Status != applyrequest.StatusQueued {
+					t.Fatalf("expected queued list query, got %+v", query)
+				}
+				return records, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/applies?status=queued", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var got []applyrequest.Record
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode queued applies payload: %v", err)
+		}
+		if len(got) != 2 || got[0].ID != "apply_queued_api" || got[1].ID != "apply_queued_worker" {
+			t.Fatalf("unexpected queued applies payload: %+v", got)
+		}
+		for _, record := range got {
+			if record.Status != applyrequest.StatusQueued {
+				t.Fatalf("expected only queued records, got %+v", got)
+			}
+		}
+
+		var raw []map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw queued applies payload: %v", err)
+		}
+		for _, key := range []string{"id", "planId", "deploymentName", "status", "createdAt", "details", "lifecycle", "operations", "source"} {
+			if _, ok := raw[0][key]; !ok {
+				t.Fatalf("expected queued apply payload to include %q, got %#v", key, raw[0])
+			}
+		}
+		operations, ok := raw[0]["operations"].([]any)
+		if !ok || len(operations) != 1 {
+			t.Fatalf("expected raw operations array, got %#v", raw[0]["operations"])
+		}
+		firstOperation := operations[0].(map[string]any)
+		for _, key := range []string{"id", "status", "phase", "target", "summary"} {
+			if _, ok := firstOperation[key]; !ok {
+				t.Fatalf("expected queued apply operation to include %q, got %#v", key, firstOperation)
+			}
+		}
+		if _, ok := raw[0]["error"]; ok {
+			t.Fatalf("did not expect empty error field on queued apply payload: %#v", raw[0])
+		}
+	})
+
+	t.Run("unavailable", func(t *testing.T) {
+		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+		req := httptest.NewRequest(http.MethodGet, "/v1/applies?status=queued", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d", resp.Code)
+		}
+	})
+
+	t.Run("provider error", func(t *testing.T) {
+		const upstreamErr = "boom: apply list"
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			ApplyRequests: func(context.Context, applyrequest.ListQuery) ([]applyrequest.Record, error) {
+				return nil, errors.New(upstreamErr)
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/applies?status=queued", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		assertInternalServerErrorResponse(t, resp, upstreamErr)
+	})
+
+	for _, path := range []string{"/v1/applies", "/v1/applies?status=failed", "/v1/applies?status=running"} {
+		t.Run("unsupported query "+path, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				ApplyRequests: func(context.Context, applyrequest.ListQuery) ([]applyrequest.Record, error) {
+					t.Fatalf("apply requests provider should not run for unsupported query")
+					return nil, nil
+				},
+			})
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d", path, resp.Code)
+			}
+		})
+	}
+
+	t.Run("deployment authorization filters queued records to visible deployments", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			ApplyRequests: func(context.Context, applyrequest.ListQuery) ([]applyrequest.Record, error) {
+				return records, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/applies?status=queued", nil)
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthorizedDeploymentsHeader, "api-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var got []applyrequest.Record
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode queued applies payload: %v", err)
+		}
+		if len(got) != 1 || got[0].ID != "apply_queued_api" {
+			t.Fatalf("expected only authorized queued apply record, got %+v", got)
+		}
+	})
+
+	t.Run("deployment authorization requires identity before provider", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			ApplyRequests: func(context.Context, applyrequest.ListQuery) ([]applyrequest.Record, error) {
+				providerCalls++
+				return records, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/applies?status=queued", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.Code)
+		}
+		if providerCalls != 0 {
+			t.Fatalf("expected unauthenticated request to short-circuit before provider, got %d calls", providerCalls)
+		}
+	})
+}
+
 func TestRouterTransitionApplyRequest(t *testing.T) {
 	t.Run("transition payload", func(t *testing.T) {
 		router := NewRouter(Options{
@@ -12598,6 +12795,9 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		CreateApplyRequest: func(context.Context, string) (applyrequest.CreateResult, error) {
 			return applyrequest.CreateResult{Record: applyrequest.Record{ID: "apply_1234abcd"}}, nil
 		},
+		ApplyRequests: func(context.Context, applyrequest.ListQuery) ([]applyrequest.Record, error) {
+			return []applyrequest.Record{{ID: "apply_queued", Status: applyrequest.StatusQueued}}, nil
+		},
 		ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
 			return applyrequest.Record{ID: "apply_1234abcd"}, nil
 		},
@@ -12612,7 +12812,7 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		},
 	})
 
-	getPaths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/applications", "/v1/overview/applications/api-prod", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/overview/deployments/api-prod/events", "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/plans/plan_1234abcd", "/v1/applies/apply_1234abcd", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
+	getPaths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/applications", "/v1/overview/applications/api-prod", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/overview/deployments/api-prod/events", "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/plans/plan_1234abcd", "/v1/applies?status=queued", "/v1/applies/apply_1234abcd", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
 	for _, path := range getPaths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()

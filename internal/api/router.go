@@ -211,6 +211,15 @@ func validDeploymentEventsSource(source string) bool {
 	return true
 }
 
+func parseApplyRequestListQuery(w http.ResponseWriter, r *http.Request) (applyrequest.ListQuery, bool) {
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	if status != string(applyrequest.StatusQueued) {
+		http.Error(w, "status=queued is required", http.StatusBadRequest)
+		return applyrequest.ListQuery{}, false
+	}
+	return applyrequest.ListQuery{Status: applyrequest.StatusQueued}, true
+}
+
 func applyAuditLogLimit(result auditlog.Result, query auditlog.Query) auditlog.Result {
 	totalEntryCount := len(result.Entries)
 	if query.Limit > 0 && query.Limit < len(result.Entries) {
@@ -2149,6 +2158,22 @@ func filterAuthorizedStatusSnapshots(snapshots []statusstore.Snapshot, visible m
 	return filtered
 }
 
+func filterApplyRequestRecords(records []applyrequest.Record, status applyrequest.Status, visible map[string]struct{}, enabled bool) []applyrequest.Record {
+	filtered := make([]applyrequest.Record, 0, len(records))
+	for _, record := range records {
+		if status != "" && record.Status != status {
+			continue
+		}
+		if enabled {
+			if _, ok := visible[record.DeploymentName]; !ok {
+				continue
+			}
+		}
+		filtered = append(filtered, record)
+	}
+	return filtered
+}
+
 func assignManagedDriftIDsToSnapshots(snapshots []statusstore.Snapshot) []statusstore.Snapshot {
 	if len(snapshots) == 0 {
 		return snapshots
@@ -2330,6 +2355,7 @@ type Options struct {
 	CreateDeploymentPlanPreview          func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error)
 	PlanPreview                          func(context.Context, string) (planpreview.Record, error)
 	CreateApplyRequest                   func(context.Context, string) (applyrequest.CreateResult, error)
+	ApplyRequests                        func(context.Context, applyrequest.ListQuery) ([]applyrequest.Record, error)
 	ApplyRequest                         func(context.Context, string) (applyrequest.Record, error)
 	TransitionApplyRequest               func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error)
 	DeploymentStatuses                   func(context.Context) ([]statusstore.Snapshot, error)
@@ -3174,6 +3200,35 @@ func NewRouter(options Options) http.Handler {
 			w.WriteHeader(http.StatusCreated)
 		}
 		_ = json.NewEncoder(w).Encode(result.Record)
+	})
+	mux.HandleFunc("/v1/applies", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		query, ok := parseApplyRequestListQuery(w, r)
+		if !ok {
+			return
+		}
+		if !requireDeploymentReadIdentity(w, r, options) {
+			return
+		}
+		if options.ApplyRequests == nil {
+			http.Error(w, "apply requests unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		records, err := options.ApplyRequests(r.Context(), query)
+		if err != nil {
+			respondReadProviderError(w, err, "apply requests unavailable")
+			return
+		}
+		records = filterApplyRequestRecords(
+			records,
+			query.Status,
+			authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())),
+			options.RequireDeploymentReadAuthorization,
+		)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(records)
 	})
 	mux.HandleFunc("/v1/applies/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/v1/applies/")

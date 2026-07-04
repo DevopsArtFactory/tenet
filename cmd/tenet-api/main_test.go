@@ -828,7 +828,7 @@ func TestAPIOptionsApplyRequestPersistsDisabledRecordAndReadsBack(t *testing.T) 
 	t.Setenv("TENET_APPLY_STORE_PATH", filepath.Join(t.TempDir(), "apply-requests.json"))
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
-	if options.CreateDeploymentPlanPreview == nil || options.PlanPreview == nil || options.CreateApplyRequest == nil || options.ApplyRequest == nil {
+	if options.CreateDeploymentPlanPreview == nil || options.PlanPreview == nil || options.CreateApplyRequest == nil || options.ApplyRequests == nil || options.ApplyRequest == nil {
 		t.Fatalf("expected plan/apply providers to be wired")
 	}
 
@@ -863,6 +863,13 @@ func TestAPIOptionsApplyRequestPersistsDisabledRecordAndReadsBack(t *testing.T) 
 	if fetched.ID != created.Record.ID || fetched.Source.Route != "/v1/plans/"+plan.Record.ID {
 		t.Fatalf("unexpected fetched immutable apply request: %+v", fetched)
 	}
+	queued, err := options.ApplyRequests(context.Background(), applyrequest.ListQuery{Status: applyrequest.StatusQueued})
+	if err != nil {
+		t.Fatalf("ApplyRequests returned error: %v", err)
+	}
+	if len(queued) != 0 {
+		t.Fatalf("expected disabled apply record to stay out of queued list, got %+v", queued)
+	}
 }
 
 func TestAPIOptionsApplyRequestPersistsQueuedRecordWhenApplyExecutionIsEnabled(t *testing.T) {
@@ -872,7 +879,7 @@ func TestAPIOptionsApplyRequestPersistsQueuedRecordWhenApplyExecutionIsEnabled(t
 	t.Setenv("TENET_AWS_ENABLE_APPLY", "true")
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
-	if options.CreateDeploymentPlanPreview == nil || options.CreateApplyRequest == nil || options.ApplyRequest == nil {
+	if options.CreateDeploymentPlanPreview == nil || options.CreateApplyRequest == nil || options.ApplyRequests == nil || options.ApplyRequest == nil {
 		t.Fatalf("expected plan/apply providers to be wired")
 	}
 
@@ -903,6 +910,13 @@ func TestAPIOptionsApplyRequestPersistsQueuedRecordWhenApplyExecutionIsEnabled(t
 	}
 	if fetched.Status != applyrequest.StatusQueued || fetched.Operations[0].Status != applyrequest.OperationStatusQueued {
 		t.Fatalf("unexpected fetched queued apply request: %+v", fetched)
+	}
+	queued, err := options.ApplyRequests(context.Background(), applyrequest.ListQuery{Status: applyrequest.StatusQueued})
+	if err != nil {
+		t.Fatalf("ApplyRequests returned error: %v", err)
+	}
+	if len(queued) != 1 || queued[0].ID != created.Record.ID {
+		t.Fatalf("expected queued apply read provider to return created record, got %+v", queued)
 	}
 }
 
