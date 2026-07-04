@@ -823,7 +823,9 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"item.id = ecsServiceEventAnchorID(event, index);",
 		"if (event?.eventId) {",
 		"`Event ID · ${String(event.eventId).trim()}`",
-		"createNavLink(ecsServiceEventShareURL(event, index), 'Share ECS service event', '_self')",
+		"const eventShareURL = ecsServiceEventShareURL(event, index);",
+		"createNavLink(eventShareURL, 'Share ECS service event', '_self')",
+		"createCopyLinkButton(eventShareURL, 'Copy ECS service event link', 'Copy ECS service event share link')",
 		"ECS service events were not included in this live-inspection payload.",
 		"scrollToCurrentHashTarget();",
 		"pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');",
@@ -4634,6 +4636,7 @@ func TestResourceInspectionFeatureGuideDocumentsSelectorsAndScope(t *testing.T) 
 		"`effectiveLimit`, `returnedEventCount`, `truncationStatus`, `truncated`, optional",
 		"the timestamps identify the newest and oldest events retained",
 		"`Share ECS service event` links to a same-page row anchor for one ECS service event",
+		"`Copy ECS service event link` copies the same stable handoff URL without navigating away",
 		"eventId-backed anchors remain stable across refreshes",
 		"Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating",
 		"Runtime code remains read-only; this guide documents the shipped live-inspection route contract.",
@@ -4652,13 +4655,13 @@ func TestResourceInspectionFeatureGuideDocumentsSelectorsAndScope(t *testing.T) 
 		"../../README.md": {
 			"`docs/features/resource-inspection.md` documents the focused live resource inspection route, selectors, lookup context, unavailable states, and detailed field contracts.",
 			"Resource drill-down Recent logs and Live inspection panels summarize lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract.",
-			"Use `Share ECS service event` from a Live inspection event row to hand off one ECS service event without changing the resource-page selector state.",
+			"Use `Share ECS service event` or the adjacent `Copy ECS service event link` from a Live inspection event row to hand off one ECS service event without changing the resource-page selector state.",
 		},
 		"../../docs/architecture/tenet-v1-overview.md": {
 			"`docs/features/resource-inspection.md`",
 		},
 		"../../docs/features/overview-dashboard.md": {
-			"`Share ECS service event` on the Live inspection event row",
+			"`Share ECS service event` or `Copy ECS service event link` on the Live inspection event row",
 			"preserves the current resource page query state and changes only the hash",
 		},
 		"../../docs/architecture/tenet-v1-overview-ui.md": {

@@ -2280,6 +2280,8 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
         "const logAnchorURL = resourceLogAnchorURL(deploymentName, resource, logID, selectedLimit);",
         "createNavLink(logAnchorURL, 'Share log entry', '_self')",
         "createCopyLinkButton(logAnchorURL, 'Copy log entry link', 'Copy log entry share link')",
+        "const eventShareURL = ecsServiceEventShareURL(event, index);",
+        "createCopyLinkButton(eventShareURL, 'Copy ECS service event link', 'Copy ECS service event share link')",
         "clusterArn: params.get('clusterArn') || ''",
         "routeClusterArn: supportsECSClusterScope(resource) ? String(currentPageState.clusterArn || resource.clusterArn || '').trim() : ''",
         "Clear selected container",

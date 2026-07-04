@@ -2217,6 +2217,11 @@ async function render(search, fetchImpl, clipboardImpl) {
       hash === 'ecs-service-event-evt-deployment-steady';
   });
   if (!eventShareLink) throw new Error('expected ECS service event share link to preserve resource query state and target event hash, got ' + resourceLinks.filter((node) => node.textContent === 'Share ECS service event').map((node) => String(node.href || '') + ' target=' + String(node.target || '')).join(' || '));
+  const eventCopyButton = collectNodes(resourceView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Copy ECS service event link');
+  if (!eventCopyButton || eventCopyButton.getAttribute('aria-label') !== 'Copy ECS service event share link') throw new Error('expected ECS service event copy button');
+  eventCopyButton.dispatch('click');
+  await settle();
+  if (resourceView.clipboardWrites[resourceView.clipboardWrites.length - 1] !== eventShareLink.href) throw new Error('expected copied ECS service event link to match share link, got ' + resourceView.clipboardWrites.join(', '));
   if (!resourceLinks.find((node) => node.textContent === 'Share ECS service event' && node.href.endsWith('#ecs-service-event-2026-06-28t09-55-00z-service-payments-api-staging-service-registered-2-targets-row-2'))) throw new Error('expected fallback ECS service event anchor for payloads without eventId');
   const eventRows = collectNodes(resourceView.document.getElementById('accounts'), (node) => node.id && node.id.startsWith('ecs-service-event-'));
   if (!eventRows.find((node) => node.id === 'ecs-service-event-evt-deployment-steady')) throw new Error('expected backend eventId row anchor');

@@ -2129,6 +2129,8 @@ assert "const createCopyLinkButton = (href, label = 'Copy link', ariaLabel = '')
 assert "const logAnchorURL = resourceLogAnchorURL(deploymentName, resource, logID, selectedLimit);" in ui, ui
 assert "createNavLink(logAnchorURL, 'Share log entry', '_self')" in ui, ui
 assert "createCopyLinkButton(logAnchorURL, 'Copy log entry link', 'Copy log entry share link')" in ui, ui
+assert "const eventShareURL = ecsServiceEventShareURL(event, index);" in ui, ui
+assert "createCopyLinkButton(eventShareURL, 'Copy ECS service event link', 'Copy ECS service event share link')" in ui, ui
 assert "clusterArn: params.get('clusterArn') || ''" in ui, ui
 assert "routeClusterArn: supportsECSClusterScope(resource) ? String(currentPageState.clusterArn || resource.clusterArn || '').trim() : ''" in ui, ui
 assert "Clear selected container" in ui, ui
