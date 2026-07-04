@@ -21,6 +21,10 @@ and deployment/project/environment grants for the deployment being inspected.
 
 For `401`, reopen the same route through the trusted front door or active
 managed-login/enterprise-SSO sign-in route, then retry the original bookmark.
+If Tenet-managed login is the recovery path, use `docs/features/managed-login.md`
+and `authRuntime.tenetManagedLogin` to confirm the provider mode, login route,
+and cookie/session diagnostics; managed login authenticates browser identity but
+does not grant Tenet roles or deployment access.
 For `403`, stay on the blocked route and inspect Operator context details for
 recognized roles, `roles.canRead` / write capability, deployment access summary,
 unmatched forwarded grants, and access verdict route examples. Do not treat a
