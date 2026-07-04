@@ -6200,12 +6200,15 @@ async function renderScenario(hash, fetchImpl) {
   if (sectionLinks.find((node) => node.textContent === 'Recent logs')) throw new Error('expected active current section to be removed from On this page links');
   const recentLogsScrollsBefore = recentLogsRun.document.scrollEvents.filter((event) => event.id === 'resource-recent-logs').length;
   if (recentLogsScrollsBefore < 1) throw new Error('expected initial recent logs hash to scroll the matching section into view');
+  if (!recentLogsRun.document.activeElement || recentLogsRun.document.activeElement.id !== 'resource-recent-logs') throw new Error('expected initial recent logs hash to focus the matching section, got ' + (recentLogsRun.document.activeElement?.id || 'none'));
+  if (recentLogsRun.document.activeElement.getAttribute('tabindex') !== '-1') throw new Error('expected focused recent logs section to be programmatically focusable');
   resolveLogs({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', resourceDescription: 'Primary ECS service log stream', containerName: 'worker', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, resultScope: { effectiveLimit: 100, returnedEntryCount: 0, truncationStatus: 'not_truncated' }, entries: [] }) });
   await settle();
   await settle();
   const recentLogsScrollsAfter = recentLogsRun.document.scrollEvents.filter((event) => event.id === 'resource-recent-logs').length;
   if (recentLogsScrollsAfter <= recentLogsScrollsBefore) throw new Error('expected recent logs hash to re-scroll after lazy panel load');
   if (!recentLogsRun.document.lastScrolledTarget || recentLogsRun.document.lastScrolledTarget.id !== 'resource-recent-logs') throw new Error('expected recent logs hash to remain the active scroll target after lazy panel load');
+  if (!recentLogsRun.document.activeElement || recentLogsRun.document.activeElement.id !== 'resource-recent-logs') throw new Error('expected recent logs hash to refocus the matching section after lazy panel load, got ' + (recentLogsRun.document.activeElement?.id || 'none'));
   const recentLogsText = collectText(recentLogsRoot).join(' | ');
   if (!recentLogsText.includes('Log entry cap · All available entries')) throw new Error('expected recent logs panel to render the default active cap copy');
   ['Recent logs request | GET ' + logsURL, 'Requested cap | All available entries', 'Effective cap | 100 entries', 'Returned entries | 0 entries', 'Newest entry | —', 'Oldest entry | —', 'Scope status | Below cap; no router truncation', 'Resource description | Primary ECS service log stream', 'Selected cluster | ' + clusterArn, 'Selected container | worker'].forEach((fragment) => {
@@ -6256,6 +6259,8 @@ async function renderScenario(hash, fetchImpl) {
   if (updatedSectionLinks.find((node) => node.textContent === 'Conditions')) throw new Error('expected updated current section to be removed from On this page links after hashchange');
   if (!updatedSectionLinks.find((node) => node.textContent === 'Recent logs')) throw new Error('expected previous current section to return to On this page links after hashchange');
   if (!recentLogsRun.document.lastScrolledTarget || recentLogsRun.document.lastScrolledTarget.id !== 'resource-status-conditions') throw new Error('expected hashchange to scroll the new current section into view');
+  if (!recentLogsRun.document.activeElement || recentLogsRun.document.activeElement.id !== 'resource-status-conditions') throw new Error('expected hashchange to focus the new current section, got ' + (recentLogsRun.document.activeElement?.id || 'none'));
+  if (recentLogsRun.document.activeElement.getAttribute('tabindex') !== '-1') throw new Error('expected updated current section to be programmatically focusable');
 
   let resolveInspection;
   const inspectionRun = await renderScenario('#resource-live-inspection', (url) => {
@@ -6269,12 +6274,14 @@ async function renderScenario(hash, fetchImpl) {
   if (!inspectionChip) throw new Error('expected live inspection hash to render the current-section chip');
   const inspectionScrollsBefore = inspectionRun.document.scrollEvents.filter((event) => event.id === 'resource-live-inspection').length;
   if (inspectionScrollsBefore < 1) throw new Error('expected initial live inspection hash to scroll the matching section into view');
+  if (!inspectionRun.document.activeElement || inspectionRun.document.activeElement.id !== 'resource-live-inspection') throw new Error('expected initial live inspection hash to focus the matching section, got ' + (inspectionRun.document.activeElement?.id || 'none'));
   resolveInspection({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, minimumHealthyPercent: 100, maximumPercent: 200, healthCheckGracePeriodSeconds: 45, taskDefinition: 'payments-api:42', deployments: [], tasks: [{ taskArn: 'arn:aws:ecs:ap-northeast-2:210987654321:task/payments-staging/abc123', taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:container-instance/payments-staging/ci-abc123', capacityProviderName: 'FARGATE_SPOT', availabilityZone: 'ap-northeast-2a', containers: [{ name: 'worker', lastStatus: 'RUNNING', healthStatus: 'HEALTHY', image: 'worker:latest', awslogs: { group: '/ecs/payments', stream: 'ecs/worker/abc123' } }] }], events: [] } }) });
   await settle();
   await settle();
   const inspectionScrollsAfter = inspectionRun.document.scrollEvents.filter((event) => event.id === 'resource-live-inspection').length;
   if (inspectionScrollsAfter <= inspectionScrollsBefore) throw new Error('expected live inspection hash to re-scroll after lazy panel load');
   if (!inspectionRun.document.lastScrolledTarget || inspectionRun.document.lastScrolledTarget.id !== 'resource-live-inspection') throw new Error('expected live inspection hash to remain the active scroll target after lazy panel load');
+  if (!inspectionRun.document.activeElement || inspectionRun.document.activeElement.id !== 'resource-live-inspection') throw new Error('expected live inspection hash to refocus after lazy panel load, got ' + (inspectionRun.document.activeElement?.id || 'none'));
   const inspectionRoot = inspectionRun.document.getElementById('accounts');
   const inspectionText = collectText(inspectionRoot).join(' | ');
   ['Container instance · arn:aws:ecs:ap-northeast-2:210987654321:container-instance/payments-staging/ci-abc123', 'Capacity provider · FARGATE_SPOT', 'Availability Zone · ap-northeast-2a'].forEach((fragment) => {
