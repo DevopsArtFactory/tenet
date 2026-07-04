@@ -144,4 +144,6 @@ This issue is not the RBAC policy redesign. Keep these concerns separate:
 - no automatic access grant from raw provider group names
 - no removal of trusted-front-door header support
 
-Repository-backed policy parsing/evaluation for users/groups, Tenet roles, and deployment/project/environment scopes is already shipped through `GET /v1/operator/context.repositoryPolicy`, and filesystem catalog runs can explicitly opt into using those policy-derived grants for guarded route authorization with `TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true`. Remaining work is provider-token/group lifecycle hardening and any future provider-specific group synchronization beyond the current request-scoped `X-Tenet-Authenticated-Groups` input.
+Repository-backed policy parsing/evaluation for users/groups, Tenet roles, and deployment/project/environment scopes is already shipped through `GET /v1/operator/context.repositoryPolicy`, and filesystem catalog runs can explicitly opt into using those policy-derived grants for guarded route authorization with `TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true`.
+
+Remaining work is provider-token/group lifecycle hardening and any future provider-specific group synchronization beyond the current request-scoped `X-Tenet-Authenticated-Groups` input.

@@ -287,6 +287,21 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 
 	doc := readRepoFile(t, "docs/architecture/tenet-v1-enterprise-sso.md")
 	localRuntimeDoc := readRepoFile(t, "docs/architecture/tenet-v1-local-runtime.md")
+	repositoryPolicyOptInSentence := "Repository-backed policy parsing/evaluation for users/groups, Tenet roles, and deployment/project/environment scopes is already shipped through `GET /v1/operator/context.repositoryPolicy`, and filesystem catalog runs can explicitly opt into using those policy-derived grants for guarded route authorization with `TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true`."
+	remainingProviderWorkSentence := "Remaining work is provider-token/group lifecycle hardening and any future provider-specific group synchronization beyond the current request-scoped `X-Tenet-Authenticated-Groups` input."
+	if !strings.Contains(doc, repositoryPolicyOptInSentence+"\n\n"+remainingProviderWorkSentence) {
+		t.Fatal("expected enterprise SSO docs to keep the repository RBAC opt-in example complete and separate from remaining provider work")
+	}
+	for _, malformed := range []string{
+		"`TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true. Remaining work",
+		"`TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true Remaining work",
+		"TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=***",
+		"TENET_AUTH_PROVIDER=***",
+	} {
+		if strings.Contains(doc, malformed) {
+			t.Fatalf("expected enterprise SSO docs to avoid malformed/redacted provider-mode artifact %q", malformed)
+		}
+	}
 	for _, fragment := range []string{
 		"Google Workspace/Gmail means identity login only",
 		"It does not grant Tenet Gmail mailbox, Drive, Calendar, or other Google API access.",
@@ -325,8 +340,8 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		"Route authorization still depends on Tenet's existing trusted role/deployment/project/environment enforcement toggles by default",
 		"repository-backed RBAC policy evaluation becomes the guarded route authorization source",
 		"This issue is not the RBAC policy redesign.",
-		"Repository-backed policy parsing/evaluation for users/groups, Tenet roles, and deployment/project/environment scopes is already shipped through `GET /v1/operator/context.repositoryPolicy`",
-		"Remaining work is provider-token/group lifecycle hardening and any future provider-specific group synchronization beyond the current request-scoped `X-Tenet-Authenticated-Groups` input.",
+		repositoryPolicyOptInSentence,
+		remainingProviderWorkSentence,
 	} {
 		if !strings.Contains(doc, fragment) {
 			t.Fatalf("expected enterprise SSO docs to include %q", fragment)
