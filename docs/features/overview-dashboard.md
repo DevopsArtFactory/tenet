@@ -506,3 +506,5 @@ Likely next UI slices:
 - account/group summary sparklines or event cues
 - deeper drift diagnostics once the backend exposes richer live drift sources beyond the current derived read model
 - eventual extraction into a dedicated frontend only if the current read-model/UI surface becomes too large for embedded HTML
+
+`GET /v1/applies?status=queued` follows the same collection contract for executor-facing queued immutable apply records and returns `200 OK` with `[]` when no queued records are visible.

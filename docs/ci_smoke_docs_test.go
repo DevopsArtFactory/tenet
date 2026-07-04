@@ -638,6 +638,7 @@ func TestAuthToggleDocsUseReadableBooleanExamples(t *testing.T) {
 		"when `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true` is enabled, `POST /v1/plans/deployments/{deploymentName}`",
 		"when that same `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` setting is enabled",
 		"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` is enabled, stored `GET /v1/applies/{applyId}`",
+		"`GET /v1/applies?status=queued` follows the same collection contract",
 	} {
 		if !strings.Contains(overviewText, fragment) {
 			t.Fatalf("expected overview dashboard docs to include readable boolean auth-toggle example %q", fragment)

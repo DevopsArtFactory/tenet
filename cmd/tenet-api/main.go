@@ -332,6 +332,7 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 		options.CreateDeploymentPlanPreview = planService.Create
 		options.PlanPreview = planService.Get
 		options.CreateApplyRequest = applyService.Create
+		options.ApplyRequests = applyService.List
 		options.ApplyRequest = applyService.Get
 		options.TransitionApplyRequest = applyService.Transition
 		controllerRefreshAuditStorePath := envOrDefault("TENET_CONTROLLER_REFRESH_AUDIT_STORE_PATH", defaultControllerRefreshAuditStorePath())
