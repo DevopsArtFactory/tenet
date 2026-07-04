@@ -192,6 +192,49 @@ func mktempUnderPayloadDir(args string) bool {
 	return args == "$PAYLOAD_DIR" || strings.HasPrefix(args, "$PAYLOAD_DIR/")
 }
 
+func TestOperatorTroubleshootingRunbookDocumentsDailyTriageFlow(t *testing.T) {
+	runbookText := readTextFile(t, "runbooks/operator-troubleshooting.md")
+
+	for _, fragment := range []string{
+		"GET /v1/operator/context",
+		"POST /v1/controller/refresh",
+		"/?page=audit&deployment={deploymentName}&action=controller.refresh.requested",
+		"GET /v1/controller/refresh/status",
+		"/?page=application&deployment={deploymentName}",
+		"/?page=resource&deployment={deploymentName}&resourceType={type}&resourceId={stableResourceId}",
+		"Request-Id",
+		"Tenet request ID",
+		"lookupContext",
+		"aws_unavailable",
+		"no_log_source",
+		"source_mismatch",
+		"no retained controller history",
+	} {
+		if !strings.Contains(runbookText, fragment) {
+			t.Fatalf("expected operator troubleshooting runbook to preserve daily triage fragment %q", fragment)
+		}
+	}
+
+	orderedFragments := []string{
+		"## 1. Confirm identity, roles, and deployment access",
+		"## 2. Confirm desired-state source and controller-refresh availability",
+		"## 3. Request or trace a refresh through audit",
+		"## 4. Drill into application, resource evidence, events, live inspection, and logs",
+		"## 5. Decode common unavailable states",
+	}
+	last := -1
+	for _, fragment := range orderedFragments {
+		idx := strings.Index(runbookText, fragment)
+		if idx < 0 {
+			t.Fatalf("expected operator troubleshooting runbook to include ordered section %q", fragment)
+		}
+		if idx <= last {
+			t.Fatalf("expected operator troubleshooting section %q to appear after the previous triage section", fragment)
+		}
+		last = idx
+	}
+}
+
 func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 	runbookText := readTextFile(t, "runbooks/ci-smoke-runner-start.md")
 	helperText := readTextFile(t, "../scripts/ci-smoke-runner-evidence.sh")

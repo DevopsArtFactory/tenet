@@ -72,7 +72,7 @@ Filter for `controller.refresh.requested` and the deployment when applicable.
 The matching audit rows should carry actor metadata plus safe request, route,
 status, result, request ID, delivery ID, channel, or filesystem no-op evidence.
 If no row appears after an accepted request, check the controller-refresh status
-route before assuming desired state changed:
+route (`GET /v1/controller/refresh/status`) before assuming desired state changed:
 
 ```bash
 curl -i "$TENET_API_BASE/v1/controller/refresh/status"
