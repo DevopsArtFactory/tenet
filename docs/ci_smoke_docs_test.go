@@ -767,7 +767,8 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search",
 		"visible/total impact and section-specific empty guidance alongside the inline",
-		"`Clear resource filter` action, while rollout/history/log evidence stays on the final",
+		"`Clear resource filter`, plus compact resource-row `Evidence cues`:",
+		"`Live evidence available` / `Recent logs supported` `_self` handoffs to the final",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README to include application-detail resource-filter summary %q", fragment)

@@ -1157,8 +1157,9 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"const createRolloutResourceDetailLink = (detail, resourceTypes, identifiers) => {",
 		"return href ? createNavLink(href, 'Open resource detail', '_self') : null;",
 		"const resourceSupportsRecentLogs = (resource) => {",
-		"createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open live inspection', '_self')",
-		"createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open recent logs', '_self')",
+		"'Evidence cues'",
+		"createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Live evidence available', '_self')",
+		"createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Recent logs supported', '_self')",
 		"const renderApplicationDetailPage = (detail, applicationState = null, focusState = null) => {",
 		"const applicationSectionIDs = {",
 		"const createApplicationQuickNav = (detail, sectionLinks = []) => {",
@@ -3976,16 +3977,16 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"const resourceSupportsRecentLogs = (resource) => {\" in application_ui, application_ui") || !strings.Contains(text, "assert \"'codeDeployApplication',\\n          'codeDeployDeploymentGroup'\" in application_ui, application_ui") || !strings.Contains(text, "assert \"'trafficShiftPlan',\\n          'productionListenerRule',\\n          'activeTargetGroup',\\n          'candidateTargetGroup'\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page recent logs support helper and route-stable resource types")
 	}
-	if !strings.Contains(text, "assert \"createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open live inspection', '_self')\" in application_ui, application_ui") {
+	if !strings.Contains(text, "assert \"createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Live evidence available', '_self')\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page live inspection handoff contract")
 	}
-	if !strings.Contains(text, "assert \"createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open recent logs', '_self')\" in application_ui, application_ui") {
+	if !strings.Contains(text, "assert \"createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Recent logs supported', '_self')\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page recent logs handoff contract")
 	}
 	if !strings.Contains(text, "assert \"const rolloutResourceDetailURL = (detail, resourceTypes, identifiers) => {\" in application_ui, application_ui") || !strings.Contains(text, "assert \"return href ? createNavLink(href, 'Open resource detail', '_self') : null;\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert traffic-routing resource-detail handoff contract")
 	}
-	if !strings.Contains(text, "assert 'Open live inspection' in application_ui, application_ui") || !strings.Contains(text, "assert 'Open recent logs' in application_ui, application_ui") {
+	if !strings.Contains(text, "assert 'Evidence cues' in application_ui, application_ui") || !strings.Contains(text, "assert 'Live evidence available' in application_ui, application_ui") || !strings.Contains(text, "assert 'Recent logs supported' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page evidence handoff copy")
 	}
 	if !strings.Contains(text, "assert \"const applicationResourceSectionLinkLabel = (group, resourceFilter = '') => {\" in application_ui, application_ui") {
