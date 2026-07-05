@@ -13,6 +13,11 @@ The implementation remains fully embedded HTML/CSS/JS with no separate frontend 
 
 The dashboard routes are source-agnostic on the backend: `tenet-api` can now feed the same `/v1/catalog/*` and `/v1/overview/*` payloads from either a filesystem checkout or a GitHub-backed read-only desired-state catalog without changing the UI route contract.
 
+Operator troubleshooting quick-reference: use `docs/runbooks/operator-troubleshooting.md`
+for the compact route/evidence/state/verification matrix across applications
+overview, application detail, resource detail, Recent logs, Live inspection,
+audit, plan/apply, and queued applies.
+
 ## What shipped so far
 
 ### 1. Applications overview landing page

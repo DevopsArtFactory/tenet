@@ -435,50 +435,61 @@ func TestManagedLoginFeatureGuideDocs(t *testing.T) {
 
 func TestOperatorTroubleshootingRunbookDocsContract(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
-	if !strings.Contains(readme, "`docs/runbooks/operator-troubleshooting.md` documents daily auth, refresh, audit, and drill-down troubleshooting for operators.") {
+	if !strings.Contains(readme, "`docs/runbooks/operator-troubleshooting.md` documents the auth, route, evidence, state, and verification troubleshooting quick-reference.") {
 		t.Fatal("expected README documentation map to point operators at the operator troubleshooting runbook")
 	}
 
 	runbook := readRepoFile(t, "docs/runbooks/operator-troubleshooting.md")
 	for _, fragment := range []string{
 		"# Operator Troubleshooting",
-		"Daily auth, refresh, audit, and drill-down runbook",
-		"1. Confirm identity, roles, and deployment access",
+		"Compact operator troubleshooting quick-reference",
+		"Use this page for route/evidence/state/verification checks",
+		"| Surface | UI route | Backing route(s) | Request-Id / lookup-context evidence | Expected local/no-AWS state | Verify |",
 		"`GET /v1/operator/context`",
-		"`docs/features/managed-login.md`",
 		"`authRuntime.tenetManagedLogin`",
-		"managed login authenticates browser identity",
-		"does not grant Tenet roles or deployment access",
-		"2. Confirm desired-state source and controller-refresh availability",
-		"`POST /v1/controller/refresh`",
-		"3. Request or trace a refresh through audit",
-		"`/?page=audit`",
-		"deployment-scoped application, resource, drift, or plan page",
-		"`Last refresh requested` cue",
-		"same-shell",
-		"audit handoff to the exact deployment-filtered refresh audit route",
-		"/?page=audit&deployment={deploymentName}&action=controller.refresh.requested",
-		"rewriting the current bookmarkable route",
-		"curl -i \"$TENET_API_BASE/v1/controller/refresh/status\"",
-		"Use `latestReceipt` when the status is `published`",
-		"Treat `filesystem_noop` as a configured filesystem catalog refresh receipt",
-		"no controller handoff was published, and no desired-state change should be expected",
-		"treat `no_history` as an",
-		"empty configured audit store rather than a failed refresh",
-		"`unavailable` as an audit read-model/configuration problem",
-		"4. Drill into application, resource evidence, events, live inspection, and logs",
-		"`/?page=application`",
-		"`/?page=resource`",
-		"5. Decode common unavailable states",
-		"`aws_unavailable`",
-		"`no_log_source`",
-		"`source_mismatch`",
-		"`no retained controller history`",
-		"`401`",
-		"`403`",
+		"Managed login authenticates browser identity; it does not grant Tenet roles or deployment access.",
+		"| Applications overview | `/` | `GET /v1/overview/applications`",
+		"| Application detail | `/?page=application&deployment={deploymentName}` | `GET /v1/overview/applications/{deploymentName}`",
+		"| Resource detail | `/?page=resource&deployment={deploymentName}&resourceType={type}&resourceId={stableResourceId}` | `GET /v1/overview/deployments/{deploymentName}`",
+		"| Recent logs | `#resource-recent-logs` | `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}`",
+		"| Live inspection | `#resource-live-inspection` | `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}`",
+		"| Audit | `/?page=audit[&deployment={deploymentName}][&action={action}][&limit={n}]` | `GET /v1/audit-logs`",
+		"| Plan/apply | `/?page=plan&deployment={deploymentName}[&planId={planId}][&applyId={applyId}]` | `POST /v1/plans/deployments/{deploymentName}`",
+		"| Queued applies | no dashboard page; use API collection | `GET /v1/applies?status=queued`",
+		"`Request-Id` / `Tenet request ID`",
+		"`lookupContext.region`",
+		"`available=false` / `unavailableReason=aws_unavailable`",
+		"`available=false` / `unavailableReason=no_log_source`",
+		"`status=filesystem_noop`",
+		"`status=no_history`",
+		"`make test`",
+		"`make smoke-local`",
+		"`make smoke-docker`",
 	} {
 		if !strings.Contains(runbook, fragment) {
 			t.Fatalf("expected operator troubleshooting runbook to include %q", fragment)
+		}
+	}
+
+	overviewDoc := readRepoFile(t, "docs/features/overview-dashboard.md")
+	for _, fragment := range []string{
+		"Operator troubleshooting quick-reference",
+		"`docs/runbooks/operator-troubleshooting.md`",
+		"compact route/evidence/state/verification matrix",
+	} {
+		if !strings.Contains(overviewDoc, fragment) {
+			t.Fatalf("expected overview dashboard docs to cross-link operator troubleshooting quick-reference with %q", fragment)
+		}
+	}
+
+	recentLogsDoc := readRepoFile(t, "docs/features/resource-recent-logs.md")
+	for _, fragment := range []string{
+		"Operator troubleshooting quick-reference",
+		"`docs/runbooks/operator-troubleshooting.md`",
+		"route/evidence/state/verification matrix",
+	} {
+		if !strings.Contains(recentLogsDoc, fragment) {
+			t.Fatalf("expected recent logs docs to cross-link operator troubleshooting quick-reference with %q", fragment)
 		}
 	}
 }

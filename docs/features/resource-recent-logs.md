@@ -2,6 +2,10 @@
 
 Tenet now exposes a read-only recent-log slice for resource-detail drill-down pages.
 
+Operator troubleshooting quick-reference: use `docs/runbooks/operator-troubleshooting.md`
+for the route/evidence/state/verification matrix when comparing Recent logs with
+resource detail, Live inspection, audit, plan/apply, and queued apply evidence.
+
 ## Route
 
 `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}][&containerName={container}][&instanceId={ec2InstanceId}][&clusterArn={ecsClusterArn}]`

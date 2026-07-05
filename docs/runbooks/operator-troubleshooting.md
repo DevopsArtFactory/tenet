@@ -1,136 +1,61 @@
 # Operator Troubleshooting
 
-Daily auth, refresh, audit, and drill-down runbook for Tenet operators.
+Compact operator troubleshooting quick-reference for Tenet drill-downs, refresh
+handoffs, audit, plan/apply records, recent logs, and live inspection.
 
-Use this when an operator cannot see an application, needs to force or trace a
-desired-state refresh, or needs to explain missing resource evidence. Keep the
-flow in order: identity and access issues can make later refresh, audit, and
-drill-down signals look stale or empty.
+Use this page for route/evidence/state/verification checks. Start with identity
+and access evidence before interpreting empty, unavailable, or stale downstream
+signals.
 
-## 1. Confirm identity, roles, and deployment access
+## Identity and Refresh Preflight
 
-Start from the embedded Operator context banner or call:
+| Check | Route | Evidence to capture | Expected local/no-AWS state | Verify |
+| --- | --- | --- | --- | --- |
+| Operator identity and grants | `GET /v1/operator/context` | `identity.authenticated`, `identityProvenance`, `roles.canRead`, `roles.canWrite`, `deploymentAccess.summary`, `accessVerdicts`, `desiredStateSource` | Local unrestricted runs may show relaxed enforcement; guarded runs should explain `401` missing identity and `403` missing role/deployment scope before any route-specific debugging. | `curl -i "$TENET_API_BASE/v1/operator/context"` |
+| Managed-login boundary | `GET /v1/operator/context` | `authRuntime.tenetManagedLogin`, login/callback/logout routes, cookie diagnostics | Managed login authenticates browser identity; it does not grant Tenet roles or deployment access. Use `docs/features/managed-login.md` when active login changes `401` recovery. | `curl -i "$TENET_API_BASE/v1/operator/context"` |
+| Manual controller refresh | `POST /v1/controller/refresh` | HTTP status, `Request-Id`, returned `controllerRefresh`/receipt evidence, deployment-scoped `Last refresh requested` cue | Filesystem catalogs return `status=filesystem_noop`; GitHub+Redis handoff can return `202 Accepted`; `401`/`403` still mean identity/write-grant debugging first. | `curl -i -X POST "$TENET_API_BASE/v1/controller/refresh"` |
+| Refresh audit/status follow-up | `GET /v1/audit-logs?action=controller.refresh.requested`; `GET /v1/controller/refresh/status` | actor, safe route/status/result metadata, request ID, delivery ID/channel or filesystem no-op evidence, `latestReceipt` | `status=no_history` means the configured audit store has no refresh receipts yet; `status=unavailable` means fix audit read-model configuration before retrying. | `curl -i "$TENET_API_BASE/v1/controller/refresh/status"` |
 
-```bash
-curl -i "$TENET_API_BASE/v1/operator/context"
-```
+Deployment-scoped refresh audit handoff: `/?page=audit&deployment={deploymentName}&action=controller.refresh.requested`.
 
-Confirm `GET /v1/operator/context` shows the expected authenticated identity,
-trusted header provenance or managed-session runtime, read/write role capability,
-and deployment/project/environment grants for the deployment being inspected.
+## Surface Matrix
 
-For `401`, reopen the same route through the trusted front door or active
-managed-login/enterprise-SSO sign-in route, then retry the original bookmark.
-If Tenet-managed login is the recovery path, use `docs/features/managed-login.md`
-and `authRuntime.tenetManagedLogin` to confirm the provider mode, login route,
-and cookie/session diagnostics; managed login authenticates browser identity but
-does not grant Tenet roles or deployment access.
-For `403`, stay on the blocked route and inspect Operator context details for
-recognized roles, `roles.canRead` / write capability, deployment access summary,
-unmatched forwarded grants, and access verdict route examples. Do not treat a
-403 as a sign-in problem after identity is already recognized.
+| Surface | UI route | Backing route(s) | Request-Id / lookup-context evidence | Expected local/no-AWS state | Verify |
+| --- | --- | --- | --- | --- | --- |
+| Applications overview | `/` | `GET /v1/overview/applications` | `Request-Id` / `Tenet request ID` on failed guarded reads; Operator context shows identity, role, and deployment-filter evidence. | Empty `200 OK` can be valid when catalog rows are missing or deployment filters/grants hide every app; guarded `401`/`403` should point back to Operator context. | `curl -i "$TENET_API_BASE/v1/overview/applications"` |
+| Application detail | `/?page=application&deployment={deploymentName}` | `GET /v1/overview/applications/{deploymentName}` | `Request-Id` on initial or refresh read failure; application page keeps deployment, source fingerprint, runtime summary, and events context visible. | Missing retained events can be a bounded controller-history window, not an audit loss; use audit for durable plan/apply/refresh evidence. | `curl -i "$TENET_API_BASE/v1/overview/applications/{deploymentName}"` |
+| Resource detail | `/?page=resource&deployment={deploymentName}&resourceType={type}&resourceId={stableResourceId}` | `GET /v1/overview/deployments/{deploymentName}` | `Request-Id` on top-level deployment-detail failures; selected resource context shows the current resource read before lazy panels load. | Resource aliases can resolve to canonical IDs; local fixture detail should still render selected resource context even when live evidence is unavailable. | `curl -i "$TENET_API_BASE/v1/overview/deployments/{deploymentName}"` |
+| Recent logs | `#resource-recent-logs` | `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}` | Capture `Request-Id` / `Tenet request ID`, `lookupContext.region`, `lookupContext.targetAccountId`, `lookupContext.crossAccount`, `lookupContext.observerRoleConfigured`, selectors, and `resultScope`. | `available=true` with `entries=[]` plus `emptyReason` is a successful empty read; `available=false` / `unavailableReason=aws_unavailable` means provider lookup failed; `available=false` / `unavailableReason=no_log_source` is expected for route-stable resources without an independent stream. | `curl -i "$TENET_API_BASE/v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}&limit=5"` |
+| Live inspection | `#resource-live-inspection` | `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}` | Capture `Request-Id` / `Tenet request ID`, `lookupContext`, accepted selectors such as `clusterArn` or `instanceId`, and `resultScope` when bounded. | Summary-only traffic-routing evidence can be valid locally; optional EC2/ECS/AWS facts may be absent; `aws_unavailable`, `cross_account_not_configured`, and `resource_not_found` route operators to provider/account wiring instead of bookmark changes. | `curl -i "$TENET_API_BASE/v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}"` |
+| Audit | `/?page=audit[&deployment={deploymentName}][&action={action}][&limit={n}]` | `GET /v1/audit-logs` | `Request-Id`, `resultScope`, actor availability, source record/detail routes, `entryId`, and action/deployment filters. | Empty scoped audit is valid when no matching immutable records exist; `action` supports `plan.created`, `apply.requested`, `apply.transitioned`, and `controller.refresh.requested`. | `curl -i "$TENET_API_BASE/v1/audit-logs?deployment={deploymentName}&action=apply.requested&limit=5"` |
+| Plan/apply | `/?page=plan&deployment={deploymentName}[&planId={planId}][&applyId={applyId}]` | `POST /v1/plans/deployments/{deploymentName}`; `GET /v1/plans/{planId}`; `POST /v1/applies/plans/{planId}`; `GET /v1/applies/{applyId}`; `POST /v1/applies/{applyId}/transitions` | `Request-Id`, persisted actor, `planId`, `applyId`, source fingerprint/`ifMatch`, operation IDs, lifecycle status/progress, and audit source routes. | Local writes persist immutable Tenet records but do not mutate AWS; stale reviewed plans return `409 Conflict`; guarded writes require identity, operator/admin role, and matching deployment or project/environment scope. | `curl -i -X POST "$TENET_API_BASE/v1/plans/deployments/{deploymentName}"` |
+| Queued applies | no dashboard page; use API collection | `GET /v1/applies?status=queued` | `Request-Id`, returned immutable records, deployment names, `status=queued`, queued operations, lifecycle fields, and related audit `apply.requested` / `apply.transitioned` rows. | Default local/no-AWS runs may return `[]`; with `TENET_AWS_ENABLE_APPLY=true`, queued-on-create records exercise the local-safe executor handoff without live AWS mutation. | `curl -i "$TENET_API_BASE/v1/applies?status=queued"` |
 
-## 2. Confirm desired-state source and controller-refresh availability
+## Unavailable-State Decoder
 
-In Operator context details, inspect `desiredStateSource` before requesting a
-refresh. Filesystem catalogs are expected to report a no-op controller-refresh
-path. GitHub desired-state sources need the configured GitHub source plus the
-controller refresh handoff to be available before a manual refresh can enqueue
-work.
+| State | Meaning | Next check |
+| --- | --- | --- |
+| `401` | Tenet did not receive trusted identity for a guarded route. | Reopen the same bookmark through the trusted front door or active managed-login route, then retry the same URL. |
+| `403` | Identity was recognized, but role or deployment/project/environment scope is missing. | Inspect `GET /v1/operator/context` `roles`, `deploymentAccess.summary`, and `accessVerdicts`; do not treat this as sign-in failure. |
+| `aws_unavailable` | The route and resource were valid, but Tenet could not complete the provider lookup. | Keep the bookmark; capture `Request-Id` plus `lookupContext`, then check credentials, observer-role reachability, permissions, region/account placement, and AWS API availability. |
+| `no_log_source` | The selected resource is valid, but Tenet has no independent recent-log/live source for that exact resource yet. | Use application events, sibling resources, rollout summary, audit rows, or backing-resource handoffs. |
+| `source_mismatch` | A webhook or refresh trigger did not match configured desired-state source. | Compare Operator context GitHub repo/ref/path/base URL with the observed webhook or refresh source. |
+| `no retained controller history` | The bounded controller-history window is empty for that deployment. | Use `/?page=audit` for durable plan/apply/refresh evidence and wait for fresh controller runtime events before expecting application-event rows. |
 
-The embedded UI exposes `Refresh controller` only when the handoff is available.
-Backend callers can use:
+## Verification Commands
 
-```bash
-curl -i -X POST "$TENET_API_BASE/v1/controller/refresh"
-```
+Use the narrowest command that proves the slice you changed:
 
-Treat `POST /v1/controller/refresh` auth failures with the same guidance as
-other operator writes: `401` means identity/session recovery first, while `403`
-means the recognized caller lacks a write-capable role or deployment scope.
-
-## 3. Request or trace a refresh through audit
-
-After a manual refresh request, stay on the same bookmarked page and use the
-success/no-op/unavailable banner as the immediate handoff result. From a
-deployment-scoped application, resource, drift, or plan page, the embedded
-Operator context keeps a compact `Last refresh requested` cue, plus a same-shell
-audit handoff to the exact deployment-filtered refresh audit route without
-rewriting the current bookmarkable route:
-
-```text
-/?page=audit&deployment={deploymentName}&action=controller.refresh.requested
-```
-
-For global refresh triage, open the bookmarkable audit timeline (`/?page=audit`):
-
-```text
-/?page=audit
-```
-
-Filter for `controller.refresh.requested` and the deployment when applicable.
-The matching audit rows should carry actor metadata plus safe request, route,
-status, result, request ID, delivery ID, channel, or filesystem no-op evidence.
-If no row appears after an accepted request, check the controller-refresh status
-route (`GET /v1/controller/refresh/status`) before assuming desired state changed:
+Fast-to-broad ladder: `go test ./internal/api -run TestOperatorTroubleshootingRunbookDocsContract -count=1`,
+`make test`, `make smoke-local`, then `make smoke-docker`.
 
 ```bash
-curl -i "$TENET_API_BASE/v1/controller/refresh/status"
+go test ./internal/api -run TestOperatorTroubleshootingRunbookDocsContract -count=1
+make test
+make smoke-local
+make smoke-docker
 ```
 
-Use `latestReceipt` when the status is `published`.
-Treat `filesystem_noop` as a configured filesystem catalog refresh receipt:
-no controller handoff was published, and no desired-state change should be expected.
-Then treat `no_history` as an empty configured audit store rather than a failed refresh,
-and treat `unavailable` as an audit read-model/configuration problem to fix
-before retrying refresh requests.
-
-## 4. Drill into application, resource evidence, events, live inspection, and logs
-
-Use the application page first (`/?page=application`):
-
-```text
-/?page=application&deployment={deploymentName}
-```
-
-Confirm the application detail loaded the expected deployment, source
-fingerprint, runtime summary, managed drift rows, and Controller runtime events.
-If the events panel is empty, distinguish an actually empty retained window from
-a source filter, query limit, or controller retention cap before escalating.
-
-Then open the specific resource (`/?page=resource`):
-
-```text
-/?page=resource&deployment={deploymentName}&resourceType={type}&resourceId={stableResourceId}
-```
-
-On `/?page=resource`, keep the selected resource context visible while checking
-the lazy Recent logs and Live inspection panels. Capture the HTTP `Request-Id`
-shown as `Tenet request ID` with the provider lookup context whenever evidence is
-empty, unavailable, or denied. Use the panel refresh controls to rerun only the
-needed recent-log or live-inspection read without changing the bookmark.
-
-## 5. Decode common unavailable states
-
-Use these states as routing clues, not as generic failures:
-
-- `aws_unavailable` means Tenet reached a supported route but could not complete
-  the provider lookup. Check credentials, observer-role reachability,
-  permissions, region/account placement, AWS API availability, and the captured
-  `Tenet request ID` plus `lookupContext`.
-- `no_log_source` means the selected resource is a valid drill-down target, but
-  Tenet has no independent recent-log stream or live provider read for that
-  exact resource yet. Use application events, sibling resources, rollout summary,
-  audit rows, or backing-resource handoffs instead of changing the route.
-- `source_mismatch` means the incoming webhook or refresh trigger did not match
-  the configured desired-state source. Compare the configured repo/ref/path/base
-  URL in Operator context with the webhook or refresh source that was observed.
-- `no retained controller history` means the immutable audit log may still have
-  plan/apply/refresh rows, but the deployment's controller-history timeline has
-  no retained events in its bounded window. Use `/?page=audit` for durable audit
-  evidence and wait for the controller to write fresh runtime events before
-  expecting application-event rows.
-
-If several states appear together, resolve auth/access first, then desired-state
-source or refresh handoff, then resource-provider availability. That order keeps
-operator action focused on the layer that can actually change the next signal.
+For docs-only changes, the focused Go docs contract is the fast guard. Run the
+smoke lanes when the text changes release-guard expectations, local/no-AWS
+matrices, or route contracts that smoke scripts assert.

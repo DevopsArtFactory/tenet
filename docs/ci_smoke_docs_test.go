@@ -216,11 +216,10 @@ func TestOperatorTroubleshootingRunbookDocumentsDailyTriageFlow(t *testing.T) {
 	}
 
 	orderedFragments := []string{
-		"## 1. Confirm identity, roles, and deployment access",
-		"## 2. Confirm desired-state source and controller-refresh availability",
-		"## 3. Request or trace a refresh through audit",
-		"## 4. Drill into application, resource evidence, events, live inspection, and logs",
-		"## 5. Decode common unavailable states",
+		"## Identity and Refresh Preflight",
+		"## Surface Matrix",
+		"## Unavailable-State Decoder",
+		"## Verification Commands",
 	}
 	last := -1
 	for _, fragment := range orderedFragments {
