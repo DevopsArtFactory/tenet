@@ -105,6 +105,10 @@ func respondApplyTransitionError(w http.ResponseWriter, err error) {
 }
 
 func respondApplyClaimError(w http.ResponseWriter, err error) {
+	if errors.Is(err, applyrequest.ErrInvalidClaimRequest) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if errors.Is(err, applyrequest.ErrInvalidState) || errors.Is(err, applyrequest.ErrAlreadyClaimed) {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return

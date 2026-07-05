@@ -12,6 +12,7 @@ var (
 	ErrPlanNotReady              = fmt.Errorf("plan preview is not ready")
 	ErrSourceFingerprintConflict = fmt.Errorf("apply request plan source fingerprint conflict")
 	ErrInvalidState              = fmt.Errorf("apply request lifecycle transition is invalid")
+	ErrInvalidClaimRequest       = fmt.Errorf("apply request claim request is invalid")
 	ErrAlreadyClaimed            = fmt.Errorf("apply request is already claimed by another worker")
 )
 

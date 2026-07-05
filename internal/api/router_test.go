@@ -12378,6 +12378,34 @@ func TestRouterClaimApplyRequest(t *testing.T) {
 		})
 	}
 
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{name: "missing workerId", body: `{}`},
+		{name: "blank workerId", body: `{"workerId":"   "}`},
+	} {
+		t.Run("invalid claim request "+tc.name, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				ClaimApplyRequest: func(context.Context, string, applyrequest.ClaimRequest) (applyrequest.Record, error) {
+					return applyrequest.Record{}, fmt.Errorf("%w: workerId is required", applyrequest.ErrInvalidClaimRequest)
+				},
+			})
+			req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/claim", strings.NewReader(tc.body))
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d with body %q", tc.name, resp.Code, resp.Body.String())
+			}
+			if body := resp.Body.String(); !strings.Contains(body, "workerId is required") {
+				t.Fatalf("expected workerId validation response, got %q", body)
+			}
+		})
+	}
+
 	t.Run("not found", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},

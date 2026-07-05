@@ -358,6 +358,13 @@ func TestServiceClaimRejectsCompetingWorkerAndInvalidStates(t *testing.T) {
 				DeploymentName: "api-prod",
 				Status:         StatusFailed,
 			},
+			"apply_failed_claimed_by_same_worker": {
+				ID:             "apply_failed_claimed_by_same_worker",
+				PlanID:         "plan_ready",
+				DeploymentName: "api-prod",
+				Status:         StatusFailed,
+				Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z"},
+			},
 		},
 	}
 	service := Service{Store: store}
@@ -370,12 +377,16 @@ func TestServiceClaimRejectsCompetingWorkerAndInvalidStates(t *testing.T) {
 	if !errors.Is(err, ErrInvalidState) {
 		t.Fatalf("expected ErrInvalidState for terminal record, got %v", err)
 	}
+	_, err = service.Claim(context.Background(), "apply_failed_claimed_by_same_worker", ClaimRequest{WorkerID: "worker-a"})
+	if !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("expected ErrInvalidState for terminal same-worker claim, got %v", err)
+	}
 	_, err = service.Claim(context.Background(), "missing", ClaimRequest{WorkerID: "worker-a"})
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for missing record, got %v", err)
 	}
 	_, err = service.Claim(context.Background(), "apply_claimed", ClaimRequest{})
-	if !errors.Is(err, ErrInvalidState) || !strings.Contains(err.Error(), "workerId is required") {
+	if !errors.Is(err, ErrInvalidClaimRequest) || !strings.Contains(err.Error(), "workerId is required") {
 		t.Fatalf("expected workerId validation error, got %v", err)
 	}
 }

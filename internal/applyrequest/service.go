@@ -203,7 +203,7 @@ func (s Service) Claim(ctx context.Context, id string, request ClaimRequest) (Re
 func normalizeClaimRequest(request ClaimRequest) (string, error) {
 	workerID := strings.TrimSpace(request.WorkerID)
 	if workerID == "" {
-		return "", fmt.Errorf("%w: workerId is required", ErrInvalidState)
+		return "", fmt.Errorf("%w: workerId is required", ErrInvalidClaimRequest)
 	}
 	return workerID, nil
 }
@@ -215,11 +215,17 @@ func (s Service) claimRecord(ctx context.Context, request ClaimRequest) func(Rec
 			return Record{}, err
 		}
 		record = NormalizeOperationIDs(record)
+		if record.Status != StatusQueued && record.Status != StatusRunning {
+			return Record{}, fmt.Errorf("%w: only queued apply requests can be claimed; %s is %s", ErrInvalidState, record.ID, record.Status)
+		}
 		if record.Claim != nil {
-			if record.Claim.WorkerID == workerID {
+			if record.Claim.WorkerID == workerID && record.Status == StatusRunning {
 				return record, nil
 			}
-			return Record{}, fmt.Errorf("%w: %s is already claimed by worker %s", ErrAlreadyClaimed, record.ID, record.Claim.WorkerID)
+			if record.Claim.WorkerID != workerID {
+				return Record{}, fmt.Errorf("%w: %s is already claimed by worker %s", ErrAlreadyClaimed, record.ID, record.Claim.WorkerID)
+			}
+			return Record{}, fmt.Errorf("%w: only queued apply requests can be claimed; %s is %s", ErrInvalidState, record.ID, record.Status)
 		}
 		if record.Status != StatusQueued {
 			return Record{}, fmt.Errorf("%w: only queued apply requests can be claimed; %s is %s", ErrInvalidState, record.ID, record.Status)
