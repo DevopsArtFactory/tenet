@@ -96,7 +96,7 @@
       .row-top { display:flex; justify-content:space-between; gap:10px; align-items:center; }
       .row-title { margin:0; font-size: 17px; }
       .row-subtitle { margin-top:4px; color: var(--muted); font-size: 13px; }
-      .row-links { display:flex; flex-wrap:wrap; gap: 10px; margin-top: 10px; }
+      .row-links { display:flex; flex-wrap:wrap; gap: 10px; margin-top: 10px; align-items:center; }
       .account-links { margin-top: 0; align-self: center; }
       .row-links-shell { padding: 0 16px 16px; }
       .row-primary-action { align-self: flex-start; margin-top: 0; }
@@ -111,6 +111,7 @@
       .application-core-item strong { display:block; margin-bottom: 2px; color: var(--text); font-size: 13px; }
       .row-link { color: var(--blue); font-size: 13px; font-weight: 600; text-decoration: none; }
       .row-link:hover, .row-link:focus-visible { text-decoration: underline; }
+      .row-link-label { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
       .row-hint { margin-top: 10px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
       .pills { display:flex; flex-wrap:wrap; gap:8px; }
       .pill { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid transparent; }
@@ -4138,11 +4139,15 @@
         if (!container || !deploymentName || !resource?.type || !resource?.id) {
           return;
         }
+        const evidenceLinks = [];
         if (resourceSupportsLiveInspection(resource)) {
-          container.append(createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open live inspection', '_self'));
+          evidenceLinks.push(createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Live evidence available', '_self'));
         }
         if (resourceSupportsRecentLogs(resource)) {
-          container.append(createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open recent logs', '_self'));
+          evidenceLinks.push(createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Recent logs supported', '_self'));
+        }
+        if (evidenceLinks.length) {
+          container.append(createElement('span', 'row-link-label', 'Evidence cues'), ...evidenceLinks);
         }
       };
       const renderApplicationDetailPage = (detail, applicationState = null, focusState = null) => {
