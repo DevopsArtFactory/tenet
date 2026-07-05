@@ -1003,7 +1003,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if operatorWrite["allowed"] != true || operatorWrite["requiresOperatorRole"] != true || operatorWrite["reason"] != "guarded operator write prerequisites are satisfied for this request" {
 		t.Fatalf("expected allowed write verdict, got %#v", operatorWrite)
 	}
-	if !reflect.DeepEqual(operatorWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/transitions", "POST /v1/controller/refresh"}) {
+	if !reflect.DeepEqual(operatorWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/claim", "POST /v1/applies/{applyId}/transitions", "POST /v1/controller/refresh"}) {
 		t.Fatalf("expected operator write route examples, got %#v", operatorWrite["exampleRoutes"])
 	}
 	if !reflect.DeepEqual(operatorWrite["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles"}) {
@@ -1026,7 +1026,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if deploymentScopedWrite["allowed"] != true || deploymentScopedWrite["requiresExactDeploymentAllowlistMatch"] != true || deploymentScopedWrite["acceptsProjectEnvironmentScopes"] != true {
 		t.Fatalf("expected conditional deployment write verdict, got %#v", deploymentScopedWrite)
 	}
-	if !reflect.DeepEqual(deploymentScopedWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/transitions"}) {
+	if !reflect.DeepEqual(deploymentScopedWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/claim", "POST /v1/applies/{applyId}/transitions"}) {
 		t.Fatalf("expected deployment-scoped write route examples, got %#v", deploymentScopedWrite["exampleRoutes"])
 	}
 	if !reflect.DeepEqual(deploymentScopedWrite["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments", "X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"}) {
@@ -12261,6 +12261,225 @@ func TestRouterApplyRequestCollection(t *testing.T) {
 		}
 		if providerCalls != 0 {
 			t.Fatalf("expected unauthenticated request to short-circuit before provider, got %d calls", providerCalls)
+		}
+	})
+}
+
+func TestRouterClaimApplyRequest(t *testing.T) {
+	t.Run("claim payload", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			ClaimApplyRequest: func(ctx context.Context, applyID string, req applyrequest.ClaimRequest) (applyrequest.Record, error) {
+				if applyID != "apply_1234abcd" {
+					t.Fatalf("unexpected apply claim for %s", applyID)
+				}
+				if req.WorkerID != "worker-a" {
+					t.Fatalf("unexpected claim request: %+v", req)
+				}
+				return applyrequest.Record{
+					ID:             applyID,
+					PlanID:         "plan_1234abcd",
+					DeploymentName: "api-prod",
+					Status:         applyrequest.StatusRunning,
+					CreatedAt:      "2026-04-18T08:05:00Z",
+					Details:        []string{"Executor worker-a claimed this queued apply request for local-safe handoff; no live AWS mutation has been attempted by the claim route."},
+					Lifecycle:      applyrequest.Lifecycle{UpdatedAt: "2026-04-18T08:10:00Z", StartedAt: "2026-04-18T08:10:00Z", CurrentStep: 1, TotalSteps: 2},
+					Claim:          &applyrequest.Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z"},
+					Transitions: []applyrequest.Transition{{
+						TransitionedAt: "2026-04-18T08:10:00Z",
+						PreviousStatus: applyrequest.StatusQueued,
+						Status:         applyrequest.StatusRunning,
+						Step:           1,
+						Details:        []string{"Executor worker-a claimed this queued apply request for local-safe handoff; no live AWS mutation has been attempted by the claim route."},
+						Lifecycle:      applyrequest.Lifecycle{UpdatedAt: "2026-04-18T08:10:00Z", StartedAt: "2026-04-18T08:10:00Z", CurrentStep: 1, TotalSteps: 2},
+					}},
+					Operations: []applyrequest.Operation{
+						{Status: applyrequest.OperationStatusRunning, Phase: "Promoting", Target: "api-prod listener", Summary: "Shift production traffic."},
+						{Status: applyrequest.OperationStatusQueued, Phase: "Finalizing", Target: "api-prod alarms", Summary: "Verify final health."},
+					},
+					Source: applyrequest.SourceContext{PlanID: "plan_1234abcd", Route: "/v1/plans/plan_1234abcd", PlanStatus: "ready", Fingerprint: "plan_input"},
+				}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/claim", strings.NewReader(`{"workerId":"worker-a"}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var record applyrequest.Record
+		if err := json.Unmarshal(resp.Body.Bytes(), &record); err != nil {
+			t.Fatalf("failed to decode apply claim payload: %v", err)
+		}
+		if record.ID != "apply_1234abcd" || record.Status != applyrequest.StatusRunning || record.Claim == nil || record.Claim.WorkerID != "worker-a" {
+			t.Fatalf("unexpected apply claim payload: %+v", record)
+		}
+		if record.Lifecycle.CurrentStep != 1 || len(record.Operations) != 2 || record.Operations[0].Status != applyrequest.OperationStatusRunning {
+			t.Fatalf("expected running lifecycle/operations update, got %+v", record)
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw apply claim payload: %v", err)
+		}
+		for _, key := range []string{"id", "planId", "deploymentName", "status", "createdAt", "details", "lifecycle", "claim", "transitions", "operations", "source"} {
+			if _, ok := raw[key]; !ok {
+				t.Fatalf("expected apply claim payload to include %q, got %#v", key, raw)
+			}
+		}
+		claim, ok := raw["claim"].(map[string]any)
+		if !ok || claim["workerId"] != "worker-a" || claim["claimedAt"] != "2026-04-18T08:10:00Z" {
+			t.Fatalf("expected raw claim metadata, got %#v", raw["claim"])
+		}
+	})
+
+	t.Run("unavailable", func(t *testing.T) {
+		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/claim", strings.NewReader(`{"workerId":"worker-a"}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d", resp.Code)
+		}
+	})
+
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{name: "empty body", body: ""},
+		{name: "unknown field", body: `{"workerId":"worker-a","unexpected":true}`},
+		{name: "trailing payload", body: `{"workerId":"worker-a"}{"workerId":"worker-b"}`},
+	} {
+		t.Run("invalid body "+tc.name, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				ClaimApplyRequest: func(context.Context, string, applyrequest.ClaimRequest) (applyrequest.Record, error) {
+					t.Fatalf("apply claim provider should not run on invalid body")
+					return applyrequest.Record{}, nil
+				},
+			})
+			req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/claim", strings.NewReader(tc.body))
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d", tc.name, resp.Code)
+			}
+			if body := resp.Body.String(); body != "invalid apply claim request body\n" {
+				t.Fatalf("expected invalid body response, got %q", body)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{name: "missing workerId", body: `{}`},
+		{name: "blank workerId", body: `{"workerId":"   "}`},
+	} {
+		t.Run("invalid claim request "+tc.name, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				ClaimApplyRequest: func(context.Context, string, applyrequest.ClaimRequest) (applyrequest.Record, error) {
+					return applyrequest.Record{}, fmt.Errorf("%w: workerId is required", applyrequest.ErrInvalidClaimRequest)
+				},
+			})
+			req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/claim", strings.NewReader(tc.body))
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d with body %q", tc.name, resp.Code, resp.Body.String())
+			}
+			if body := resp.Body.String(); !strings.Contains(body, "workerId is required") {
+				t.Fatalf("expected workerId validation response, got %q", body)
+			}
+		})
+	}
+
+	t.Run("not found", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			ClaimApplyRequest: func(context.Context, string, applyrequest.ClaimRequest) (applyrequest.Record, error) {
+				return applyrequest.Record{}, applyrequest.ErrNotFound
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_missing/claim", strings.NewReader(`{"workerId":"worker-a"}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.Code)
+		}
+	})
+
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "invalid claim state", err: fmt.Errorf("%w: only queued apply requests can be claimed", applyrequest.ErrInvalidState)},
+		{name: "already claimed", err: fmt.Errorf("%w: apply_1234abcd is already claimed by worker worker-b", applyrequest.ErrAlreadyClaimed)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				ClaimApplyRequest: func(context.Context, string, applyrequest.ClaimRequest) (applyrequest.Record, error) {
+					return applyrequest.Record{}, tc.err
+				},
+			})
+			req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/claim", strings.NewReader(`{"workerId":"worker-a"}`))
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusConflict {
+				t.Fatalf("expected 409, got %d", resp.Code)
+			}
+		})
+	}
+
+	t.Run("deployment authorization allows authorized claim", func(t *testing.T) {
+		applyLookupCalls := 0
+		claimCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
+				applyLookupCalls++
+				return applyrequest.Record{ID: "apply_1234abcd", DeploymentName: "api-prod", Status: applyrequest.StatusQueued, CreatedAt: "2026-04-18T08:00:00Z"}, nil
+			},
+			ClaimApplyRequest: func(_ context.Context, applyID string, req applyrequest.ClaimRequest) (applyrequest.Record, error) {
+				claimCalls++
+				if applyID != "apply_1234abcd" || req.WorkerID != "worker-a" {
+					t.Fatalf("unexpected claim request %q %+v", applyID, req)
+				}
+				return applyrequest.Record{ID: applyID, DeploymentName: "api-prod", Status: applyrequest.StatusRunning, CreatedAt: "2026-04-18T08:00:00Z", Claim: &applyrequest.Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z"}}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/claim", strings.NewReader(`{"workerId":"worker-a"}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		req.Header.Set(requestactor.AuthorizedDeploymentsHeader, "api-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if applyLookupCalls != 1 || claimCalls != 1 {
+			t.Fatalf("expected one apply lookup and one claim, got %d/%d", applyLookupCalls, claimCalls)
 		}
 	})
 }

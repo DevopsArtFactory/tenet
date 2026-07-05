@@ -3027,7 +3027,7 @@ def assert_operator_context_common(payload):
     assert access_verdicts.get("operatorRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers, payload
     assert access_verdicts.get("operatorRead", {}).get("acceptedRoleNames") == read_roles, payload
     assert access_verdicts.get("operatorWrite", {}).get("requiresOperatorRole") is True, payload
-    assert access_verdicts.get("operatorWrite", {}).get("exampleRoutes") == ["POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/transitions", "POST /v1/controller/refresh"], payload
+    assert access_verdicts.get("operatorWrite", {}).get("exampleRoutes") == ["POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/claim", "POST /v1/applies/{applyId}/transitions", "POST /v1/controller/refresh"], payload
     assert access_verdicts.get("operatorWrite", {}).get("requiredTrustedHeaders") == identity_headers + role_headers, payload
     assert access_verdicts.get("operatorWrite", {}).get("acceptedRoleNames") == write_roles, payload
     assert access_verdicts.get("deploymentScopedRead", {}).get("requiresExactDeploymentAllowlistMatch") is True, payload

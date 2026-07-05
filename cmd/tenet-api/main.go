@@ -334,6 +334,7 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 		options.CreateApplyRequest = applyService.Create
 		options.ApplyRequests = applyService.List
 		options.ApplyRequest = applyService.Get
+		options.ClaimApplyRequest = applyService.Claim
 		options.TransitionApplyRequest = applyService.Transition
 		controllerRefreshAuditStorePath := envOrDefault("TENET_CONTROLLER_REFRESH_AUDIT_STORE_PATH", defaultControllerRefreshAuditStorePath())
 		controllerRefreshAuditStore := controllerrefreshaudit.NewFileStore(controllerRefreshAuditStorePath)
@@ -741,6 +742,7 @@ func startApplyRequestExecutor(logger *slog.Logger, repoRoot string, applyEnable
 			Store: applyrequest.NewFileStore(applyStorePath),
 		},
 		PollInterval: interval,
+		WorkerID:     "tenet-api-local-executor",
 		Logger:       logger,
 	}
 	logger.Info("starting local-safe apply executor", "apply_store_path", applyStorePath)

@@ -927,7 +927,7 @@ func TestAPIOptionsApplyRequestTransitionPersistsLifecycleUpdatesAndReusesStable
 	t.Setenv("TENET_AWS_ENABLE_APPLY", "true")
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
-	if options.CreateDeploymentPlanPreview == nil || options.CreateApplyRequest == nil || options.ApplyRequest == nil || options.TransitionApplyRequest == nil {
+	if options.CreateDeploymentPlanPreview == nil || options.CreateApplyRequest == nil || options.ApplyRequest == nil || options.ClaimApplyRequest == nil || options.TransitionApplyRequest == nil {
 		t.Fatalf("expected plan/apply providers to be wired")
 	}
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,11 +16,14 @@ import (
 )
 
 type memoryStore struct {
+	mu        sync.Mutex
 	records   map[string]Record
 	saveCalls int
 }
 
 func (s *memoryStore) Get(_ context.Context, id string) (Record, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	record, ok := s.records[id]
 	if !ok {
 		return Record{}, ErrNotFound
@@ -28,6 +32,8 @@ func (s *memoryStore) Get(_ context.Context, id string) (Record, error) {
 }
 
 func (s *memoryStore) List(_ context.Context) ([]Record, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	records := make([]Record, 0, len(s.records))
 	for _, record := range s.records {
 		records = append(records, record)
@@ -36,6 +42,8 @@ func (s *memoryStore) List(_ context.Context) ([]Record, error) {
 }
 
 func (s *memoryStore) Save(_ context.Context, record Record) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.saveCalls++
 	if s.records == nil {
 		s.records = map[string]Record{}
@@ -47,6 +55,8 @@ func (s *memoryStore) Save(_ context.Context, record Record) error {
 }
 
 func (s *memoryStore) Update(_ context.Context, record Record) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.records == nil {
 		s.records = map[string]Record{}
 	}
@@ -55,6 +65,24 @@ func (s *memoryStore) Update(_ context.Context, record Record) error {
 	}
 	s.records[record.ID] = record
 	return nil
+}
+
+func (s *memoryStore) Claim(_ context.Context, id string, _ ClaimRequest, claim func(Record) (Record, error)) (Record, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.records == nil {
+		return Record{}, ErrNotFound
+	}
+	record, ok := s.records[id]
+	if !ok {
+		return Record{}, ErrNotFound
+	}
+	updated, err := claim(record)
+	if err != nil {
+		return Record{}, err
+	}
+	s.records[id] = updated
+	return updated, nil
 }
 
 func TestServiceCreatePersistsImmutableFailedApplyRequestWhenExecutionIsDisabled(t *testing.T) {
@@ -243,6 +271,176 @@ func TestServiceListRequiresStore(t *testing.T) {
 	_, err := (Service{}).List(context.Background(), ListQuery{Status: StatusQueued})
 	if err == nil || !strings.Contains(err.Error(), "apply request store is required") {
 		t.Fatalf("expected missing store error, got %v", err)
+	}
+}
+
+func TestServiceClaimQueuedApplyRequest(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_queued": {
+				ID:             "apply_queued",
+				PlanID:         "plan_ready",
+				DeploymentName: "api-prod",
+				Status:         StatusQueued,
+				CreatedAt:      "2026-04-18T08:05:00Z",
+				Lifecycle:      Lifecycle{UpdatedAt: "2026-04-18T08:05:00Z", TotalSteps: 2},
+				Operations: []Operation{
+					{Status: OperationStatusQueued, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity."},
+					{Status: OperationStatusQueued, Phase: "Promoting", Target: "api-prod listener", Summary: "Shift production traffic."},
+				},
+			},
+		},
+	}
+	service := Service{Store: store, Now: func() time.Time { return time.Date(2026, 4, 18, 8, 10, 0, 0, time.UTC) }}
+
+	claimed, err := service.Claim(context.Background(), "apply_queued", ClaimRequest{WorkerID: "worker-a"})
+	if err != nil {
+		t.Fatalf("Claim returned error: %v", err)
+	}
+	if claimed.ID != "apply_queued" || claimed.Status != StatusRunning {
+		t.Fatalf("expected stable running claimed record, got %+v", claimed)
+	}
+	if claimed.Claim == nil || claimed.Claim.WorkerID != "worker-a" || claimed.Claim.ClaimedAt != "2026-04-18T08:10:00Z" {
+		t.Fatalf("expected claim metadata, got %+v", claimed.Claim)
+	}
+	if claimed.Lifecycle.StartedAt != "2026-04-18T08:10:00Z" || claimed.Lifecycle.CurrentStep != 1 || claimed.Lifecycle.CompletedSteps != 0 || claimed.Lifecycle.TotalSteps != 2 {
+		t.Fatalf("unexpected claim lifecycle metadata: %+v", claimed.Lifecycle)
+	}
+	if statuses := []OperationStatus{claimed.Operations[0].Status, claimed.Operations[1].Status}; !reflect.DeepEqual(statuses, []OperationStatus{OperationStatusRunning, OperationStatusQueued}) {
+		t.Fatalf("unexpected claimed operation statuses: %+v", claimed.Operations)
+	}
+	if len(claimed.Transitions) != 1 || claimed.Transitions[0].PreviousStatus != StatusQueued || claimed.Transitions[0].Status != StatusRunning || claimed.Transitions[0].Step != 1 {
+		t.Fatalf("expected claim to append running transition history, got %+v", claimed.Transitions)
+	}
+	if !strings.Contains(claimed.Details[0], "worker-a") || !strings.Contains(claimed.Details[0], "no live AWS mutation") {
+		t.Fatalf("expected local-safe claim detail, got %+v", claimed.Details)
+	}
+}
+
+func TestServiceClaimIsIdempotentForSameWorker(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_claimed": {
+				ID:             "apply_claimed",
+				PlanID:         "plan_ready",
+				DeploymentName: "api-prod",
+				Status:         StatusRunning,
+				CreatedAt:      "2026-04-18T08:05:00Z",
+				Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z"},
+				Transitions:    []Transition{{TransitionedAt: "2026-04-18T08:10:00Z", PreviousStatus: StatusQueued, Status: StatusRunning, Step: 1}},
+			},
+		},
+	}
+	service := Service{Store: store, Now: func() time.Time { return time.Date(2026, 4, 18, 8, 11, 0, 0, time.UTC) }}
+
+	claimed, err := service.Claim(context.Background(), "apply_claimed", ClaimRequest{WorkerID: "worker-a"})
+	if err != nil {
+		t.Fatalf("same-worker Claim returned error: %v", err)
+	}
+	if claimed.Claim == nil || claimed.Claim.ClaimedAt != "2026-04-18T08:10:00Z" || len(claimed.Transitions) != 1 {
+		t.Fatalf("expected idempotent claim to return existing lease unchanged, got %+v", claimed)
+	}
+}
+
+func TestServiceClaimRejectsCompetingWorkerAndInvalidStates(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_claimed": {
+				ID:             "apply_claimed",
+				PlanID:         "plan_ready",
+				DeploymentName: "api-prod",
+				Status:         StatusRunning,
+				Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z"},
+			},
+			"apply_failed": {
+				ID:             "apply_failed",
+				PlanID:         "plan_ready",
+				DeploymentName: "api-prod",
+				Status:         StatusFailed,
+			},
+			"apply_failed_claimed_by_same_worker": {
+				ID:             "apply_failed_claimed_by_same_worker",
+				PlanID:         "plan_ready",
+				DeploymentName: "api-prod",
+				Status:         StatusFailed,
+				Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z"},
+			},
+		},
+	}
+	service := Service{Store: store}
+
+	_, err := service.Claim(context.Background(), "apply_claimed", ClaimRequest{WorkerID: "worker-b"})
+	if !errors.Is(err, ErrAlreadyClaimed) {
+		t.Fatalf("expected ErrAlreadyClaimed for competing worker, got %v", err)
+	}
+	_, err = service.Claim(context.Background(), "apply_failed", ClaimRequest{WorkerID: "worker-a"})
+	if !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("expected ErrInvalidState for terminal record, got %v", err)
+	}
+	_, err = service.Claim(context.Background(), "apply_failed_claimed_by_same_worker", ClaimRequest{WorkerID: "worker-a"})
+	if !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("expected ErrInvalidState for terminal same-worker claim, got %v", err)
+	}
+	_, err = service.Claim(context.Background(), "missing", ClaimRequest{WorkerID: "worker-a"})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for missing record, got %v", err)
+	}
+	_, err = service.Claim(context.Background(), "apply_claimed", ClaimRequest{})
+	if !errors.Is(err, ErrInvalidClaimRequest) || !strings.Contains(err.Error(), "workerId is required") {
+		t.Fatalf("expected workerId validation error, got %v", err)
+	}
+}
+
+func TestServiceClaimUsesAtomicStoreBoundary(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_queued": {
+				ID:             "apply_queued",
+				PlanID:         "plan_ready",
+				DeploymentName: "api-prod",
+				Status:         StatusQueued,
+				CreatedAt:      "2026-04-18T08:05:00Z",
+				Lifecycle:      Lifecycle{UpdatedAt: "2026-04-18T08:05:00Z", TotalSteps: 1},
+				Operations:     []Operation{{Status: OperationStatusQueued, Phase: "Promoting", Target: "api-prod listener", Summary: "Shift production traffic."}},
+			},
+		},
+	}
+	service := Service{Store: store, Now: func() time.Time { return time.Date(2026, 4, 18, 8, 10, 0, 0, time.UTC) }}
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	for _, workerID := range []string{"worker-a", "worker-b"} {
+		wg.Add(1)
+		go func(workerID string) {
+			defer wg.Done()
+			_, err := service.Claim(context.Background(), "apply_queued", ClaimRequest{WorkerID: workerID})
+			errs <- err
+		}(workerID)
+	}
+	wg.Wait()
+	close(errs)
+
+	successes := 0
+	conflicts := 0
+	for err := range errs {
+		switch {
+		case err == nil:
+			successes++
+		case errors.Is(err, ErrAlreadyClaimed):
+			conflicts++
+		default:
+			t.Fatalf("unexpected claim result: %v", err)
+		}
+	}
+	if successes != 1 || conflicts != 1 {
+		t.Fatalf("expected one successful claim and one conflict, got successes=%d conflicts=%d", successes, conflicts)
+	}
+	stored, err := store.Get(context.Background(), "apply_queued")
+	if err != nil {
+		t.Fatalf("Get returned error: %v", err)
+	}
+	if stored.Claim == nil || (stored.Claim.WorkerID != "worker-a" && stored.Claim.WorkerID != "worker-b") {
+		t.Fatalf("expected one persisted worker claim, got %+v", stored.Claim)
 	}
 }
 
