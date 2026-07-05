@@ -8767,6 +8767,15 @@
         return ['updatedAt', 'startedAt', 'finishedAt'].some((field) => applyLifecycleTimestampValue(lifecycle, field) !== '—') ||
           ['currentStep', 'completedSteps', 'totalSteps'].some((field) => applyLifecycleStepValue(lifecycle, field) !== '—');
       };
+      const applyClaimWorkerValue = (record) => {
+        const workerID = typeof record?.claim?.workerId === 'string' ? record.claim.workerId.trim() : '';
+        return workerID || '—';
+      };
+      const applyClaimTimestampValue = (record) => {
+        const claimedAt = typeof record?.claim?.claimedAt === 'string' ? record.claim.claimedAt.trim() : '';
+        return claimedAt || '—';
+      };
+      const hasApplyClaimMetadata = (record) => applyClaimWorkerValue(record) !== '—' || applyClaimTimestampValue(record) !== '—';
       const applyLifecycleProgressText = (record) => {
         const lifecycle = record?.lifecycle;
         const currentStep = applyLifecycleStepValue(lifecycle, 'currentStep');
@@ -9854,6 +9863,7 @@
             const operationCounts = applyOperationCounts(activeApplyRecord.operations || []);
             const lifecycleSummaryGrid = createElement('div', 'detail-grid');
             const lifecycleMetadataGrid = createElement('div', 'detail-grid');
+            const claimMetadataGrid = createElement('div', 'detail-grid');
             const recordLinks = createElement('div', 'row-links');
             [
               ['Apply ID', metricValue(activeApplyRecord.id)],
@@ -9890,6 +9900,15 @@
                 lifecycleMetadataGrid.append(createMetric(label, value, className || ''));
               });
             }
+            if (hasApplyClaimMetadata(activeApplyRecord)) {
+              [
+                ['Executor claim', 'Claimed by a local-safe executor worker; no live AWS mutation is implied by this handoff.', 'summary'],
+                ['Executor worker', applyClaimWorkerValue(activeApplyRecord)],
+                ['Claimed at', applyClaimTimestampValue(activeApplyRecord)],
+              ].forEach(([label, value, className]) => {
+                claimMetadataGrid.append(createMetric(label, value, className || ''));
+              });
+            }
             recordLinks.append(
               createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activeApplyRecord.planId || activePlanRecord?.id || currentPageState.planId, applyId: activeApplyRecord.id }), 'Open bookmarked apply', '_self'),
               createNavLink(buildApplyRequestRoute(activeApplyRecord.id), 'Apply JSON'),
@@ -9897,6 +9916,9 @@
             recordSection.append(recordGrid, lifecycleSummaryGrid);
             if (lifecycleMetadataGrid.children.length) {
               recordSection.append(lifecycleMetadataGrid);
+            }
+            if (claimMetadataGrid.children.length) {
+              recordSection.append(claimMetadataGrid);
             }
             recordSection.append(recordLinks);
             pushPlanSection(recordSection, 'plan-stored-apply', 'Stored apply request');

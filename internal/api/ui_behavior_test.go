@@ -11121,6 +11121,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Apply lifecycle summary')) throw new Error('expected apply lifecycle summary after create');
   if (!text.includes('0/1 terminal · 0 running · 1 queued')) throw new Error('expected queued lifecycle progress summary after create');
   if (text.includes('Apply lifecycle metadata')) throw new Error('expected failed/default apply record to omit lifecycle metadata section when lifecycle fields are missing');
+  if (text.includes('Executor claim')) throw new Error('expected failed/default apply record without claim metadata to omit executor claim section');
   if (!text.includes('Apply operations')) throw new Error('expected apply operations section');
   if (!text.includes('Immutable apply request loaded from GET /v1/applies/apply_failed_123.')) throw new Error('expected apply operations intro');
   if (!text.includes('Apply step 1')) throw new Error('expected synthetic apply-step label');
@@ -11717,6 +11718,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Apply lifecycle summary')) throw new Error('expected apply lifecycle summary on bookmarked apply');
   if (!text.includes('0/1 terminal · 0 running · 1 queued')) throw new Error('expected queued lifecycle progress summary on bookmarked apply');
   if (text.includes('Apply lifecycle metadata')) throw new Error('expected bookmarked failed/default apply record to omit lifecycle metadata section when lifecycle fields are missing');
+  if (text.includes('Executor claim')) throw new Error('expected bookmarked failed/default apply record without claim metadata to omit executor claim section');
   if (!text.includes('Apply operations')) throw new Error('expected apply operations section on bookmarked apply');
   if (!text.includes('Immutable apply request loaded from GET /v1/applies/apply_failed_123.')) throw new Error('expected apply operations intro on bookmarked apply');
   if (!text.includes('Apply step 1')) throw new Error('expected synthetic apply-step label on bookmarked apply');
@@ -12382,6 +12384,10 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 					"deploymentName": "api-prod",
 					"status":         tc.status,
 					"createdAt":      "2026-04-18T08:00:00Z",
+					"claim": map[string]any{
+						"workerId":  "worker-lifecycle",
+						"claimedAt": "2026-04-18T08:00:30Z",
+					},
 					"operations": []map[string]any{
 						{"status": "queued", "phase": "Preparing", "target": "target-queued", "summary": "Queued summary"},
 						{"status": "running", "phase": "Promoting", "target": "target-running", "summary": "Running summary"},
@@ -12435,6 +12441,10 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('3/5 terminal · 1 running · 1 queued')) throw new Error('expected lifecycle progress summary for ` + tc.name + `');
   if (!text.includes('Apply lifecycle metadata')) throw new Error('expected lifecycle metadata section for ` + tc.name + `');
   if (!text.includes('` + tc.expectedSummary + `')) throw new Error('expected lifecycle metadata summary for ` + tc.name + `');
+  if (!text.includes('Executor claim')) throw new Error('expected executor claim metadata section for ` + tc.name + `');
+  if (!text.includes('Claimed by a local-safe executor worker; no live AWS mutation is implied by this handoff.')) throw new Error('expected executor claim operator guidance for ` + tc.name + `');
+  if (!/Executor worker\s*\|\s*worker-lifecycle/.test(text)) throw new Error('expected executor worker metric for ` + tc.name + `');
+  if (!/Claimed at\s*\|\s*2026-04-18T08:00:30Z/.test(text)) throw new Error('expected executor claim timestamp for ` + tc.name + `');
   if (!/Lifecycle updated\s*\|\s*2026-04-18T08:0[1-5]:00Z/.test(text)) throw new Error('expected lifecycle updated timestamp for ` + tc.name + `');
   if (!/Current lifecycle step\s*\|\s*[1-5]/.test(text)) throw new Error('expected current lifecycle step metric for ` + tc.name + `');
   if (!text.includes('Completed / total steps')) throw new Error('expected completed/total lifecycle metric for ` + tc.name + `');

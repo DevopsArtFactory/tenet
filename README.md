@@ -34,17 +34,15 @@ The primary UI flow is intentionally simple:
 Additional operator workspaces are linked from that flow: account detail, drift,
 plan/apply, audit timeline, deployment events, recent logs, and live inspection.
 Resource-detail quick navigation keeps `_self` links back to the Applications
-overview and parent Application detail page before operators pivot into focused
-log or inspection evidence; non-click current destination/section chips expose
-`aria-current` so assistive technology receives the same orientation cues as the
-visual shell; section-hash jumps also move focus after scrolling so keyboard and
-screen-reader users land on the same context as visual operators.
+and Application detail pages before operators pivot into log or inspection
+evidence, while destination/section chips and hash jumps keep keyboard and screen
+reader orientation aligned with the visual shell.
 The plan/apply workspace keeps disabled mutation controls explanatory: `Create Plan`
-is available for the currently reviewed deployment, while `Apply Plan` and
-record refreshes activate after persisted plan/apply records are loaded. If
-`POST /v1/applies/plans/{planId}` returns `409 Conflict` because the reviewed
-plan is stale, the workspace keeps the bookmarkable deployment/plan context
-visible and tells the operator to create a fresh plan preview before retrying.
+reviews the current deployment, `Apply Plan` / refreshes activate after stored
+records load, and optional executor claim metadata (`claim.workerId` /
+`claim.claimedAt`) shows local-safe queued-apply ownership without raw JSON. If a
+reviewed plan is stale, the workspace preserves bookmarkable context and tells the
+operator to create a fresh plan preview before retrying.
 
 ## Architecture
 
