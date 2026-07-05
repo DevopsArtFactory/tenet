@@ -907,6 +907,12 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`POST /v1/applies/plans/{planId}`",
 		"`GET /v1/applies/{applyId}`",
+		"`POST /v1/applies/{applyId}/claim`",
+		"accepts a JSON request body with `workerId`",
+		"preserves that same stable `applyId`",
+		"moves a queued apply record to `running`",
+		"records `claim.workerId` and `claim.claimedAt`",
+		"performs no live AWS mutation",
 		"`POST /v1/applies/{applyId}/transitions`",
 		"preserving the immutable stable `applyId`",
 		"failed immutable contract with operator-facing error/details",
