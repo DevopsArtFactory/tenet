@@ -9261,6 +9261,17 @@
 
         container.replaceChildren(detailGrid, historySection, conditionsSection, executionSection, stepsSection);
       };
+      const deploymentDetailWaitingContainers = (cached, container) => {
+        const containers = new Set(cached?.containers || []);
+        if (cached?.container) containers.add(cached.container);
+        if (container) containers.add(container);
+        return containers;
+      };
+      const renderDeploymentDetailContainers = (containers, render) => {
+        (containers || new Set()).forEach((waitingContainer) => {
+          if (waitingContainer) render(waitingContainer);
+        });
+      };
       const loadDeploymentDetail = (deploymentName, container) => {
         const cached = detailStateByDeployment.get(deploymentName);
         if (cached?.status === 'ready') {
@@ -9268,31 +9279,29 @@
           return Promise.resolve(cached.detail);
         }
         if (cached?.status === 'loading') {
-          detailStateByDeployment.set(deploymentName, { ...cached, container });
+          const containers = deploymentDetailWaitingContainers(cached, container);
+          detailStateByDeployment.set(deploymentName, { ...cached, containers });
           renderDetailState(container, 'Loading deployment details…');
           return cached.promise;
         }
 
         renderDetailState(container, 'Loading deployment details…');
+        const containers = deploymentDetailWaitingContainers(cached, container);
         const promise = fetchDeploymentDetail(deploymentName)
           .then((detail) => {
             const current = detailStateByDeployment.get(deploymentName);
             detailStateByDeployment.set(deploymentName, { status: 'ready', detail });
-            if (current?.container) {
-              renderDeploymentDetail(current.container, detail);
-            }
+            renderDeploymentDetailContainers(current?.containers, (waitingContainer) => renderDeploymentDetail(waitingContainer, detail));
             return detail;
           })
           .catch((error) => {
             const current = detailStateByDeployment.get(deploymentName);
             detailStateByDeployment.set(deploymentName, { status: 'error', error });
-            if (current?.container) {
-              renderDetailState(current.container, `Failed to load deployment details: ${error.message}`, 'error');
-            }
+            renderDeploymentDetailContainers(current?.containers, (waitingContainer) => renderDetailState(waitingContainer, `Failed to load deployment details: ${error.message}`, 'error'));
             throw error;
           });
 
-        detailStateByDeployment.set(deploymentName, { status: 'loading', promise, container });
+        detailStateByDeployment.set(deploymentName, { status: 'loading', promise, containers });
         return promise;
       };
       const renderDeploymentWorkspace = (mode, detail, planState = null, applyState = null, workspaceState = null) => {

@@ -2575,6 +2575,107 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 		runNodeHarness(t, nodeProgram)
 	})
 
+	t.Run("account detail fans out shared lazy deployment detail results", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const baseAccountDetail = ` + string(accountDetailJSON) + `;
+const accountDetail = JSON.parse(JSON.stringify(baseAccountDetail));
+accountDetail.deployments[1] = { ...accountDetail.deployments[0], region: 'us-west-2' };
+const deploymentDetail = {
+  name: 'payments-api-staging',
+  accountName: 'staging-core',
+  awsAccountId: '210987654321',
+  region: 'ap-northeast-2',
+  allowedRegions: ['ap-northeast-2', 'us-west-2'],
+  sync: { state: 'OutOfSync', reason: 'rollout in progress' },
+  health: { overall: 'Progressing', summary: '1/2 tasks healthy' },
+  runtimeSummary: { historyCount: 1, summary: 'CodeDeploy traffic shift is progressing' },
+  history: [{ summary: 'Traffic shifted to 25%', timestamp: '2026-04-16T07:10:00Z', sync: { state: 'OutOfSync' } }],
+  conditions: [],
+  rollout: { steps: [] }
+};
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+let resolveDetail;
+const detailPromise = new Promise((resolve) => { resolveDetail = () => resolve({ ok: true, json: () => Promise.resolve(deploymentDetail) }); });
+const window = { location: { pathname: '/', search: '?page=account&accountId=210987654321', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/accounts/210987654321') return Promise.resolve({ ok: true, json: () => Promise.resolve(accountDetail) });
+  if (url === '/v1/overview/deployments/payments-api-staging') return detailPromise;
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+(async () => {
+  await settle();
+  const toggles = collectNodes(document.getElementById('accounts'), (node) => node.getAttribute && node.getAttribute('role') === 'button' && node.className === 'row-toggle');
+  const panels = collectNodes(document.getElementById('accounts'), (node) => node.className === 'detail-panel');
+  if (toggles.length !== 2 || panels.length !== 2) throw new Error('expected two duplicate deployment rows for fan-out coverage');
+  toggles[0].dispatch('click');
+  toggles[1].dispatch('click');
+  await settle();
+  if (fetchCalls.filter((url) => url === '/v1/overview/deployments/payments-api-staging').length !== 1) throw new Error('expected duplicate expands to share one deployment detail fetch, got ' + fetchCalls.join(', '));
+  panels.forEach((panel, index) => {
+    const text = collectText(panel).join(' | ');
+    if (!text.includes('Loading deployment details…')) throw new Error('expected panel ' + index + ' to show loading while shared fetch is pending');
+  });
+  resolveDetail();
+  await settle();
+  await settle();
+  panels.forEach((panel, index) => {
+    const text = collectText(panel).join(' | ');
+    if (text.includes('Loading deployment details…')) throw new Error('expected panel ' + index + ' to leave loading after shared fetch resolves');
+    if (!text.includes('Sync reason') || !text.includes('rollout in progress')) throw new Error('expected panel ' + index + ' to render resolved deployment detail, got ' + text);
+  });
+})();
+`
+
+		runNodeHarness(t, nodeProgram)
+	})
+
 	t.Run("account detail refresh reloads the current route in place without changing bookmarkable state", func(t *testing.T) {
 		refreshedAccountDetailJSON, err := json.Marshal(map[string]any{
 			"name":             "staging-core",
