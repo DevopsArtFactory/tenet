@@ -518,12 +518,15 @@ func TestEmbeddedUILazyLoadsDeploymentDetailsOnExpandOnly(t *testing.T) {
 
 	for _, fragment := range []string{
 		"const detailStateByDeployment = new Map();",
+		"const deploymentDetailWaitingContainers = (cached, container) => {",
+		"const containers = new Set(cached?.containers || []);",
+		"if (cached?.container) containers.add(cached.container);",
+		"const renderDeploymentDetailContainers = (containers, render) => {",
+		"renderDeploymentDetailContainers(current?.containers, (waitingContainer) => renderDeploymentDetail(waitingContainer, detail));",
+		"renderDeploymentDetailContainers(current?.containers, (waitingContainer) => renderDetailState(waitingContainer, `Failed to load deployment details: ${error.message}`, 'error'));",
 		"const loadDeploymentDetail = (deploymentName, container) => {",
-		"detailStateByDeployment.set(deploymentName, { ...cached, container });",
-		"const current = detailStateByDeployment.get(deploymentName);",
-		"if (current?.container) {",
-		"renderDeploymentDetail(current.container, detail);",
-		"renderDetailState(current.container, `Failed to load deployment details: ${error.message}`, 'error');",
+		"const containers = deploymentDetailWaitingContainers(cached, container);",
+		"detailStateByDeployment.set(deploymentName, { ...cached, containers });",
 		"renderDeploymentDetail(container, cached.detail);",
 		"detailPanel.id = `account-deployment-detail-${sectionIDSegment(account.awsAccountId, 'account')}-${sectionIDSegment(deployment.name, 'deployment')}`;",
 		"detailPanel.setAttribute('id', detailPanel.id);",
@@ -535,8 +538,7 @@ func TestEmbeddedUILazyLoadsDeploymentDetailsOnExpandOnly(t *testing.T) {
 		"failure: 'detail request failed',",
 		"renderDetailState(container, 'Loading deployment details…');",
 		"detailStateByDeployment.set(deploymentName, { status: 'ready', detail });",
-		"detailStateByDeployment.set(deploymentName, { status: 'loading', promise, container });",
-		"renderDetailState(current.container, `Failed to load deployment details: ${error.message}`, 'error');",
+		"detailStateByDeployment.set(deploymentName, { status: 'loading', promise, containers });",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
