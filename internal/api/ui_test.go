@@ -5057,6 +5057,8 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"groupLinks.append(createCopyReadRouteButton(accountGroupDetailReadRoute(account.awsAccountId, group), 'Copy group read route'));\",",
 		"\"const accountGroupDetailReadRoute = (accountID, group) => {\",",
 		"\"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')\",",
+		"\"target.focus({ preventScroll: true });\",",
+		"\"focusCurrentHashTarget(target);\",",
 		"\"detailSummary.id = 'account-summary';\",",
 		"\"const accountGroupSectionLabel = (group) => {\",",
 		"\"return region === '—' ? `${app} · ${environment}` : `${app} · ${environment} · ${region}`;\",",
