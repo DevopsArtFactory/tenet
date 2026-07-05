@@ -13,6 +13,11 @@ The implementation remains fully embedded HTML/CSS/JS with no separate frontend 
 
 The dashboard routes are source-agnostic on the backend: `tenet-api` can now feed the same `/v1/catalog/*` and `/v1/overview/*` payloads from either a filesystem checkout or a GitHub-backed read-only desired-state catalog without changing the UI route contract.
 
+Operator troubleshooting quick-reference: use `docs/runbooks/operator-troubleshooting.md`
+for the compact route/evidence/state/verification matrix across applications
+overview, application detail, resource detail, Recent logs, Live inspection,
+audit, plan/apply, and queued applies.
+
 ## What shipped so far
 
 ### 1. Applications overview landing page
@@ -424,7 +429,7 @@ Current plan/apply workspace behavior:
 The dashboard now exposes the following navigation affordances across the current drill-down flow:
 - landing page: `_self` `Open audit log`, expanded-row deployment-scoped `_self` `Drift view` and `Audit log`, `_self` `Open account`, `_self` `Open application`
 - account detail page: `Account JSON` / `Copy account read route`, `Group JSON` / `Copy group read route`, `_self` `Open application`, and a guarded `_self` `Open runtime events` row link to `#application-runtime-events` when the row has meaningful runtime/event evidence; when the selected account has no deployment groups, the page keeps the account summary visible and renders an explicit empty state with `_self` `Applications overview` plus `Account JSON` / `Copy account read route` recovery handoffs instead of leaving a blank body
-- application detail page: `_self` `Drift view`, `_self` `Plan/apply`, `_self` `Audit log`, `Open resource`, `Open live inspection`, `Open recent logs`
+- application detail page: `_self` `Drift view`, `_self` `Plan/apply`, `_self` `Audit log`, `Open resource`, plus compact `Evidence cues` row links for `_self` `Live evidence available` (`#resource-live-inspection`) and `_self` `Recent logs supported` (`#resource-recent-logs`)
 - application detail `Audit log` now routes to `/?page=audit&deployment={deploymentName}` so the selected deployment stays visible in the bookmarkable audit slice
 - audit page: unscoped `_self` `Back to applications`, deployment-scoped `_self` `Back to application`, `_self` `Open application drill-down`, `_self` `Open drift view`, `_self` `Open plan/apply workspace`
 - resource/workspace drill-down pages: embedded back links that keep operators in the same shell; drift/plan also expose `Workspace JSON` for `/v1/overview/deployments/{deploymentName}`

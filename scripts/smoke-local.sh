@@ -2364,14 +2364,15 @@ assert "const resourceSupportsLiveInspection = (resource) => {" in application_u
 assert "const resourceSupportsRecentLogs = (resource) => {" in application_ui, application_ui
 assert "'codeDeployApplication',\n          'codeDeployDeploymentGroup'" in application_ui, application_ui
 assert "'trafficShiftPlan',\n          'productionListenerRule',\n          'activeTargetGroup',\n          'candidateTargetGroup'" in application_ui, application_ui
-assert "createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open live inspection', '_self')" in application_ui, application_ui
-assert "createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open recent logs', '_self')" in application_ui, application_ui
+assert "createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Live evidence available', '_self')" in application_ui, application_ui
+assert "createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Recent logs supported', '_self')" in application_ui, application_ui
 assert "const trafficRoutingIdentifierTokens = (value) => {" in application_ui, application_ui
 assert "const rolloutResourceDetailURL = (detail, resourceTypes, identifiers) => {" in application_ui, application_ui
 assert "const createRolloutResourceDetailLink = (detail, resourceTypes, identifiers) => {" in application_ui, application_ui
 assert "return href ? createNavLink(href, 'Open resource detail', '_self') : null;" in application_ui, application_ui
-assert 'Open live inspection' in application_ui, application_ui
-assert 'Open recent logs' in application_ui, application_ui
+assert 'Evidence cues' in application_ui, application_ui
+assert 'Live evidence available' in application_ui, application_ui
+assert 'Recent logs supported' in application_ui, application_ui
 assert 'Application resources' in application_ui, application_ui
 assert 'Grouped linked resources for the selected application. Open drift, plan/apply, or audit log from here before the final resource page.' in application_ui, application_ui
 assert 'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.' in application_ui, application_ui

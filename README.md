@@ -174,10 +174,10 @@ drill-down keeps its toolbar `Refresh account detail` action; account/group JSON
 handoffs, and deployment rows with meaningful runtime/event evidence add a `_self` `Open runtime events` link to `/?page=application&deployment={deploymentName}#application-runtime-events` while preserving `q` / `sync` / `account`. Expandable rows expose their controlled lazy-loaded detail panel with
 `aria-controls`. Application detail pages show the exact backing read route,
 `Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search
-for grouped linked resources. When that filter is active, each resource section shows
-visible/total impact and section-specific empty guidance alongside the inline
-`Clear resource filter` action, while rollout/history/log evidence stays on the final
-resource page. The drift and plan workspaces show `Current workspace read: GET /v1/overview/deployments/{deploymentName}.`
+with visible/total impact and section-specific empty guidance alongside the inline
+`Clear resource filter`, plus compact resource-row `Evidence cues`:
+`Live evidence available` / `Recent logs supported` `_self` handoffs to the final
+resource page's `#resource-live-inspection` / `#resource-recent-logs` panels. The drift and plan workspaces show `Current workspace read: GET /v1/overview/deployments/{deploymentName}.`
 in their chrome and include a top-level `Workspace JSON` handoff to that
 deployment-detail read model. Non-auth read failures render the active page label, failed `GET ...` route, optional `Tenet request ID`, and same-URL `Retry current page` action instead of a generic overview-only error. Malformed drill-down bookmarks that omit the required `accountId` or `deployment` context render a missing-context empty state with a same-shell `Back to applications` recovery link that keeps existing `q` / `sync` / `health` / `account` filters intact.
 
@@ -328,7 +328,7 @@ The detailed runner-start evidence bundle remains available by omitting
   drift, audit, and plan/apply workspaces.
 - `docs/features/resource-recent-logs.md` documents recent-log resource contracts, including lookup context, selector echoes, and friendly empty/unavailable states.
 - `docs/features/resource-inspection.md` documents the focused live resource inspection route, selectors, lookup context, unavailable states, and detailed field contracts.
-- `docs/runbooks/operator-troubleshooting.md` documents daily auth, refresh, audit, and drill-down troubleshooting for operators.
+- `docs/runbooks/operator-troubleshooting.md` documents the auth, route, evidence, state, and verification troubleshooting quick-reference.
 - `docs/runbooks/ci-smoke-runner-start.md` documents GitHub Actions runner-start
   failure triage for CI smoke checks.
 

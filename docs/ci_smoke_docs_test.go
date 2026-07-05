@@ -216,11 +216,10 @@ func TestOperatorTroubleshootingRunbookDocumentsDailyTriageFlow(t *testing.T) {
 	}
 
 	orderedFragments := []string{
-		"## 1. Confirm identity, roles, and deployment access",
-		"## 2. Confirm desired-state source and controller-refresh availability",
-		"## 3. Request or trace a refresh through audit",
-		"## 4. Drill into application, resource evidence, events, live inspection, and logs",
-		"## 5. Decode common unavailable states",
+		"## Identity and Refresh Preflight",
+		"## Surface Matrix",
+		"## Unavailable-State Decoder",
+		"## Verification Commands",
 	}
 	last := -1
 	for _, fragment := range orderedFragments {
@@ -767,7 +766,8 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search",
 		"visible/total impact and section-specific empty guidance alongside the inline",
-		"`Clear resource filter` action, while rollout/history/log evidence stays on the final",
+		"`Clear resource filter`, plus compact resource-row `Evidence cues`:",
+		"`Live evidence available` / `Recent logs supported` `_self` handoffs to the final",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README to include application-detail resource-filter summary %q", fragment)
