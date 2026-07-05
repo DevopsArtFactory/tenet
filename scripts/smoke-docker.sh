@@ -1875,6 +1875,8 @@ assert_fragments("account_ui", account_ui, (
     "emptyStateActions.append(createNavLink(buildPageURL('applications'), 'Applications overview', '_self'));",
     "emptyStateActions.append(createNavLink(`/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}`, 'Account JSON'));",
     "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`, 'location')",
+    "target.focus({ preventScroll: true });",
+    "focusCurrentHashTarget(target);",
     "detailSummary.id = 'account-summary';",
     "detailPanel.id = `account-deployment-detail-${sectionIDSegment(account.awsAccountId, 'account')}-${sectionIDSegment(deployment.name, 'deployment')}`;",
     "toggle.setAttribute('aria-controls', detailPanel.id);",
