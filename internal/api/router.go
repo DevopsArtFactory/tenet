@@ -104,6 +104,14 @@ func respondApplyTransitionError(w http.ResponseWriter, err error) {
 	respondLookupError(w, err)
 }
 
+func respondApplyClaimError(w http.ResponseWriter, err error) {
+	if errors.Is(err, applyrequest.ErrInvalidState) || errors.Is(err, applyrequest.ErrAlreadyClaimed) {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	respondLookupError(w, err)
+}
+
 func parseResourceQuery(w http.ResponseWriter, r *http.Request) (resourceType string, resourceName string, ok bool) {
 	resourceType = strings.TrimSpace(r.URL.Query().Get("resourceType"))
 	if resourceType == "" {
@@ -697,6 +705,7 @@ var (
 	operatorContextOperatorWriteExampleRoutes = []string{
 		"POST /v1/plans/deployments/{deploymentName}",
 		"POST /v1/applies/plans/{planId}",
+		"POST /v1/applies/{applyId}/claim",
 		"POST /v1/applies/{applyId}/transitions",
 		"POST /v1/controller/refresh",
 	}
@@ -708,6 +717,7 @@ var (
 	operatorContextDeploymentScopedWriteExampleRoutes = []string{
 		"POST /v1/plans/deployments/{deploymentName}",
 		"POST /v1/applies/plans/{planId}",
+		"POST /v1/applies/{applyId}/claim",
 		"POST /v1/applies/{applyId}/transitions",
 	}
 	operatorContextCollectionReadExampleRoutes = []string{
@@ -2357,6 +2367,7 @@ type Options struct {
 	CreateApplyRequest                   func(context.Context, string) (applyrequest.CreateResult, error)
 	ApplyRequests                        func(context.Context, applyrequest.ListQuery) ([]applyrequest.Record, error)
 	ApplyRequest                         func(context.Context, string) (applyrequest.Record, error)
+	ClaimApplyRequest                    func(context.Context, string, applyrequest.ClaimRequest) (applyrequest.Record, error)
 	TransitionApplyRequest               func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error)
 	DeploymentStatuses                   func(context.Context) ([]statusstore.Snapshot, error)
 	DeploymentStatus                     func(context.Context, string) (statusstore.Snapshot, error)
@@ -3251,6 +3262,52 @@ func NewRouter(options Options) http.Handler {
 				return
 			}
 			if !requireDeploymentReadAccessWithOptions(w, r, options, record.DeploymentName) {
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(record)
+		case len(segments) == 2 && segments[0] != "" && segments[1] == "claim":
+			if !requireMethod(w, r, http.MethodPost) {
+				return
+			}
+			if (options.RequireAuthenticatedIdentity || options.RequireDeploymentReadAuthorization) && !requireAuthenticatedIdentity(w, r) {
+				return
+			}
+			if !requireOperatorRoleForWrite(w, r, options) {
+				return
+			}
+			if options.RequireDeploymentReadAuthorization {
+				if options.ApplyRequest == nil {
+					http.Error(w, "apply request unavailable", http.StatusServiceUnavailable)
+					return
+				}
+				record, err := options.ApplyRequest(r.Context(), segments[0])
+				if err != nil {
+					respondLookupError(w, err)
+					return
+				}
+				if !requireDeploymentWriteAuthorization(w, r, options, record.DeploymentName) {
+					return
+				}
+			}
+			if options.ClaimApplyRequest == nil {
+				http.Error(w, "apply request claim unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			var req applyrequest.ClaimRequest
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&req); err != nil {
+				http.Error(w, "invalid apply claim request body", http.StatusBadRequest)
+				return
+			}
+			if err := decoder.Decode(&struct{}{}); err != nil && !errors.Is(err, io.EOF) {
+				http.Error(w, "invalid apply claim request body", http.StatusBadRequest)
+				return
+			}
+			record, err := options.ClaimApplyRequest(r.Context(), segments[0], req)
+			if err != nil {
+				respondApplyClaimError(w, err)
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")

@@ -17,6 +17,7 @@ const (
 type Executor struct {
 	Service      Service
 	PollInterval time.Duration
+	WorkerID     string
 	Logger       *slog.Logger
 }
 
@@ -61,14 +62,21 @@ func (e Executor) RunOnce(ctx context.Context) error {
 }
 
 func (e Executor) advance(ctx context.Context, record Record) error {
+	if record.Status == StatusQueued {
+		updated, err := e.Service.Claim(ctx, record.ID, ClaimRequest{WorkerID: e.workerID()})
+		if err != nil {
+			if errors.Is(err, ErrInvalidState) || errors.Is(err, ErrNotFound) || errors.Is(err, ErrAlreadyClaimed) {
+				e.log(ctx, slog.LevelDebug, "apply executor skipped stale apply claim", "apply_id", record.ID, "status", record.Status, "error", err)
+				return nil
+			}
+			return err
+		}
+		e.log(ctx, slog.LevelInfo, "apply executor claimed apply request", "apply_id", updated.ID, "from_status", record.Status, "to_status", updated.Status, "worker_id", e.workerID())
+		return nil
+	}
+
 	var request TransitionRequest
 	switch record.Status {
-	case StatusQueued:
-		request = TransitionRequest{
-			Status:  StatusRunning,
-			Step:    executorStep(record),
-			Details: queuedHandoffDetails(record),
-		}
 	case StatusRunning:
 		request = TransitionRequest{
 			Status:  StatusFailed,
@@ -97,6 +105,13 @@ func (e Executor) pollInterval() time.Duration {
 		return e.PollInterval
 	}
 	return defaultExecutorPollInterval
+}
+
+func (e Executor) workerID() string {
+	if e.WorkerID != "" {
+		return e.WorkerID
+	}
+	return "tenet-local-executor"
 }
 
 func (e Executor) log(ctx context.Context, level slog.Level, msg string, args ...any) {

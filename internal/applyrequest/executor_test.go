@@ -3,6 +3,7 @@ package applyrequest
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -47,8 +48,11 @@ func TestExecutorRunOnceAdvancesQueuedApplyToRunningThenFailed(t *testing.T) {
 	if running.Lifecycle.StartedAt != "2026-04-18T08:06:00Z" || running.Lifecycle.CurrentStep != 1 {
 		t.Fatalf("unexpected running lifecycle metadata: %+v", running.Lifecycle)
 	}
-	if running.Error != "" || len(running.Details) != 3 {
-		t.Fatalf("expected queued handoff details without error, got %+v", running)
+	if running.Error != "" || len(running.Details) != 1 || !strings.Contains(running.Details[0], "tenet-local-executor") {
+		t.Fatalf("expected queued claim details without error, got %+v", running)
+	}
+	if running.Claim == nil || running.Claim.WorkerID != "tenet-local-executor" {
+		t.Fatalf("expected executor claim metadata, got %+v", running.Claim)
 	}
 
 	now = now.Add(30 * time.Second)

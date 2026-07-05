@@ -12,6 +12,7 @@ var (
 	ErrPlanNotReady              = fmt.Errorf("plan preview is not ready")
 	ErrSourceFingerprintConflict = fmt.Errorf("apply request plan source fingerprint conflict")
 	ErrInvalidState              = fmt.Errorf("apply request lifecycle transition is invalid")
+	ErrAlreadyClaimed            = fmt.Errorf("apply request is already claimed by another worker")
 )
 
 // Status captures the immutable apply-request lifecycle.
@@ -105,6 +106,12 @@ type Lifecycle struct {
 	TotalSteps     int    `json:"totalSteps,omitempty"`
 }
 
+// Claim captures the local-safe executor lease metadata for one queued apply request.
+type Claim struct {
+	WorkerID  string `json:"workerId"`
+	ClaimedAt string `json:"claimedAt"`
+}
+
 // Transition captures one successful lifecycle advance for immutable audit projection.
 type Transition struct {
 	TransitionedAt string             `json:"transitionedAt"`
@@ -128,9 +135,15 @@ type Record struct {
 	Error          string             `json:"error,omitempty"`
 	Details        []string           `json:"details,omitempty"`
 	Lifecycle      Lifecycle          `json:"lifecycle,omitempty"`
+	Claim          *Claim             `json:"claim,omitempty"`
 	Transitions    []Transition       `json:"transitions,omitempty"`
 	Operations     []Operation        `json:"operations,omitempty"`
 	Source         SourceContext      `json:"source"`
+}
+
+// ClaimRequest captures one executor's local-safe attempt to claim queued work.
+type ClaimRequest struct {
+	WorkerID string `json:"workerId"`
 }
 
 // TransitionRequest captures one validated lifecycle advance for a persisted apply request.
@@ -152,4 +165,11 @@ type Store interface {
 	List(context.Context) ([]Record, error)
 	Save(context.Context, Record) error
 	Update(context.Context, Record) error
+}
+
+// ClaimStore atomically claims one queued apply request when the backend can
+// protect the read/check/write boundary. FileStore implements this for the
+// local-safe executor handoff path.
+type ClaimStore interface {
+	Claim(context.Context, string, ClaimRequest, func(Record) (Record, error)) (Record, error)
 }

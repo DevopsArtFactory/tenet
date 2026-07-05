@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
@@ -161,6 +162,90 @@ func (s Service) List(ctx context.Context, query ListQuery) ([]Record, error) {
 func NormalizeOperationIDs(record Record) Record {
 	record.Operations = normalizeOperationIDs(record.Operations)
 	return record
+}
+
+// Claim records a local-safe executor lease and advances one queued apply request to running.
+// The stable immutable apply ID is preserved; no live AWS mutation is attempted.
+func (s Service) Claim(ctx context.Context, id string, request ClaimRequest) (Record, error) {
+	if s.Store == nil {
+		return Record{}, fmt.Errorf("apply request store is required")
+	}
+	if _, err := normalizeClaimRequest(request); err != nil {
+		return Record{}, err
+	}
+	claimFn := s.claimRecord(ctx, request)
+	if claimStore, ok := s.Store.(ClaimStore); ok {
+		record, err := claimStore.Claim(ctx, id, request, claimFn)
+		if err != nil {
+			return Record{}, err
+		}
+		return NormalizeOperationIDs(record), nil
+	}
+
+	record, err := s.Store.Get(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+	record, err = claimFn(record)
+	if err != nil {
+		return Record{}, err
+	}
+	if err := s.Store.Update(ctx, record); err != nil {
+		return Record{}, err
+	}
+	stored, err := s.Store.Get(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+	return NormalizeOperationIDs(stored), nil
+}
+
+func normalizeClaimRequest(request ClaimRequest) (string, error) {
+	workerID := strings.TrimSpace(request.WorkerID)
+	if workerID == "" {
+		return "", fmt.Errorf("%w: workerId is required", ErrInvalidState)
+	}
+	return workerID, nil
+}
+
+func (s Service) claimRecord(ctx context.Context, request ClaimRequest) func(Record) (Record, error) {
+	return func(record Record) (Record, error) {
+		workerID, err := normalizeClaimRequest(request)
+		if err != nil {
+			return Record{}, err
+		}
+		record = NormalizeOperationIDs(record)
+		if record.Claim != nil {
+			if record.Claim.WorkerID == workerID {
+				return record, nil
+			}
+			return Record{}, fmt.Errorf("%w: %s is already claimed by worker %s", ErrAlreadyClaimed, record.ID, record.Claim.WorkerID)
+		}
+		if record.Status != StatusQueued {
+			return Record{}, fmt.Errorf("%w: only queued apply requests can be claimed; %s is %s", ErrInvalidState, record.ID, record.Status)
+		}
+
+		now := s.now()
+		claim := Claim{WorkerID: workerID, ClaimedAt: now.UTC().Format(time.RFC3339)}
+		record.Claim = &claim
+		previousStatus := record.Status
+		record.Status = StatusRunning
+		record.Error = ""
+		record.Details = []string{"Executor " + workerID + " claimed this queued apply request for local-safe handoff; no live AWS mutation has been attempted by the claim route."}
+		step := firstRunnableStep(record)
+		record.Operations = transitionOperations(record.Operations, StatusRunning, step)
+		record.Lifecycle = transitionLifecycle(record.Lifecycle, len(record.Operations), TransitionRequest{Status: StatusRunning, Step: step}, now)
+		record.Transitions = appendTransition(record.Transitions, Transition{
+			TransitionedAt: claim.ClaimedAt,
+			PreviousStatus: previousStatus,
+			Status:         StatusRunning,
+			Step:           step,
+			Actor:          requestactor.FromContext(ctx),
+			Details:        append([]string(nil), record.Details...),
+			Lifecycle:      record.Lifecycle,
+		})
+		return record, nil
+	}
 }
 
 // Transition advances one persisted apply request to a validated lifecycle state without changing
@@ -355,6 +440,13 @@ func initialLifecycle(record Record) Lifecycle {
 		}
 	}
 	return lifecycle
+}
+
+func firstRunnableStep(record Record) int {
+	if len(record.Operations) == 0 {
+		return 0
+	}
+	return 1
 }
 
 func validateTransition(record Record, request TransitionRequest) error {
