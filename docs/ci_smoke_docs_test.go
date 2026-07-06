@@ -762,6 +762,34 @@ func TestLocalRuntimeDocsSeparateShippedWriteRoutesFromDeferredAWSMutation(t *te
 	}
 }
 
+func TestClaimedApplyTransitionGuardDocsAndSmoke(t *testing.T) {
+	readmeText := readTextFile(t, "../README.md")
+	smokeLocalText := readTextFile(t, "../scripts/smoke-local.sh")
+
+	for _, fragment := range []string{
+		"claimed apply can still advance through `POST /v1/applies/{applyId}/transitions`",
+		"the transition response keeps `claim.workerId`, `claim.claimedAt`, and additive lifecycle metadata",
+		"local-safe only: claim/transition records update Tenet's persisted apply lifecycle without live AWS mutation",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README to document claimed apply transition guard %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"claim_transition_apply_id",
+		"claimed_apply_transition_status",
+		"/v1/applies/$claim_transition_apply_id/claim",
+		"/v1/applies/$claim_transition_apply_id/transitions",
+		"MANUAL_CLAIMED_APPLY_TRANSITION_STATUS",
+		"manual claimed local-safe transition",
+	} {
+		if !strings.Contains(smokeLocalText, fragment) {
+			t.Fatalf("expected smoke-local to cover claimed apply transition guard %q", fragment)
+		}
+	}
+}
+
 func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{
