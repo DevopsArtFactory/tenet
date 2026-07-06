@@ -13132,6 +13132,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
   const backLink = toolbarLinks.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Back to application' && node.target === '_self');
   if (!backLink || backLink.rel) throw new Error('expected deployment-scoped audit toolbar back link to return to application while preserving filters');
+  const clearAuditControlsButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit controls');
+  if (!clearAuditControlsButton || clearAuditControlsButton.disabled) throw new Error('expected one-click clear audit controls action while deployment or limit controls are active');
   const rows = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'DIV' && node.className === 'row');
   if (rows.length < 2) throw new Error('expected audit page rows');
   const rowTexts = rows.map((node) => collectText(node).join(' | '));
@@ -13249,7 +13251,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action Apply requested (apply.requested) · Limit cap: latest 1')) throw new Error('expected active audit filters in toolbar');
-  if (!accountsText.includes('No audit entries match the current filters (deployment payments-api-prod · action Apply requested (apply.requested); Limit cap: latest 1). Clear action/limit to stay scoped to this deployment, or view the global audit log to remove the deployment scope.')) throw new Error('expected filtered audit empty-state recovery copy, got ' + accountsText);
+  if (!accountsText.includes('No audit entries match the current filters (deployment payments-api-prod · action Apply requested (apply.requested); Limit cap: latest 1). Clear action/limit to stay scoped to this deployment, or clear audit controls to remove the deployment scope.')) throw new Error('expected filtered audit empty-state recovery copy, got ' + accountsText);
   if (accountsText.includes('No audit activity has been persisted yet for deployment payments-api-prod.')) throw new Error('expected filtered empty state to avoid unfiltered no-activity copy');
   const clearScopedButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear action/limit');
   if (!clearScopedButton) throw new Error('expected clear action/limit button for deployment-scoped audit filters');
@@ -13258,8 +13260,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle();
   if (window.location.search !== '?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod') throw new Error('expected clear action/limit to preserve deployment scope, got ' + window.location.search);
   if (fetchCalls[fetchCalls.length - 1] !== '/v1/audit-logs?deployment=payments-api-prod') throw new Error('expected clear action/limit to reload deployment-scoped audit log, got ' + fetchCalls.join(' | '));
-  const globalButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'View global audit log');
-  if (!globalButton) throw new Error('expected global audit log button while deployment scope remains active');
+  const globalButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit controls');
+  if (!globalButton) throw new Error('expected clear audit controls button while deployment scope remains active');
   globalButton.dispatch('click');
   await settle();
   await settle();
@@ -13549,9 +13551,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!inlinePlanLink) throw new Error('expected filtered deployment empty timeline to include a bookmarkable plan/apply workspace link');
   const emptyScopedButtons = collectNodes(emptyScopedTimeline, (node) => node.tagName === 'BUTTON');
   const inlineClearScopedButton = emptyScopedButtons.find((node) => node.textContent === 'Clear action/limit');
-  const inlineGlobalButton = emptyScopedButtons.find((node) => node.textContent === 'View global audit log');
+  const inlineGlobalButton = emptyScopedButtons.find((node) => node.textContent === 'Clear audit controls');
   if (!inlineClearScopedButton || inlineClearScopedButton.disabled) throw new Error('expected filtered deployment empty timeline to include an enabled inline clear action/limit control');
-  if (!inlineGlobalButton || inlineGlobalButton.disabled) throw new Error('expected filtered deployment empty timeline to include an enabled inline global audit log control');
+  if (!inlineGlobalButton || inlineGlobalButton.disabled) throw new Error('expected filtered deployment empty timeline to include an enabled inline clear audit controls control');
   clearScopedButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear action/limit');
   if (!clearScopedButton || clearScopedButton.disabled) throw new Error('expected clear action/limit recovery action to stay available while action or limit is active');
   inlineClearScopedButton.dispatch('click');
@@ -13568,8 +13570,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear action/limit')) throw new Error('did not expect clear action/limit action after action and limit were reset');
   const scopedToolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   if (!scopedToolbarText.includes('Audit filters: deployment payments-api-prod')) throw new Error('expected deployment scope to remain in audit toolbar copy');
-  let globalButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'View global audit log');
-  if (!globalButton) throw new Error('expected global audit log recovery action while deployment scope remains active');
+  let globalButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit controls');
+  if (!globalButton) throw new Error('expected clear audit controls recovery action while deployment scope remains active');
   const scopedAccountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (!scopedAccountsText.includes('Active deployment context')) throw new Error('expected deployment-scoped callout after clearing action/limit');
   if (!scopedAccountsText.includes('deployment payments-api-prod')) throw new Error('expected deployment filter copy after clearing action/limit');
@@ -13703,8 +13705,8 @@ async function renderWithFetch(fetchImpl, search = '?page=audit') {
   const loadingRun = await renderWithFetch(() => pending.promise);
   const loadingText = collectText(loadingRun.document.getElementById('accounts')).join(' | ');
   if (!loadingText.includes('Loading audit log…')) throw new Error('expected audit loading state');
-  const clearFiltersButton = collectNodes(loadingRun.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit filters');
-  if (clearFiltersButton) throw new Error('did not expect clear audit filters action without active audit filters');
+  const inactiveClearControlsButton = collectNodes(loadingRun.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit controls');
+  if (inactiveClearControlsButton) throw new Error('did not expect clear audit controls action without active audit controls');
   const loadingRefreshButton = collectNodes(loadingRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Refresh audit log');
   if (!loadingRefreshButton || !loadingRefreshButton.disabled) throw new Error('expected audit refresh button disabled during initial load');
   pending.resolve({ ok: true, json: () => Promise.resolve({ entries: [] }) });
@@ -13713,6 +13715,25 @@ async function renderWithFetch(fetchImpl, search = '?page=audit') {
   const emptyText = collectText(loadingRun.document.getElementById('accounts')).join(' | ');
   if (!emptyText.includes('No audit activity has been persisted yet.')) throw new Error('expected audit empty state after resolve');
   if (emptyText.includes('Quick navigation')) throw new Error('did not expect audit quick navigation without a deployment filter');
+
+  let actionOnlyFetchCount = 0;
+  const actionOnlyRun = await renderWithFetch((url) => {
+    actionOnlyFetchCount += 1;
+    if (actionOnlyFetchCount === 1 && url !== '/v1/audit-logs?action=apply.requested') throw new Error('unexpected initial action-only audit fetch: ' + url);
+    if (actionOnlyFetchCount === 2 && url !== '/v1/audit-logs') throw new Error('unexpected cleared action-only audit fetch: ' + url);
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [] }) });
+  }, '?page=audit&action=apply.requested');
+  await settle();
+  await settle();
+  const actionToolbarText = collectText(actionOnlyRun.document.getElementById('toolbar')).join(' | ');
+  if (!actionToolbarText.includes('Audit filters: action Apply requested (apply.requested)')) throw new Error('expected action-only audit toolbar to show active action filter');
+  const actionClearControlsButton = collectNodes(actionOnlyRun.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit controls');
+  if (!actionClearControlsButton || actionClearControlsButton.disabled) throw new Error('expected action-only audit toolbar to offer clear audit controls');
+  actionClearControlsButton.dispatch('click');
+  await settle();
+  await settle();
+  if (actionOnlyFetchCount !== 2) throw new Error('expected action-only clear audit controls to reload the global audit route once');
+  if (actionOnlyRun.window.location.search !== '?page=audit') throw new Error('expected action-only clear audit controls to reset controls, got ' + actionOnlyRun.window.location.search);
 
   let deploymentOnlyFetchCount = 0;
   const deploymentOnlyRun = await renderWithFetch((url) => {
@@ -13732,8 +13753,8 @@ async function renderWithFetch(fetchImpl, search = '?page=audit') {
   if (!deploymentOnlyPlanLink || deploymentOnlyPlanLink.href !== '/?page=plan&deployment=payments-api-prod') throw new Error('expected deployment-only audit empty state to include a self link to the plan/apply workspace, got ' + (deploymentOnlyPlanLink && deploymentOnlyPlanLink.href));
   const deploymentOnlyButtons = collectNodes(deploymentOnlyTimeline, (node) => node.tagName === 'BUTTON');
   if (deploymentOnlyButtons.find((node) => node.textContent === 'Clear action/limit')) throw new Error('did not expect deployment-only audit empty state to include clear action/limit without action or limit controls');
-  const deploymentOnlyGlobalButton = deploymentOnlyButtons.find((node) => node.textContent === 'View global audit log');
-  if (!deploymentOnlyGlobalButton || deploymentOnlyGlobalButton.disabled) throw new Error('expected deployment-only audit empty state to include enabled inline global audit control');
+  const deploymentOnlyGlobalButton = deploymentOnlyButtons.find((node) => node.textContent === 'Clear audit controls');
+  if (!deploymentOnlyGlobalButton || deploymentOnlyGlobalButton.disabled) throw new Error('expected deployment-only audit empty state to include enabled inline clear audit controls control');
   deploymentOnlyGlobalButton.dispatch('click');
   await settle();
   await settle();

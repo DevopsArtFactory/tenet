@@ -1229,7 +1229,7 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		"`apply.transitioned` rows with previous/new status and step metadata",
 		"accepts optional `&action={action}` / `&limit={n}`",
 		"`Clear action/limit`",
-		"`View global audit log`",
+		"`Clear audit controls`",
 	} {
 		if !strings.Contains(overviewUIDoc, fragment) {
 			t.Fatalf("expected overview UI doc to include %q", fragment)
