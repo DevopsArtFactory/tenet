@@ -12395,6 +12395,176 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 		}
 	})
 
+	t.Run("stored apply records render optional executor claim freshness metadata", func(t *testing.T) {
+		cases := []struct {
+			name                    string
+			status                  string
+			claim                   map[string]any
+			expectedFreshnessState  string
+			expectedFreshnessReason string
+			expectedHeartbeat       string
+			expectedExpires         string
+		}{
+			{
+				name:   "nested freshness on failed record",
+				status: "failed",
+				claim: map[string]any{
+					"freshness": map[string]any{
+						"state":           "expired",
+						"reason":          "executor heartbeat missed",
+						"lastHeartbeatAt": "2026-04-18T08:02:00Z",
+						"expiresAt":       "2026-04-18T08:03:00Z",
+					},
+				},
+				expectedFreshnessState:  "expired",
+				expectedFreshnessReason: "executor heartbeat missed",
+				expectedHeartbeat:       "2026-04-18T08:02:00Z",
+				expectedExpires:         "2026-04-18T08:03:00Z",
+			},
+			{
+				name:   "direct freshness fields on default-status record",
+				status: "",
+				claim: map[string]any{
+					"state":           "fresh",
+					"reason":          "heartbeat inside lease",
+					"lastHeartbeatAt": "2026-04-18T08:04:00Z",
+					"expiresAt":       "2026-04-18T08:05:00Z",
+				},
+				expectedFreshnessState:  "fresh",
+				expectedFreshnessReason: "heartbeat inside lease",
+				expectedHeartbeat:       "2026-04-18T08:04:00Z",
+				expectedExpires:         "2026-04-18T08:05:00Z",
+			},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				applyRecord := map[string]any{
+					"id":             "apply_claim_freshness_123",
+					"planId":         "plan_ready_123",
+					"deploymentName": "api-prod",
+					"createdAt":      "2026-04-18T08:00:00Z",
+					"claim":          tc.claim,
+					"operations": []map[string]any{
+						{"status": "queued", "phase": "Preparing", "target": "target-queued", "summary": "Queued summary"},
+					},
+					"source": map[string]any{
+						"planId":        "plan_ready_123",
+						"route":         "/v1/plans/plan_ready_123",
+						"planStatus":    "ready",
+						"planCreatedAt": "2026-04-17T09:00:00Z",
+						"fingerprint":   "fp_plan_ready",
+					},
+				}
+				if tc.status != "" {
+					applyRecord["status"] = tc.status
+				}
+				applyRecordJSON, err := json.Marshal(applyRecord)
+				if err != nil {
+					t.Fatalf("marshal apply record with claim freshness: %v", err)
+				}
+
+				nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewReadyJSON) + `;
+const applyRecord = ` + string(applyRecordJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_claim_freshness_123', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/plan_ready_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  if (url === '/v1/applies/apply_claim_freshness_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(applyRecord) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  const text = collectText(document.getElementById('accounts')).join(' | ');
+  if (!text.includes('Executor claim')) throw new Error('expected executor claim section for ` + tc.name + `');
+  if (!text.includes('Claimed by a local-safe executor worker; no live AWS mutation is implied by this handoff.')) throw new Error('expected executor claim guidance for ` + tc.name + `');
+  if (!/Executor worker\s*\|\s*—/.test(text)) throw new Error('expected missing executor worker placeholder for ` + tc.name + `');
+  if (!/Claimed at\s*\|\s*—/.test(text)) throw new Error('expected missing claimed-at placeholder for ` + tc.name + `');
+  if (!/Claim freshness\s*\|\s*` + tc.expectedFreshnessState + `/.test(text)) throw new Error('expected claim freshness state for ` + tc.name + `: ' + text);
+  if (!/Freshness reason\s*\|\s*` + tc.expectedFreshnessReason + `/.test(text)) throw new Error('expected claim freshness reason for ` + tc.name + `: ' + text);
+  if (!/Last heartbeat\s*\|\s*` + tc.expectedHeartbeat + `/.test(text)) throw new Error('expected claim heartbeat timestamp for ` + tc.name + `: ' + text);
+  if (!/Claim expires\s*\|\s*` + tc.expectedExpires + `/.test(text)) throw new Error('expected claim expiration timestamp for ` + tc.name + `: ' + text);
+  if (text.includes('Pending local-safe executor claim; no worker has claimed this active apply request yet.')) throw new Error('did not expect pending executor claim copy when claim freshness exists for ` + tc.name + `');
+})();
+`
+				runNodeHarness(t, nodeProgram)
+			})
+		}
+	})
+
+	t.Run("active claimed apply records explain missing freshness metadata", func(t *testing.T) {
+		applyRecord := map[string]any{
+			"id":             "apply_claim_missing_freshness_123",
+			"planId":         "plan_ready_123",
+			"deploymentName": "api-prod",
+			"status":         "running",
+			"createdAt":      "2026-04-18T08:00:00Z",
+			"claim": map[string]any{
+				"workerId":  "worker-a",
+				"claimedAt": "2026-04-18T08:01:00Z",
+			},
+			"operations": []map[string]any{
+				{"status": "running", "phase": "Preparing", "target": "target-running", "summary": "Running summary"},
+			},
+			"source": map[string]any{
+				"planId":        "plan_ready_123",
+				"route":         "/v1/plans/plan_ready_123",
+				"planStatus":    "ready",
+				"planCreatedAt": "2026-04-17T09:00:00Z",
+				"fingerprint":   "fp_plan_ready",
+			},
+		}
+		applyRecordJSON, err := json.Marshal(applyRecord)
+		if err != nil {
+			t.Fatalf("marshal claimed apply record without freshness: %v", err)
+		}
+
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewReadyJSON) + `;
+const applyRecord = ` + string(applyRecordJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_claim_missing_freshness_123', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/plan_ready_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  if (url === '/v1/applies/apply_claim_missing_freshness_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(applyRecord) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  const text = collectText(document.getElementById('accounts')).join(' | ');
+  if (!text.includes('Executor claim')) throw new Error('expected executor claim section');
+  if (!/Executor worker\s*\|\s*worker-a/.test(text)) throw new Error('expected executor worker value: ' + text);
+  if (!/Claimed at\s*\|\s*2026-04-18T08:01:00Z/.test(text)) throw new Error('expected claimed-at value: ' + text);
+  if (!/Claim freshness\s*\|\s*Freshness metadata unavailable for this active apply claim\./.test(text)) throw new Error('expected missing-freshness explanation: ' + text);
+  if (text.includes('Pending local-safe executor claim; no worker has claimed this active apply request yet.')) throw new Error('did not expect pending executor claim copy for claimed record');
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
 	t.Run("future apply lifecycle states render lifecycle-aware chrome and metadata", func(t *testing.T) {
 		cases := []struct {
 			name            string

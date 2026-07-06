@@ -1899,9 +1899,18 @@ assert 'Pending local-safe executor claim; no worker has claimed this active app
 assert 'Claimed by a local-safe executor worker; no live AWS mutation is implied by this handoff.' in ui, ui
 assert 'Executor worker' in ui, ui
 assert 'Claimed at' in ui, ui
-assert "const hasApplyClaimMetadata = (record) => applyClaimWorkerValue(record) !== '—' || applyClaimTimestampValue(record) !== '—';" in ui, ui
+assert 'Claim freshness' in ui, ui
+assert 'Freshness reason' in ui, ui
+assert 'Last heartbeat' in ui, ui
+assert 'Claim expires' in ui, ui
+assert "const applyClaimFreshnessValue = (record, field) => {" in ui, ui
+assert "const activeApplyClaimStatuses = ['pending', 'queued', 'running', 'in_progress', 'in-progress'];" in ui, ui
+assert "const hasApplyClaimCoreMetadata = (record) => applyClaimWorkerValue(record) !== '—' || applyClaimTimestampValue(record) !== '—';" in ui, ui
+assert "const applyClaimFreshnessRows = (record) => {" in ui, ui
+assert 'Freshness metadata unavailable for this active apply claim.' in ui, ui
+assert "const hasApplyClaimMetadata = (record) => hasApplyClaimCoreMetadata(record) || applyClaimFreshnessRows(record).length > 0;" in ui, ui
 assert "const hasPendingApplyClaim = (record) => {" in ui, ui
-assert "return ['pending', 'queued', 'running', 'in_progress', 'in-progress'].includes(status);" in ui, ui
+assert "return isActiveApplyRecord(record);" in ui, ui
 assert 'Linked resources' in ui, ui
 assert 'On this page' in ui, ui
 assert 'Breadcrumbs' in ui, ui
