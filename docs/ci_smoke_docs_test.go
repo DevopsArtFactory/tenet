@@ -768,7 +768,7 @@ func TestClaimedApplyTransitionGuardDocsAndSmoke(t *testing.T) {
 
 	for _, fragment := range []string{
 		"claimed apply can still advance through `POST /v1/applies/{applyId}/transitions`",
-		"the transition response keeps `claim.workerId`, `claim.claimedAt`, and additive lifecycle metadata",
+		"the transition response keeps `claim.workerId`, `claim.claimedAt`, `claim.lastHeartbeatAt`, `claim.expiresAt`, and additive lifecycle metadata",
 		"local-safe only: claim/transition records update Tenet's persisted apply lifecycle without live AWS mutation",
 	} {
 		if !strings.Contains(readmeText, fragment) {

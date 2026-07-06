@@ -12284,7 +12284,7 @@ func TestRouterClaimApplyRequest(t *testing.T) {
 					CreatedAt:      "2026-04-18T08:05:00Z",
 					Details:        []string{"Executor worker-a claimed this queued apply request for local-safe handoff; no live AWS mutation has been attempted by the claim route."},
 					Lifecycle:      applyrequest.Lifecycle{UpdatedAt: "2026-04-18T08:10:00Z", StartedAt: "2026-04-18T08:10:00Z", CurrentStep: 1, TotalSteps: 2},
-					Claim:          &applyrequest.Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z"},
+					Claim:          &applyrequest.Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z", LastHeartbeatAt: "2026-04-18T08:10:00Z", ExpiresAt: "2026-04-18T08:15:00Z"},
 					Transitions: []applyrequest.Transition{{
 						TransitionedAt: "2026-04-18T08:10:00Z",
 						PreviousStatus: applyrequest.StatusQueued,
@@ -12331,8 +12331,8 @@ func TestRouterClaimApplyRequest(t *testing.T) {
 			}
 		}
 		claim, ok := raw["claim"].(map[string]any)
-		if !ok || claim["workerId"] != "worker-a" || claim["claimedAt"] != "2026-04-18T08:10:00Z" {
-			t.Fatalf("expected raw claim metadata, got %#v", raw["claim"])
+		if !ok || claim["workerId"] != "worker-a" || claim["claimedAt"] != "2026-04-18T08:10:00Z" || claim["lastHeartbeatAt"] != "2026-04-18T08:10:00Z" || claim["expiresAt"] != "2026-04-18T08:15:00Z" {
+			t.Fatalf("expected raw claim freshness metadata, got %#v", raw["claim"])
 		}
 	})
 
@@ -12428,7 +12428,7 @@ func TestRouterClaimApplyRequest(t *testing.T) {
 		err  error
 	}{
 		{name: "invalid claim state", err: fmt.Errorf("%w: only queued apply requests can be claimed", applyrequest.ErrInvalidState)},
-		{name: "already claimed", err: fmt.Errorf("%w: apply_1234abcd is already claimed by worker worker-b", applyrequest.ErrAlreadyClaimed)},
+		{name: "already claimed", err: fmt.Errorf("%w: apply_1234abcd has active claim held by worker worker-b; last heartbeat 2026-04-18T08:10:00Z; expires at 2026-04-18T08:15:00Z; retry with the same workerId for idempotent recovery or wait for the lease to become stale", applyrequest.ErrAlreadyClaimed)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			router := NewRouter(Options{
@@ -12536,8 +12536,8 @@ func TestRouterTransitionApplyRequest(t *testing.T) {
 		if err := json.Unmarshal(claimResp.Body.Bytes(), &claimed); err != nil {
 			t.Fatalf("decode claimed apply response: %v", err)
 		}
-		if claimed.Status != applyrequest.StatusRunning || claimed.Claim == nil || claimed.Claim.WorkerID != "worker-a" || claimed.Claim.ClaimedAt != "2026-04-18T08:10:00Z" {
-			t.Fatalf("expected running claim metadata, got %+v", claimed)
+		if claimed.Status != applyrequest.StatusRunning || claimed.Claim == nil || claimed.Claim.WorkerID != "worker-a" || claimed.Claim.ClaimedAt != "2026-04-18T08:10:00Z" || claimed.Claim.LastHeartbeatAt != "2026-04-18T08:10:00Z" || claimed.Claim.ExpiresAt != "2026-04-18T08:15:00Z" {
+			t.Fatalf("expected running claim freshness metadata, got %+v", claimed)
 		}
 
 		now = time.Date(2026, 4, 18, 8, 12, 0, 0, time.UTC)
