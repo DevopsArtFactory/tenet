@@ -3577,6 +3577,24 @@ func TestSmokeDockerScriptLocksOperatorContextRoleDiagnostics(t *testing.T) {
 	}
 }
 
+func TestSmokeDockerScriptLocksFreshnessMarkers(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/smoke-docker.sh")
+	if err != nil {
+		t.Fatalf("read smoke-docker.sh: %v", err)
+	}
+
+	text := string(body)
+	for _, fragment := range []string{
+		"\"applications-overview-freshness\",",
+		"\"workspace-detail-freshness\",",
+		"\"deployment-events-freshness\",",
+	} {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("expected smoke-docker.sh to lock freshness marker fragment %q", fragment)
+		}
+	}
+}
+
 func TestSmokeLocalScriptLocksOperatorContextRoleDiagnostics(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/smoke-local.sh")
 	if err != nil {
