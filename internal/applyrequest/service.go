@@ -15,7 +15,10 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
 
-const disabledError = "apply execution is disabled"
+const (
+	disabledError     = "apply execution is disabled"
+	claimFreshnessTTL = 5 * time.Minute
+)
 
 var (
 	marshalStableRecordPayload = json.Marshal
@@ -223,7 +226,7 @@ func (s Service) claimRecord(ctx context.Context, request ClaimRequest) func(Rec
 				return record, nil
 			}
 			if record.Claim.WorkerID != workerID {
-				return Record{}, fmt.Errorf("%w: %s is already claimed by worker %s", ErrAlreadyClaimed, record.ID, record.Claim.WorkerID)
+				return Record{}, alreadyClaimedError(record, s.now())
 			}
 			return Record{}, fmt.Errorf("%w: only queued apply requests can be claimed; %s is %s", ErrInvalidState, record.ID, record.Status)
 		}
@@ -231,8 +234,14 @@ func (s Service) claimRecord(ctx context.Context, request ClaimRequest) func(Rec
 			return Record{}, fmt.Errorf("%w: only queued apply requests can be claimed; %s is %s", ErrInvalidState, record.ID, record.Status)
 		}
 
-		now := s.now()
-		claim := Claim{WorkerID: workerID, ClaimedAt: now.UTC().Format(time.RFC3339)}
+		now := s.now().UTC()
+		claimedAt := now.Format(time.RFC3339)
+		claim := Claim{
+			WorkerID:        workerID,
+			ClaimedAt:       claimedAt,
+			LastHeartbeatAt: claimedAt,
+			ExpiresAt:       now.Add(claimFreshnessTTL).Format(time.RFC3339),
+		}
 		record.Claim = &claim
 		previousStatus := record.Status
 		record.Status = StatusRunning
@@ -252,6 +261,43 @@ func (s Service) claimRecord(ctx context.Context, request ClaimRequest) func(Rec
 		})
 		return record, nil
 	}
+}
+
+func alreadyClaimedError(record Record, now time.Time) error {
+	claim := record.Claim
+	if claim == nil {
+		return fmt.Errorf("%w: %s is already claimed", ErrAlreadyClaimed, record.ID)
+	}
+	lastHeartbeatAt, heartbeatSource := claim.LastHeartbeatAt, "lastHeartbeatAt"
+	if strings.TrimSpace(lastHeartbeatAt) == "" {
+		lastHeartbeatAt, heartbeatSource = claim.ClaimedAt, "claimedAt"
+	}
+	expiresAt := claim.ExpiresAt
+	if strings.TrimSpace(expiresAt) == "" {
+		if parsed, err := time.Parse(time.RFC3339, lastHeartbeatAt); err == nil {
+			expiresAt = parsed.Add(claimFreshnessTTL).UTC().Format(time.RFC3339)
+		}
+	}
+	state := "active claim"
+	if parsed, err := time.Parse(time.RFC3339, expiresAt); err == nil && !parsed.After(now.UTC()) {
+		state = "stale claim"
+	}
+	detail := fmt.Sprintf("%s has %s held by worker %s", record.ID, state, claim.WorkerID)
+	if strings.TrimSpace(lastHeartbeatAt) != "" {
+		detail += "; last heartbeat " + lastHeartbeatAt
+	}
+	if strings.TrimSpace(expiresAt) != "" {
+		detail += "; expires at " + expiresAt
+	}
+	if heartbeatSource == "claimedAt" {
+		detail += "; legacy claim metadata used claimedAt as lastHeartbeatAt"
+	}
+	if state == "active claim" {
+		detail += "; retry with the same workerId for idempotent recovery or wait for the lease to become stale"
+	} else {
+		detail += "; manual recovery is required before another worker can claim it"
+	}
+	return fmt.Errorf("%w: %s", ErrAlreadyClaimed, detail)
 }
 
 // Transition advances one persisted apply request to a validated lifecycle state without changing

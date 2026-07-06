@@ -1085,6 +1085,8 @@ if apply_enabled:
     assert isinstance(apply_record_get['lifecycle'].get('finishedAt'), str) and apply_record_get['lifecycle']['finishedAt'], apply_record_get
     assert apply_record_get['claim']['workerId'] == 'tenet-api-local-executor', apply_record_get
     assert isinstance(apply_record_get['claim'].get('claimedAt'), str) and apply_record_get['claim']['claimedAt'], apply_record_get
+    assert apply_record_get['claim']['lastHeartbeatAt'] == apply_record_get['claim']['claimedAt'], apply_record_get
+    assert isinstance(apply_record_get['claim'].get('expiresAt'), str) and apply_record_get['claim']['expiresAt'], apply_record_get
     assert apply_record_get['details'] == [
         'Tenet executor advanced this apply request on the same applyId without calling the manual transition API.',
         'Tenet then marked the request failed because live AWS mutation is not implemented for this backend slice yet.',
@@ -1113,6 +1115,8 @@ assert claimed_apply_record['id'] == os.environ['CLAIM_TRANSITION_APPLY_ID'], cl
 assert claimed_apply_record['status'] == 'running', claimed_apply_record
 assert claimed_apply_record['claim']['workerId'] == 'smoke-worker', claimed_apply_record
 assert isinstance(claimed_apply_record['claim'].get('claimedAt'), str) and claimed_apply_record['claim']['claimedAt'], claimed_apply_record
+assert claimed_apply_record['claim']['lastHeartbeatAt'] == claimed_apply_record['claim']['claimedAt'], claimed_apply_record
+assert isinstance(claimed_apply_record['claim'].get('expiresAt'), str) and claimed_apply_record['claim']['expiresAt'], claimed_apply_record
 assert claimed_apply_record['lifecycle']['startedAt'] == claimed_apply_record['claim']['claimedAt'], claimed_apply_record
 assert claimed_apply_record['lifecycle']['currentStep'] == 1, claimed_apply_record
 assert claimed_apply_record['lifecycle']['totalSteps'] == len(claimed_apply_record['operations']), claimed_apply_record

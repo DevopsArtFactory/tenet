@@ -300,7 +300,7 @@ func TestServiceClaimQueuedApplyRequest(t *testing.T) {
 	if claimed.ID != "apply_queued" || claimed.Status != StatusRunning {
 		t.Fatalf("expected stable running claimed record, got %+v", claimed)
 	}
-	if claimed.Claim == nil || claimed.Claim.WorkerID != "worker-a" || claimed.Claim.ClaimedAt != "2026-04-18T08:10:00Z" {
+	if claimed.Claim == nil || claimed.Claim.WorkerID != "worker-a" || claimed.Claim.ClaimedAt != "2026-04-18T08:10:00Z" || claimed.Claim.LastHeartbeatAt != "2026-04-18T08:10:00Z" || claimed.Claim.ExpiresAt != "2026-04-18T08:15:00Z" {
 		t.Fatalf("expected claim metadata, got %+v", claimed.Claim)
 	}
 	if claimed.Lifecycle.StartedAt != "2026-04-18T08:10:00Z" || claimed.Lifecycle.CurrentStep != 1 || claimed.Lifecycle.CompletedSteps != 0 || claimed.Lifecycle.TotalSteps != 2 {
@@ -326,7 +326,7 @@ func TestServiceClaimIsIdempotentForSameWorker(t *testing.T) {
 				DeploymentName: "api-prod",
 				Status:         StatusRunning,
 				CreatedAt:      "2026-04-18T08:05:00Z",
-				Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z"},
+				Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z", LastHeartbeatAt: "2026-04-18T08:10:00Z", ExpiresAt: "2026-04-18T08:15:00Z"},
 				Transitions:    []Transition{{TransitionedAt: "2026-04-18T08:10:00Z", PreviousStatus: StatusQueued, Status: StatusRunning, Step: 1}},
 			},
 		},
@@ -337,7 +337,7 @@ func TestServiceClaimIsIdempotentForSameWorker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("same-worker Claim returned error: %v", err)
 	}
-	if claimed.Claim == nil || claimed.Claim.ClaimedAt != "2026-04-18T08:10:00Z" || len(claimed.Transitions) != 1 {
+	if claimed.Claim == nil || claimed.Claim.ClaimedAt != "2026-04-18T08:10:00Z" || claimed.Claim.LastHeartbeatAt != "2026-04-18T08:10:00Z" || claimed.Claim.ExpiresAt != "2026-04-18T08:15:00Z" || len(claimed.Transitions) != 1 {
 		t.Fatalf("expected idempotent claim to return existing lease unchanged, got %+v", claimed)
 	}
 }
@@ -350,7 +350,14 @@ func TestServiceClaimRejectsCompetingWorkerAndInvalidStates(t *testing.T) {
 				PlanID:         "plan_ready",
 				DeploymentName: "api-prod",
 				Status:         StatusRunning,
-				Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z"},
+				Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z", LastHeartbeatAt: "2026-04-18T08:10:00Z", ExpiresAt: "2026-04-18T08:15:00Z"},
+			},
+			"apply_legacy_stale_claimed": {
+				ID:             "apply_legacy_stale_claimed",
+				PlanID:         "plan_ready",
+				DeploymentName: "api-prod",
+				Status:         StatusRunning,
+				Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:00:00Z"},
 			},
 			"apply_failed": {
 				ID:             "apply_failed",
@@ -367,11 +374,25 @@ func TestServiceClaimRejectsCompetingWorkerAndInvalidStates(t *testing.T) {
 			},
 		},
 	}
-	service := Service{Store: store}
+	service := Service{Store: store, Now: func() time.Time { return time.Date(2026, 4, 18, 8, 14, 0, 0, time.UTC) }}
 
 	_, err := service.Claim(context.Background(), "apply_claimed", ClaimRequest{WorkerID: "worker-b"})
 	if !errors.Is(err, ErrAlreadyClaimed) {
 		t.Fatalf("expected ErrAlreadyClaimed for competing worker, got %v", err)
+	}
+	for _, fragment := range []string{"active claim", "worker worker-a", "last heartbeat 2026-04-18T08:10:00Z", "expires at 2026-04-18T08:15:00Z", "retry with the same workerId for idempotent recovery"} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Fatalf("expected active competing-worker detail %q in %v", fragment, err)
+		}
+	}
+	_, err = service.Claim(context.Background(), "apply_legacy_stale_claimed", ClaimRequest{WorkerID: "worker-b"})
+	if !errors.Is(err, ErrAlreadyClaimed) {
+		t.Fatalf("expected ErrAlreadyClaimed for stale competing worker, got %v", err)
+	}
+	for _, fragment := range []string{"stale claim", "worker worker-a", "last heartbeat 2026-04-18T08:00:00Z", "expires at 2026-04-18T08:05:00Z", "legacy claim metadata used claimedAt as lastHeartbeatAt", "manual recovery is required before another worker can claim it"} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Fatalf("expected stale competing-worker detail %q in %v", fragment, err)
+		}
 	}
 	_, err = service.Claim(context.Background(), "apply_failed", ClaimRequest{WorkerID: "worker-a"})
 	if !errors.Is(err, ErrInvalidState) {

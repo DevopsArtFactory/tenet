@@ -109,8 +109,10 @@ type Lifecycle struct {
 
 // Claim captures the local-safe executor lease metadata for one queued apply request.
 type Claim struct {
-	WorkerID  string `json:"workerId"`
-	ClaimedAt string `json:"claimedAt"`
+	WorkerID        string `json:"workerId"`
+	ClaimedAt       string `json:"claimedAt"`
+	LastHeartbeatAt string `json:"lastHeartbeatAt,omitempty"`
+	ExpiresAt       string `json:"expiresAt,omitempty"`
 }
 
 // Transition captures one successful lifecycle advance for immutable audit projection.
