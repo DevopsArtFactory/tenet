@@ -2146,6 +2146,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		"`200 OK` authorized reads",
 		"`deploymentName` plus `events` list payload contract",
 		"additive `managedDriftSummary` severity counts",
+		"top-level additive `sourceSummary` entries (`source`, `count`) computed from the retained event window before `?source=` filtering",
 		"top-level `retention` metadata (`limit`, `retainedEventCount`, `status`)",
 		"router-authored `resultScope` metadata (`sourceFilter` when exact `?source=` filtering is used, `requestedLimit`, `effectiveLimit`, `returnedEventCount`, `totalEventCount`, `retentionLimit`, `retainedEventCount`, `retentionStatus`, `limited`, optional `newestEventTimestamp` / `oldestEventTimestamp` from the returned window, and `truncationStatus`)",
 		"`returnedCount` mirrors `returnedEventCount`, and `truncated` mirrors `truncationStatus == \"truncated\"`",
