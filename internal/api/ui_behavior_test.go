@@ -1514,9 +1514,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Last update') || !accountsText.includes('2026-04-16T07:10:00Z')) throw new Error('expected applications row to show row-local last update timestamp');
   if (!accountsText.includes('More actions for payments-api-staging')) throw new Error('expected applications page secondary actions disclosure to name the deployment');
   if (accountsText.includes('More actions |')) throw new Error('applications page secondary actions disclosure must not use a generic summary');
-  if (!accountsText.includes('Runtime') || !accountsText.includes('waiting for CodeDeploy bake window')) throw new Error('expected applications page compact runtime signal detail');
-  if (accountsText.includes('Latest runtime signal')) throw new Error('applications page should use a compact Runtime label instead of the longer latest-runtime label');
-  if (accountsText.includes('Runtime · —')) throw new Error('applications page must not render placeholder-only runtime signals');
+  if (!accountsText.includes('Latest runtime change') || !accountsText.includes('waiting for CodeDeploy bake window')) throw new Error('expected applications page compact runtime change cue');
+  if (accountsText.includes('Latest runtime signal')) throw new Error('applications page should not use the older latest-runtime signal label');
+  if (accountsText.includes('Latest runtime change · —')) throw new Error('applications page must not render placeholder-only runtime change cues');
   if (accountsText.includes('payments-api-prod')) throw new Error('expected health/sync/account filters to hide the prod row');
   if (accountsText.includes('Overview JSON')) throw new Error('applications page should not expose deployment read-model quick links');
   if (accountsText.includes('Status JSON')) throw new Error('applications page should not expose status quick links');
@@ -1702,6 +1702,22 @@ const sampleApplications = [{
     deployedArtifact: { image: 'ghcr.io/example/payments@sha256:abcdef' },
     currentStep: 'ShiftTrafficToCandidate'
   },
+}, {
+  name: 'inventory-api-prod',
+  appRef: 'inventory',
+  environmentRef: 'prod-apne2',
+  accountName: 'prod-core',
+  awsAccountId: '123456789012',
+  region: 'ap-northeast-2',
+  targetType: 'ecs',
+  executionMode: 'ecsRolling',
+  sync: { state: 'Synced', reason: 'latest desired generation applied' },
+  health: { overall: 'Healthy', summary: '2/2 tasks healthy' },
+  runtimeSummary: {
+    timestamp: '2026-04-16T06:45:00Z',
+    summary: 'rollout is steady',
+    currentStep: 'VerifyServiceStability'
+  },
 }];
 class Element {
   constructor(tagName, ownerDocument) {
@@ -1765,10 +1781,15 @@ async function render(search) {
   if (!runtimeMatchText.includes('payments-api-prod')) throw new Error('expected runtime-only search to keep matching row');
   if (!runtimeMatchText.includes('Search match')) throw new Error('expected visible search match context');
   if (!runtimeMatchText.includes('Matched runtime: managed drift added 2 rows')) throw new Error('expected runtime change-detail match context');
+  if (!runtimeMatchText.includes('Latest runtime change')) throw new Error('expected runtime change-detail search to show latest runtime change cue');
+  if (!runtimeMatchText.includes('Latest runtime change |  · managed drift added 2 rows')) throw new Error('expected runtime change cue to name the matched change detail');
   const visibleMatchText = await render('?q=payments&sync=all&account=all');
   if (visibleMatchText.includes('Search match')) throw new Error('visible application-name search should keep overview row compact');
+  if (!visibleMatchText.includes('Latest runtime change |  · managed drift added 2 rows')) throw new Error('expected visible matching row to keep compact runtime change cue');
   const noSearchText = await render('?sync=all&account=all');
   if (noSearchText.includes('Search match')) throw new Error('no-search overview should stay compact');
+  if (!noSearchText.includes('Latest runtime change |  · managed drift added 2 rows')) throw new Error('expected no-search row with change details to keep compact runtime change cue');
+  if (noSearchText.includes('Latest runtime change |  · rollout is steady')) throw new Error('no-search row without change details should not render a runtime summary cue');
 })();
 `
 

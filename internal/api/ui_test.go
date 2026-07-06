@@ -1119,9 +1119,9 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)]",
 		"row-match-context",
 		"row-runtime-signal",
-		"const latestRuntimeSignalParts = (deployment) => {",
+		"const latestRuntimeChangeParts = (deployment) => {",
 		"const hasRuntimeEventsLinkEvidence = (deployment) => {",
-		"container.append(createElement('strong', '', 'Runtime'));",
+		"container.append(createElement('strong', '', 'Latest runtime change'));",
 		"secondaryLinks.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name }), 'Open runtime events', '_self'));",
 		"const createApplicationMatchContext = (deployment, query) => {",
 		"Matched ${label}: ${value}",
@@ -3802,11 +3802,14 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createNavLink(deploymentDetailJSONRoute(deploymentName), 'Workspace JSON')\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert workspace JSON route contract")
 	}
-	if !strings.Contains(text, "assert \"container.append(createElement('strong', '', 'Runtime'));\" in ui, ui") {
-		t.Fatalf("expected smoke-local.sh to assert embedded html contains compact Runtime label")
+	if !strings.Contains(text, "assert \"container.append(createElement('strong', '', 'Latest runtime change'));\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains compact latest runtime change label")
 	}
 	if !strings.Contains(text, "assert \"['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)]\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains row-local Last update field")
+	}
+	if !strings.Contains(text, "assert \"const latestRuntimeChangeParts = (deployment) => {\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains latest runtime change helper contract")
 	}
 	if !strings.Contains(text, "application-runtime-events") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains runtime-events handoff anchor")

@@ -167,7 +167,8 @@ compact with application rows, status chips, filters, a count-aware `Clear N fil
 reset action with an active-filter tooltip that names the exact search, sync, health, and account state before reset, `Open application`, a self-describing
 `More actions for {deploymentName}` disclosure with an accessible secondary-action
 group label, and `Applications JSON` / `Copy read route` handoffs for `GET /v1/overview/applications`. Each row keeps a compact `Last update` field
-from the joined runtime summary, falling back to `Latest runtime status` when no timestamp is present. The secondary account
+from the joined runtime summary, falling back to `Latest runtime status` when no timestamp is present, and adds a compact `Latest runtime change`
+cue only when `runtimeSummary.changeDetails[]` carries controller-authored change copy. The secondary account
 drill-down keeps its toolbar `Refresh account detail` action; account/group JSON handoffs include adjacent `Copy account read route`
 / `Copy group read route` controls for exact scoped `GET /v1/overview/accounts/...`
 handoffs, and deployment rows with meaningful runtime/event evidence add a `_self` `Open runtime events` link to `/?page=application&deployment={deploymentName}#application-runtime-events` while preserving `q` / `sync` / `account`. Expandable rows expose their controlled lazy-loaded detail panel with

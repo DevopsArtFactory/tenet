@@ -396,7 +396,7 @@
         ].filter(Boolean);
         return parts.length ? parts.join(' · ') : '—';
       };
-      const latestRuntimeSignalParts = (deployment) => {
+      const latestRuntimeChangeParts = (deployment) => {
         const runtimeSummary = deployment?.runtimeSummary || {};
         const normalize = (value) => {
           if (value == null) return '';
@@ -404,22 +404,9 @@
           return text && text !== '—' ? text : '';
         };
         const details = changeDetailLabels(runtimeSummary.changeDetails).map(normalize).filter(Boolean);
-        if (details.length) return details.slice(0, 2);
-        const summary = normalize(runtimeSummary.summary);
-        if (summary) return [summary];
-        const conditions = (runtimeSummary.conditions || [])
-          .map((condition) => normalize(runtimeConditionSummary(condition)))
-          .filter(Boolean);
-        if (conditions.length) return conditions.slice(0, 2);
-        const rolloutSignals = [
-          runtimeSummary.rolloutPhase ? `Rollout phase ${runtimeSummary.rolloutPhase}` : '',
-          runtimeSummary.currentStep ? `Current step ${runtimeSummary.currentStep}` : '',
-          deployment?.rollout?.phase ? `Rollout phase ${deployment.rollout.phase}` : '',
-          deployment?.rollout?.currentStep ? `Current step ${deployment.rollout.currentStep}` : '',
-        ].map(normalize).filter(Boolean);
-        return rolloutSignals.slice(0, 2);
+        return details.slice(0, 2);
       };
-      const latestRuntimeSignalText = (deployment) => latestRuntimeSignalParts(deployment).join(' · ');
+      const latestRuntimeChangeText = (deployment) => latestRuntimeChangeParts(deployment).join(' · ');
       const hasRuntimeEventsLinkEvidence = (deployment) => {
         if (!deployment?.name) return false;
         const runtimeSummary = deployment?.runtimeSummary || {};
@@ -438,12 +425,12 @@
         ].map((value) => String(value || '').trim()).filter((value) => value && value !== '—');
         return runtimeEvidence.length > 0;
       };
-      const createLatestRuntimeSignal = (deployment) => {
-        const signal = latestRuntimeSignalText(deployment);
-        if (!signal) return null;
+      const createLatestRuntimeChangeCue = (deployment) => {
+        const change = latestRuntimeChangeText(deployment);
+        if (!change) return null;
         const container = createElement('div', 'row-runtime-signal');
-        container.append(createElement('strong', '', 'Runtime'));
-        container.append(` · ${signal}`);
+        container.append(createElement('strong', '', 'Latest runtime change'));
+        container.append(` · ${change}`);
         return container;
       };
       const plannedSteps = (rollout) => {
@@ -3449,7 +3436,7 @@
               createNavLink(buildPageURL('plan', { deployment: deployment.name }), 'Plan/apply', '_self'),
               createNavLink(buildPageURL('audit', { deployment: deployment.name }), 'Audit log', '_self'),
             );
-            if (latestRuntimeSignalText(deployment)) {
+            if (hasRuntimeEventsLinkEvidence(deployment)) {
               secondaryLinks.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name }), 'Open runtime events', '_self'));
             }
           }
@@ -3458,9 +3445,9 @@
           secondaryActions.setAttribute('aria-label', `Secondary actions for ${deployment.name || 'deployment'}`);
           secondaryActions.append(createElement('summary', '', `More actions for ${deployment.name || 'deployment'}`), secondaryLinks);
           const matchContext = createApplicationMatchContext(deployment, currentViewState.query);
-          const latestSignal = createLatestRuntimeSignal(deployment);
+          const latestChangeCue = createLatestRuntimeChangeCue(deployment);
           row.append(top, core);
-          if (latestSignal) row.append(latestSignal);
+          if (latestChangeCue) row.append(latestChangeCue);
           if (matchContext) row.append(matchContext);
           if (secondaryLinks.children.length) row.append(secondaryActions);
           rows.append(row);
