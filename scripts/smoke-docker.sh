@@ -1937,6 +1937,8 @@ for fragment in (
     "On this page",
     "Linked resources",
     "Controller runtime events",
+    "Copy runtime events route",
+    "deploymentEventsReadRoute(deploymentName, currentPageState.eventLimit, currentPageState.eventSource)",
     "Runtime event navigation",
     "Newest visible event",
     "Oldest visible event",

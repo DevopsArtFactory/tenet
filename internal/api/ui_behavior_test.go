@@ -4740,6 +4740,9 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
   if (!refreshEvents) throw new Error('expected runtime-events refresh button after initial response');
   if (refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled after initial fetch settles');
+  const copyRuntimeEventsRoute = buttons.find((node) => node.textContent === 'Copy runtime events route');
+  if (!copyRuntimeEventsRoute) throw new Error('expected runtime-events copy-route button after initial response');
+  if (copyRuntimeEventsRoute.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/payments-api-staging/events?limit=10') throw new Error('expected runtime-events copy-route button to target default events route, got ' + copyRuntimeEventsRoute.getAttribute('aria-label'));
   const eventWindowSelect = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'SELECT').find((node) => node.dataset.toolbarField === 'Event window');
   if (!eventWindowSelect) throw new Error('expected Event window selector on application runtime-events section');
   if (eventWindowSelect.disabled) throw new Error('expected Event window selector enabled after runtime-events load');
@@ -4831,6 +4834,9 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   if (selectedSourceView.fetchCalls[1] !== selectedSourceURL) throw new Error('expected bookmarked Event source to fetch source-filtered deployment events route, got ' + selectedSourceView.fetchCalls.join(', '));
   const selectedSourceText = collectText(selectedSourceView.document.getElementById('accounts')).join(' | ');
   if (!selectedSourceText.includes('Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=25&source=controller.')) throw new Error('expected runtime-events intro to show the selected source route');
+  const selectedSourceCopyButton = collectNodes(selectedSourceView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Copy runtime events route');
+  if (!selectedSourceCopyButton) throw new Error('expected source-filtered runtime-events copy-route button');
+  if (selectedSourceCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/payments-api-staging/events?limit=25&source=controller') throw new Error('expected source-filtered copy-route button to preserve selected limit/source, got ' + selectedSourceCopyButton.getAttribute('aria-label'));
   if (!selectedSourceText.includes('Source filter · controller')) throw new Error('expected runtime-events scope summary to show the selected source filter');
   if (!selectedSourceText.includes('Source mix · controller · 7 events') || !selectedSourceText.includes('Source mix · github · 3 events')) throw new Error('expected source-filtered runtime-events payload to keep retained sourceSummary chips');
   const eventSourceSelect = collectNodes(selectedSourceView.document.getElementById('accounts'), (node) => node.tagName === 'SELECT').find((node) => node.dataset.toolbarField === 'Event source');

@@ -2051,6 +2051,8 @@ assert 'Visible high' in ui, ui
 assert 'No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.' in ui, ui
 assert 'Controller runtime events' in ui, ui
 assert 'Refresh runtime events' in ui, ui
+assert 'Copy runtime events route' in ui, ui
+assert "deploymentEventsReadRoute(deploymentName, currentPageState.eventLimit, currentPageState.eventSource)" in ui, ui
 assert 'Runtime event navigation' in ui, ui
 assert 'Newest visible event' in ui, ui
 assert 'Oldest visible event' in ui, ui
