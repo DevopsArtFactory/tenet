@@ -178,7 +178,7 @@ with visible/total impact and section-specific empty guidance alongside the inli
 `Live evidence available` / `Recent logs supported` `_self` handoffs to the final
 resource page's `#resource-live-inspection` / `#resource-recent-logs` panels. The drift and plan workspaces show `Current workspace read: GET /v1/overview/deployments/{deploymentName}.`
 in their chrome and include a top-level `Workspace JSON` handoff to that
-deployment-detail read model. Non-auth read failures render the active page label, failed `GET ...` route, optional `Tenet request ID`, and same-URL `Retry current page` action instead of a generic overview-only error. Malformed drill-down bookmarks that omit the required `accountId` or `deployment` context render a missing-context empty state with a same-shell `Back to applications` recovery link that keeps existing `q` / `sync` / `health` / `account` filters intact.
+deployment-detail read model. Initial and refresh-time non-auth read failures, including the default `GET /v1/overview/applications` landing read, render the active page label, failed `GET ...` route, optional `Tenet request ID`, and same-URL `Retry current page` action instead of a generic overview-only error. Malformed drill-down bookmarks that omit the required `accountId` or `deployment` context render a missing-context empty state with a same-shell `Back to applications` recovery link that keeps existing `q` / `sync` / `health` / `account` filters intact.
 
 Common bookmarkable routes:
 

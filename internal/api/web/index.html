@@ -10373,11 +10373,7 @@
             renderApplicationsOverview(applications);
           })
           .catch((error) => {
-            if (operatorReadFailureHeading(error)) {
-              renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);
-              return;
-            }
-            renderEmptyState(`Failed to load overview: ${error.message}`);
+            renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);
           });
       } else if (currentPageState.page === 'audit') {
         activeEmbeddedReadModelRefresh = () => loadAuditLogsPage({ force: true });
