@@ -8633,6 +8633,7 @@
             return 'queued';
           case 'running':
           case 'in_progress':
+          case 'in-progress':
             return 'running';
           case 'succeeded':
           case 'success':
@@ -8776,6 +8777,11 @@
         return claimedAt || '—';
       };
       const hasApplyClaimMetadata = (record) => applyClaimWorkerValue(record) !== '—' || applyClaimTimestampValue(record) !== '—';
+      const hasPendingApplyClaim = (record) => {
+        if (hasApplyClaimMetadata(record)) return false;
+        const status = String(record?.status || '').toLowerCase();
+        return ['pending', 'queued', 'running', 'in_progress', 'in-progress'].includes(status);
+      };
       const applyLifecycleProgressText = (record) => {
         const lifecycle = record?.lifecycle;
         const currentStep = applyLifecycleStepValue(lifecycle, 'currentStep');
@@ -9905,6 +9911,14 @@
                 ['Executor claim', 'Claimed by a local-safe executor worker; no live AWS mutation is implied by this handoff.', 'summary'],
                 ['Executor worker', applyClaimWorkerValue(activeApplyRecord)],
                 ['Claimed at', applyClaimTimestampValue(activeApplyRecord)],
+              ].forEach(([label, value, className]) => {
+                claimMetadataGrid.append(createMetric(label, value, className || ''));
+              });
+            } else if (hasPendingApplyClaim(activeApplyRecord)) {
+              [
+                ['Executor claim', 'Pending local-safe executor claim; no worker has claimed this active apply request yet.', 'summary'],
+                ['Executor worker', '—'],
+                ['Claimed at', '—'],
               ].forEach(([label, value, className]) => {
                 claimMetadataGrid.append(createMetric(label, value, className || ''));
               });
