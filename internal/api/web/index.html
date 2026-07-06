@@ -8776,11 +8776,37 @@
         const claimedAt = typeof record?.claim?.claimedAt === 'string' ? record.claim.claimedAt.trim() : '';
         return claimedAt || '—';
       };
-      const hasApplyClaimMetadata = (record) => applyClaimWorkerValue(record) !== '—' || applyClaimTimestampValue(record) !== '—';
+      const applyClaimFreshnessValue = (record, field) => {
+        const claim = record?.claim && typeof record.claim === 'object' ? record.claim : null;
+        if (!claim) return '—';
+        const freshness = claim.freshness && typeof claim.freshness === 'object' ? claim.freshness : {};
+        const directFields = {
+          state: ['freshnessState', 'state'],
+          reason: ['freshnessReason', 'reason'],
+          lastHeartbeatAt: ['freshnessLastHeartbeatAt', 'lastHeartbeatAt', 'heartbeatAt'],
+          expiresAt: ['freshnessExpiresAt', 'expiresAt', 'claimExpiresAt'],
+        };
+        const candidates = [freshness[field], ...(directFields[field] || []).map((name) => claim[name])];
+        const value = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim());
+        return value ? value.trim() : '—';
+      };
+      const activeApplyClaimStatuses = ['pending', 'queued', 'running', 'in_progress', 'in-progress'];
+      const hasApplyClaimCoreMetadata = (record) => applyClaimWorkerValue(record) !== '—' || applyClaimTimestampValue(record) !== '—';
+      const isActiveApplyRecord = (record) => activeApplyClaimStatuses.includes(String(record?.status || '').toLowerCase());
+      const applyClaimFreshnessRows = (record) => {
+        const rows = [
+          ['Claim freshness', applyClaimFreshnessValue(record, 'state')],
+          ['Freshness reason', applyClaimFreshnessValue(record, 'reason')],
+          ['Last heartbeat', applyClaimFreshnessValue(record, 'lastHeartbeatAt')],
+          ['Claim expires', applyClaimFreshnessValue(record, 'expiresAt')],
+        ].filter(([, value]) => value !== '—');
+        if (rows.length > 0 || !hasApplyClaimCoreMetadata(record) || !isActiveApplyRecord(record)) return rows;
+        return [['Claim freshness', 'Freshness metadata unavailable for this active apply claim.']];
+      };
+      const hasApplyClaimMetadata = (record) => hasApplyClaimCoreMetadata(record) || applyClaimFreshnessRows(record).length > 0;
       const hasPendingApplyClaim = (record) => {
         if (hasApplyClaimMetadata(record)) return false;
-        const status = String(record?.status || '').toLowerCase();
-        return ['pending', 'queued', 'running', 'in_progress', 'in-progress'].includes(status);
+        return isActiveApplyRecord(record);
       };
       const applyLifecycleProgressText = (record) => {
         const lifecycle = record?.lifecycle;
@@ -9911,6 +9937,7 @@
                 ['Executor claim', 'Claimed by a local-safe executor worker; no live AWS mutation is implied by this handoff.', 'summary'],
                 ['Executor worker', applyClaimWorkerValue(activeApplyRecord)],
                 ['Claimed at', applyClaimTimestampValue(activeApplyRecord)],
+                ...applyClaimFreshnessRows(activeApplyRecord),
               ].forEach(([label, value, className]) => {
                 claimMetadataGrid.append(createMetric(label, value, className || ''));
               });
