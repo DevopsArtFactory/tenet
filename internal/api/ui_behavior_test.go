@@ -12162,6 +12162,10 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   let text = collectText(root).join(' | ');
   if (!text.includes('Apply request queued')) throw new Error('expected queued apply heading before refresh');
   if (!text.includes('Immutable apply request apply_refresh_123 is loaded from GET /v1/applies/apply_refresh_123 and recorded as queued.')) throw new Error('expected queued apply message before refresh');
+  if (!text.includes('Executor claim')) throw new Error('expected pending executor claim section before refresh');
+  if (!text.includes('Pending local-safe executor claim; no worker has claimed this active apply request yet.')) throw new Error('expected pending executor claim guidance before refresh');
+  if (!/Executor worker\s*\|\s*—/.test(text)) throw new Error('expected pending executor worker placeholder before refresh');
+  if (!/Claimed at\s*\|\s*—/.test(text)) throw new Error('expected pending executor claim timestamp placeholder before refresh');
   let buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   const refreshPlan = buttons.find((node) => node.textContent === 'Refresh plan preview');
   const refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
@@ -12185,6 +12189,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Immutable apply request apply_refresh_123 is loaded from GET /v1/applies/apply_refresh_123 and recorded as running.')) throw new Error('expected running apply message after refresh');
   if (!text.includes('1/2 terminal · 1 running · 0 queued')) throw new Error('expected updated lifecycle summary after refresh');
   if (!text.includes('Current step 2 of 2 · Completed 1 of 2')) throw new Error('expected updated lifecycle metadata after refresh');
+  if (!text.includes('Pending local-safe executor claim; no worker has claimed this active apply request yet.')) throw new Error('expected pending executor claim guidance after refresh');
   if (!text.includes('Running apply operation')) throw new Error('expected running apply operation after refresh');
 })();
 `
@@ -12302,6 +12307,92 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 })();
 `
 		runNodeHarness(t, nodeProgram)
+	})
+
+	t.Run("active unclaimed apply records render pending executor claim section", func(t *testing.T) {
+		cases := []struct {
+			name          string
+			status        string
+			includeStatus bool
+			expectPending bool
+		}{
+			{name: "queued", status: "queued", includeStatus: true, expectPending: true},
+			{name: "running", status: "running", includeStatus: true, expectPending: true},
+			{name: "in_progress", status: "in_progress", includeStatus: true, expectPending: true},
+			{name: "in-progress", status: "in-progress", includeStatus: true, expectPending: true},
+			{name: "failed", status: "failed", includeStatus: true, expectPending: false},
+			{name: "unknown", status: "mystery", includeStatus: true, expectPending: false},
+			{name: "default", includeStatus: false, expectPending: false},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				applyRecord := map[string]any{
+					"id":             "apply_unclaimed_123",
+					"planId":         "plan_ready_123",
+					"deploymentName": "api-prod",
+					"createdAt":      "2026-04-18T08:00:00Z",
+					"operations": []map[string]any{
+						{"status": "queued", "phase": "Preparing", "target": "target-queued", "summary": "Queued summary"},
+					},
+					"source": map[string]any{
+						"planId":        "plan_ready_123",
+						"route":         "/v1/plans/plan_ready_123",
+						"planStatus":    "ready",
+						"planCreatedAt": "2026-04-17T09:00:00Z",
+						"fingerprint":   "fp_plan_ready",
+					},
+				}
+				if tc.includeStatus {
+					applyRecord["status"] = tc.status
+				}
+				applyRecordJSON, err := json.Marshal(applyRecord)
+				if err != nil {
+					t.Fatalf("marshal unclaimed apply record: %v", err)
+				}
+				expectPending := "false"
+				if tc.expectPending {
+					expectPending = "true"
+				}
+
+				nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewReadyJSON) + `;
+const applyRecord = ` + string(applyRecordJSON) + `;
+const expectPendingClaim = ` + expectPending + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_unclaimed_123', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/plan_ready_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  if (url === '/v1/applies/apply_unclaimed_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(applyRecord) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  const text = collectText(document.getElementById('accounts')).join(' | ');
+  if (expectPendingClaim) {
+    if (!text.includes('Executor claim')) throw new Error('expected pending executor claim section for ` + tc.name + `');
+    if (!text.includes('Pending local-safe executor claim; no worker has claimed this active apply request yet.')) throw new Error('expected pending executor claim guidance for ` + tc.name + `');
+    if (!/Executor worker\s*\|\s*—/.test(text)) throw new Error('expected pending executor worker placeholder for ` + tc.name + `');
+    if (!/Claimed at\s*\|\s*—/.test(text)) throw new Error('expected pending executor timestamp placeholder for ` + tc.name + `');
+  } else if (text.includes('Executor claim')) {
+    throw new Error('did not expect executor claim section for ` + tc.name + `');
+  }
+})();
+`
+				runNodeHarness(t, nodeProgram)
+			})
+		}
 	})
 
 	t.Run("future apply lifecycle states render lifecycle-aware chrome and metadata", func(t *testing.T) {

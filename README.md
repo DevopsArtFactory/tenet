@@ -40,9 +40,11 @@ reader orientation aligned with the visual shell.
 The plan/apply workspace keeps disabled mutation controls explanatory: `Create Plan`
 reviews the current deployment, `Apply Plan` / refreshes activate after stored
 records load, and optional executor claim metadata (`claim.workerId` /
-`claim.claimedAt`) shows local-safe queued-apply ownership without raw JSON. If a
-reviewed plan is stale, the workspace preserves bookmarkable context and tells the
-operator to create a fresh plan preview before retrying.
+`claim.claimedAt`) shows local-safe queued-apply ownership without raw JSON.
+Queued or running records without claim metadata show an explicit pending executor
+claim section instead; failed/default records without claim metadata omit that
+section. If a reviewed plan is stale, the workspace preserves bookmarkable
+context and tells the operator to create a fresh plan preview before retrying.
 
 ## Architecture
 

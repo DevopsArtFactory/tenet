@@ -1895,10 +1895,13 @@ assert "buildPageURL('application', { deployment: deployment.name })" in ui, ui
 assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
 assert 'Executor claim' in ui, ui
+assert 'Pending local-safe executor claim; no worker has claimed this active apply request yet.' in ui, ui
 assert 'Claimed by a local-safe executor worker; no live AWS mutation is implied by this handoff.' in ui, ui
 assert 'Executor worker' in ui, ui
 assert 'Claimed at' in ui, ui
 assert "const hasApplyClaimMetadata = (record) => applyClaimWorkerValue(record) !== '—' || applyClaimTimestampValue(record) !== '—';" in ui, ui
+assert "const hasPendingApplyClaim = (record) => {" in ui, ui
+assert "return ['pending', 'queued', 'running', 'in_progress', 'in-progress'].includes(status);" in ui, ui
 assert 'Linked resources' in ui, ui
 assert 'On this page' in ui, ui
 assert 'Breadcrumbs' in ui, ui
