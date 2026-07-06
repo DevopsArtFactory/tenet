@@ -1795,7 +1795,9 @@ assert "const deploymentDetailJSONRoute = (deploymentName) => `/v1/overview/depl
 assert "createNavLink(deploymentDetailJSONRoute(deploymentName), 'Workspace JSON')" in ui, ui
 assert "const applicationsClearFiltersLabel = (activeFilters) => {" in ui, ui
 assert "return `Clear ${count} ${count === 1 ? 'filter' : 'filters'}`;" in ui, ui
-assert "clearButton.setAttribute('aria-label', applicationsClearFiltersAriaLabel(active));" in ui, ui
+assert "const clearLabel = applicationsClearFiltersAriaLabel(active);" in ui, ui
+assert "clearButton.setAttribute('aria-label', clearLabel);" in ui, ui
+assert "clearButton.setAttribute('title', clearLabel);" in ui, ui
 assert "const latestRuntimeSignalParts = (deployment) => {" in ui, ui
 assert "buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name })" in ui, ui
 assert 'Operator context' in ui, ui
