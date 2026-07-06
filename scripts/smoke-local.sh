@@ -46,6 +46,7 @@ TERMINAL_APPLY_TRANSITION_BODY=$(mktemp)
 INVALID_APPLY_CLAIM_BODY=$(mktemp)
 UNKNOWN_APPLY_CLAIM_BODY=$(mktemp)
 TERMINAL_APPLY_CLAIM_BODY=$(mktemp)
+CLAIMED_APPLY_TRANSITION_BODY=$(mktemp)
 INVALID_WEBHOOK_BODY=$(mktemp)
 CONTROLLER_REFRESH_BODY=$(mktemp)
 CONTROLLER_REFRESH_STATUS_BODY=$(mktemp)
@@ -94,7 +95,7 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$CONTROLLER_REFRESH_AUDIT_STORE_PATH" "$ENTERPRISE_SSO_STATE_STORE_PATH" "$ENTERPRISE_SSO_IDENTITY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$INVALID_DEPLOYMENT_EVENTS_LIMIT_BODY" "$INVALID_DEPLOYMENT_EVENTS_SOURCE_BODY" "$INVALID_RESOURCE_LOG_LIMIT_BODY" "$INVALID_RESOURCE_LOG_INSTANCE_BODY" "$INVALID_RESOURCE_INSPECTION_LIMIT_BODY" "$INVALID_RESOURCE_INSPECTION_INSTANCE_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_APPLY_CLAIM_BODY" "$UNKNOWN_APPLY_CLAIM_BODY" "$TERMINAL_APPLY_CLAIM_BODY" "$INVALID_WEBHOOK_BODY" "$CONTROLLER_REFRESH_BODY" "$CONTROLLER_REFRESH_STATUS_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_CONTROLLER_REFRESH_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_CATALOG_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_STATUS_READ_BODY" "$AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" "$AUTH_UNAUTHENTICATED_EVENTS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" "$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_EVENTS_BODY" "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_PLAN_WRITE_BODY" "$AUTH_FORBIDDEN_APPLY_WRITE_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_ROLE_REQUIRED_CONTROLLER_REFRESH_BODY" "$AUTH_FORBIDDEN_PLAN_READ_BODY" "$AUTH_FORBIDDEN_APPLY_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY" "$AUTH_ROLE_REQUIRED_PLAN_READ_BODY" "$AUTH_ROLE_REQUIRED_APPLY_READ_BODY"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$CONTROLLER_REFRESH_AUDIT_STORE_PATH" "$ENTERPRISE_SSO_STATE_STORE_PATH" "$ENTERPRISE_SSO_IDENTITY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$INVALID_DEPLOYMENT_EVENTS_LIMIT_BODY" "$INVALID_DEPLOYMENT_EVENTS_SOURCE_BODY" "$INVALID_RESOURCE_LOG_LIMIT_BODY" "$INVALID_RESOURCE_LOG_INSTANCE_BODY" "$INVALID_RESOURCE_INSPECTION_LIMIT_BODY" "$INVALID_RESOURCE_INSPECTION_INSTANCE_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_APPLY_CLAIM_BODY" "$UNKNOWN_APPLY_CLAIM_BODY" "$TERMINAL_APPLY_CLAIM_BODY" "$CLAIMED_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$CONTROLLER_REFRESH_BODY" "$CONTROLLER_REFRESH_STATUS_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_CONTROLLER_REFRESH_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_CATALOG_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_STATUS_READ_BODY" "$AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" "$AUTH_UNAUTHENTICATED_EVENTS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" "$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_EVENTS_BODY" "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_PLAN_WRITE_BODY" "$AUTH_FORBIDDEN_APPLY_WRITE_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_ROLE_REQUIRED_CONTROLLER_REFRESH_BODY" "$AUTH_FORBIDDEN_PLAN_READ_BODY" "$AUTH_FORBIDDEN_APPLY_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY" "$AUTH_ROLE_REQUIRED_PLAN_READ_BODY" "$AUTH_ROLE_REQUIRED_APPLY_READ_BODY"
   rm -rf "$PAYLOAD_DIR" "$REPO_ROOT"
 }
 trap cleanup EXIT
@@ -387,6 +388,72 @@ terminal_apply_claim_status=$(curl -sS -o "$TERMINAL_APPLY_CLAIM_BODY" -w "%{htt
   -H 'Content-Type: application/json' \
   --data '{"workerId":"smoke-worker"}' \
   "http://$HOST:$PORT/v1/applies/$apply_id/claim")
+claim_transition_apply_id=apply_smoke_claim_transition
+claim_transition_step=$(PLAN_PREVIEW_PATH="$plan_preview_extract_path" APPLY_STORE_PATH="$APPLY_STORE_PATH" CLAIM_TRANSITION_APPLY_ID="$claim_transition_apply_id" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+plan = json.loads(Path(os.environ['PLAN_PREVIEW_PATH']).read_text(encoding='utf-8'))
+operations = plan.get('operations') or []
+if not operations:
+    raise SystemExit('plan preview must include operations for claimed apply transition smoke')
+step = min(2, len(operations))
+store_path = Path(os.environ['APPLY_STORE_PATH'])
+if store_path.exists() and store_path.read_text(encoding='utf-8').strip():
+    records = json.loads(store_path.read_text(encoding='utf-8'))
+else:
+    records = []
+apply_id = os.environ['CLAIM_TRANSITION_APPLY_ID']
+records = [record for record in records if record.get('id') != apply_id]
+created_at = '2026-04-18T08:05:00Z'
+records.append({
+    'id': apply_id,
+    'planId': plan['id'],
+    'deploymentName': plan['deploymentName'],
+    'status': 'queued',
+    'createdAt': created_at,
+    'details': [
+        'Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true enabled the local-safe executor handoff path.',
+        'Tenet will advance this same applyId locally, but live AWS mutation is still not implemented for this backend slice.',
+    ],
+    'lifecycle': {
+        'updatedAt': created_at,
+        'totalSteps': len(operations),
+    },
+    'operations': [
+        {
+            'id': operation.get('id', ''),
+            'status': 'queued',
+            'phase': operation.get('phase', ''),
+            'target': operation.get('target', ''),
+            'summary': operation.get('summary', ''),
+        }
+        for operation in operations
+    ],
+    'source': {
+        'planId': plan['id'],
+        'route': f"/v1/plans/{plan['id']}",
+        'planStatus': plan['status'],
+        'planCreatedAt': plan.get('createdAt', ''),
+        'fingerprint': (plan.get('source') or {}).get('fingerprint', ''),
+    },
+})
+store_path.write_text(json.dumps(records, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+print(step)
+PY
+)
+claimed_apply_record=$(curl -fsS \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --data '{"workerId":"smoke-worker"}' \
+  "http://$HOST:$PORT/v1/applies/$claim_transition_apply_id/claim")
+claimed_apply_transition_status=$(curl -sS -o "$CLAIMED_APPLY_TRANSITION_BODY" -w "%{http_code}" \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --data "{\"status\":\"failed\",\"step\":$claim_transition_step,\"error\":\"manual claimed local-safe transition failed\",\"details\":[\"manual claimed local-safe transition advanced through POST /v1/applies/{applyId}/transitions\"]}" \
+  "http://$HOST:$PORT/v1/applies/$claim_transition_apply_id/transitions")
+claim_transition_apply_record_get=$(curl -fsS "http://$HOST:$PORT/v1/applies/$claim_transition_apply_id")
 actor_plan_preview=$(curl -fsS -X POST \
   -H "Content-Type: application/json" \
   -H "X-Tenet-Actor-Id: explicit-456" \
@@ -598,6 +665,9 @@ terminal_apply_transition_path=$(write_payload terminal-apply-transition.txt "$(
 invalid_apply_claim_path=$(write_payload invalid-apply-claim.txt "$(cat "$INVALID_APPLY_CLAIM_BODY")")
 unknown_apply_claim_path=$(write_payload unknown-apply-claim.txt "$(cat "$UNKNOWN_APPLY_CLAIM_BODY")")
 terminal_apply_claim_path=$(write_payload terminal-apply-claim.txt "$(cat "$TERMINAL_APPLY_CLAIM_BODY")")
+claimed_apply_record_path=$(write_payload claimed-apply-record.json "$claimed_apply_record")
+claimed_apply_transition_path=$(write_payload claimed-apply-transition.json "$(cat "$CLAIMED_APPLY_TRANSITION_BODY")")
+claim_transition_apply_record_get_path=$(write_payload claim-transition-apply-record-get.json "$claim_transition_apply_record_get")
 actor_plan_preview_path=$(write_payload actor-plan-preview.json "$actor_plan_preview")
 actor_plan_preview_get_path=$(write_payload actor-plan-preview-get.json "$actor_plan_preview_get")
 actor_apply_record_path=$(write_payload actor-apply-record.json "$actor_apply_record")
@@ -666,7 +736,7 @@ audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_ui_path=$(write_payload plan-ui.html "$plan_ui")
 apply_ui_path=$(write_payload apply-ui.html "$apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" DEPLOYMENT_EVENTS_FIXTURE_LIMITED_PATH="$deployment_events_fixture_limited_path" DEPLOYMENT_EVENTS_FIXTURE_SOURCE_PATH="$deployment_events_fixture_source_path" INVALID_DEPLOYMENT_EVENTS_LIMIT_STATUS="$invalid_deployment_events_limit_status" INVALID_DEPLOYMENT_EVENTS_LIMIT_PATH="$invalid_deployment_events_limit_path" INVALID_DEPLOYMENT_EVENTS_SOURCE_STATUS="$invalid_deployment_events_source_status" INVALID_DEPLOYMENT_EVENTS_SOURCE_PATH="$invalid_deployment_events_source_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" QUEUED_APPLY_RECORDS_PATH="$queued_apply_records_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" INVALID_APPLY_CLAIM_STATUS="$invalid_apply_claim_status" INVALID_APPLY_CLAIM_PATH="$invalid_apply_claim_path" UNKNOWN_APPLY_CLAIM_STATUS="$unknown_apply_claim_status" UNKNOWN_APPLY_CLAIM_PATH="$unknown_apply_claim_path" TERMINAL_APPLY_CLAIM_STATUS="$terminal_apply_claim_status" TERMINAL_APPLY_CLAIM_PATH="$terminal_apply_claim_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" STALE_APPLY_PLAN_PREVIEW_PATH="$stale_apply_plan_preview_path" STALE_APPLY_CONFLICT_PATH="$stale_apply_conflict_path" STALE_APPLY_CONFLICT_STATUS="$stale_apply_conflict_status" STALE_APPLY_AUDIT_LOGS_PATH="$stale_apply_audit_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_DELETED_PATH="$webhook_deleted_path" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" CONTROLLER_REFRESH_PATH="$controller_refresh_path" CONTROLLER_REFRESH_STATUS="$controller_refresh_status" CONTROLLER_REFRESH_READ_PATH="$controller_refresh_read_path" CONTROLLER_REFRESH_READ_STATUS="$controller_refresh_read_status" CONTROLLER_REFRESH_AUDIT_LOGS_PATH="$controller_refresh_audit_logs_path" RESOURCE_LOGS_PATH="$resource_logs_path" CODEDEPLOY_APPLICATION_RESOURCE_LOGS_PATH="$codedeploy_application_resource_logs_path" TEST_LISTENER_RESOURCE_LOGS_PATH="$test_listener_resource_logs_path" WORKER_CLUSTER_ARN="$worker_cluster_arn" SELECTED_WORKER_RESOURCE_LOGS_PATH="$selected_worker_resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" LIMITED_WORKER_RESOURCE_LOGS_PATH="$limited_worker_resource_logs_path" ECS_TASK_RESOURCE_LOGS_PATH="$ecs_task_resource_logs_path" ECS_TASK_RESOURCE_INSPECTION_PATH="$ecs_task_resource_inspection_path" INVALID_RESOURCE_LOG_LIMIT_STATUS="$invalid_resource_log_limit_status" INVALID_RESOURCE_LOG_LIMIT_PATH="$invalid_resource_log_limit_path" INVALID_RESOURCE_LOG_INSTANCE_STATUS="$invalid_resource_log_instance_status" INVALID_RESOURCE_LOG_INSTANCE_PATH="$invalid_resource_log_instance_path" INVALID_RESOURCE_INSPECTION_LIMIT_STATUS="$invalid_resource_inspection_limit_status" INVALID_RESOURCE_INSPECTION_LIMIT_PATH="$invalid_resource_inspection_limit_path" INVALID_RESOURCE_INSPECTION_INSTANCE_STATUS="$invalid_resource_inspection_instance_status" INVALID_RESOURCE_INSPECTION_INSTANCE_PATH="$invalid_resource_inspection_instance_path" BOOTSTRAP_RESOURCE_LOGS_PATH="$bootstrap_resource_logs_path" SELECTED_BOOTSTRAP_RESOURCE_LOGS_PATH="$selected_bootstrap_resource_logs_path" TRAFFIC_RESOURCE_LOGS_PATH="$traffic_resource_logs_path" PRODUCTION_LISTENER_RULE_RESOURCE_LOGS_PATH="$production_listener_rule_resource_logs_path" ACTIVE_TARGET_GROUP_RESOURCE_LOGS_PATH="$active_target_group_resource_logs_path" CANDIDATE_TARGET_GROUP_RESOURCE_LOGS_PATH="$candidate_target_group_resource_logs_path" BOOTSTRAP_RESOURCE_INSPECTION_PATH="$bootstrap_resource_inspection_path" SELECTED_BOOTSTRAP_RESOURCE_INSPECTION_PATH="$selected_bootstrap_resource_inspection_path" SELECTED_WORKER_RESOURCE_INSPECTION_PATH="$selected_worker_resource_inspection_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" BOUNDED_CANDIDATE_RESOURCE_INSPECTION_PATH="$bounded_candidate_resource_inspection_path" SELECTED_CANDIDATE_RESOURCE_INSPECTION_PATH="$selected_candidate_resource_inspection_path" CODEDEPLOY_APPLICATION_RESOURCE_INSPECTION_PATH="$codedeploy_application_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$blue_task_set_target_group_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" PRODUCTION_LISTENER_RULE_RESOURCE_INSPECTION_PATH="$production_listener_rule_resource_inspection_path" ACTIVE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$active_target_group_resource_inspection_path" CANDIDATE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$candidate_target_group_resource_inspection_path" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" ACCOUNT_UI_PATH="$account_ui_path" RESOURCE_UI_PATH="$resource_ui_path" ECS_RESOURCE_UI_PATH="$ecs_resource_ui_path" BOOTSTRAP_RESOURCE_UI_PATH="$bootstrap_resource_ui_path" CODEDEPLOY_APPLICATION_RESOURCE_UI_PATH="$codedeploy_application_resource_ui_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_UI_PATH="$blue_task_set_target_group_resource_ui_path" PRODUCTION_LISTENER_RULE_RESOURCE_UI_PATH="$production_listener_rule_resource_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" DEPLOYMENT_EVENTS_FIXTURE_LIMITED_PATH="$deployment_events_fixture_limited_path" DEPLOYMENT_EVENTS_FIXTURE_SOURCE_PATH="$deployment_events_fixture_source_path" INVALID_DEPLOYMENT_EVENTS_LIMIT_STATUS="$invalid_deployment_events_limit_status" INVALID_DEPLOYMENT_EVENTS_LIMIT_PATH="$invalid_deployment_events_limit_path" INVALID_DEPLOYMENT_EVENTS_SOURCE_STATUS="$invalid_deployment_events_source_status" INVALID_DEPLOYMENT_EVENTS_SOURCE_PATH="$invalid_deployment_events_source_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" QUEUED_APPLY_RECORDS_PATH="$queued_apply_records_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" INVALID_APPLY_CLAIM_STATUS="$invalid_apply_claim_status" INVALID_APPLY_CLAIM_PATH="$invalid_apply_claim_path" UNKNOWN_APPLY_CLAIM_STATUS="$unknown_apply_claim_status" UNKNOWN_APPLY_CLAIM_PATH="$unknown_apply_claim_path" TERMINAL_APPLY_CLAIM_STATUS="$terminal_apply_claim_status" TERMINAL_APPLY_CLAIM_PATH="$terminal_apply_claim_path" CLAIM_TRANSITION_APPLY_ID="$claim_transition_apply_id" CLAIM_TRANSITION_STEP="$claim_transition_step" CLAIMED_APPLY_RECORD_PATH="$claimed_apply_record_path" MANUAL_CLAIMED_APPLY_TRANSITION_STATUS="$claimed_apply_transition_status" CLAIMED_APPLY_TRANSITION_PATH="$claimed_apply_transition_path" CLAIM_TRANSITION_APPLY_RECORD_GET_PATH="$claim_transition_apply_record_get_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" STALE_APPLY_PLAN_PREVIEW_PATH="$stale_apply_plan_preview_path" STALE_APPLY_CONFLICT_PATH="$stale_apply_conflict_path" STALE_APPLY_CONFLICT_STATUS="$stale_apply_conflict_status" STALE_APPLY_AUDIT_LOGS_PATH="$stale_apply_audit_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_DELETED_PATH="$webhook_deleted_path" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" CONTROLLER_REFRESH_PATH="$controller_refresh_path" CONTROLLER_REFRESH_STATUS="$controller_refresh_status" CONTROLLER_REFRESH_READ_PATH="$controller_refresh_read_path" CONTROLLER_REFRESH_READ_STATUS="$controller_refresh_read_status" CONTROLLER_REFRESH_AUDIT_LOGS_PATH="$controller_refresh_audit_logs_path" RESOURCE_LOGS_PATH="$resource_logs_path" CODEDEPLOY_APPLICATION_RESOURCE_LOGS_PATH="$codedeploy_application_resource_logs_path" TEST_LISTENER_RESOURCE_LOGS_PATH="$test_listener_resource_logs_path" WORKER_CLUSTER_ARN="$worker_cluster_arn" SELECTED_WORKER_RESOURCE_LOGS_PATH="$selected_worker_resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" LIMITED_WORKER_RESOURCE_LOGS_PATH="$limited_worker_resource_logs_path" ECS_TASK_RESOURCE_LOGS_PATH="$ecs_task_resource_logs_path" ECS_TASK_RESOURCE_INSPECTION_PATH="$ecs_task_resource_inspection_path" INVALID_RESOURCE_LOG_LIMIT_STATUS="$invalid_resource_log_limit_status" INVALID_RESOURCE_LOG_LIMIT_PATH="$invalid_resource_log_limit_path" INVALID_RESOURCE_LOG_INSTANCE_STATUS="$invalid_resource_log_instance_status" INVALID_RESOURCE_LOG_INSTANCE_PATH="$invalid_resource_log_instance_path" INVALID_RESOURCE_INSPECTION_LIMIT_STATUS="$invalid_resource_inspection_limit_status" INVALID_RESOURCE_INSPECTION_LIMIT_PATH="$invalid_resource_inspection_limit_path" INVALID_RESOURCE_INSPECTION_INSTANCE_STATUS="$invalid_resource_inspection_instance_status" INVALID_RESOURCE_INSPECTION_INSTANCE_PATH="$invalid_resource_inspection_instance_path" BOOTSTRAP_RESOURCE_LOGS_PATH="$bootstrap_resource_logs_path" SELECTED_BOOTSTRAP_RESOURCE_LOGS_PATH="$selected_bootstrap_resource_logs_path" TRAFFIC_RESOURCE_LOGS_PATH="$traffic_resource_logs_path" PRODUCTION_LISTENER_RULE_RESOURCE_LOGS_PATH="$production_listener_rule_resource_logs_path" ACTIVE_TARGET_GROUP_RESOURCE_LOGS_PATH="$active_target_group_resource_logs_path" CANDIDATE_TARGET_GROUP_RESOURCE_LOGS_PATH="$candidate_target_group_resource_logs_path" BOOTSTRAP_RESOURCE_INSPECTION_PATH="$bootstrap_resource_inspection_path" SELECTED_BOOTSTRAP_RESOURCE_INSPECTION_PATH="$selected_bootstrap_resource_inspection_path" SELECTED_WORKER_RESOURCE_INSPECTION_PATH="$selected_worker_resource_inspection_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" BOUNDED_CANDIDATE_RESOURCE_INSPECTION_PATH="$bounded_candidate_resource_inspection_path" SELECTED_CANDIDATE_RESOURCE_INSPECTION_PATH="$selected_candidate_resource_inspection_path" CODEDEPLOY_APPLICATION_RESOURCE_INSPECTION_PATH="$codedeploy_application_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$blue_task_set_target_group_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" PRODUCTION_LISTENER_RULE_RESOURCE_INSPECTION_PATH="$production_listener_rule_resource_inspection_path" ACTIVE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$active_target_group_resource_inspection_path" CANDIDATE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$candidate_target_group_resource_inspection_path" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" ACCOUNT_UI_PATH="$account_ui_path" RESOURCE_UI_PATH="$resource_ui_path" ECS_RESOURCE_UI_PATH="$ecs_resource_ui_path" BOOTSTRAP_RESOURCE_UI_PATH="$bootstrap_resource_ui_path" CODEDEPLOY_APPLICATION_RESOURCE_UI_PATH="$codedeploy_application_resource_ui_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_UI_PATH="$blue_task_set_target_group_resource_ui_path" PRODUCTION_LISTENER_RULE_RESOURCE_UI_PATH="$production_listener_rule_resource_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -746,6 +816,9 @@ terminal_apply_transition = read_text('TERMINAL_APPLY_TRANSITION_PATH')
 invalid_apply_claim = read_text('INVALID_APPLY_CLAIM_PATH')
 unknown_apply_claim = read_text('UNKNOWN_APPLY_CLAIM_PATH')
 terminal_apply_claim = read_text('TERMINAL_APPLY_CLAIM_PATH')
+claimed_apply_record = read_json('CLAIMED_APPLY_RECORD_PATH')
+claimed_apply_transition = read_json('CLAIMED_APPLY_TRANSITION_PATH')
+claim_transition_apply_record_get = read_json('CLAIM_TRANSITION_APPLY_RECORD_GET_PATH')
 actor_plan_preview = read_json('ACTOR_PLAN_PREVIEW_PATH')
 actor_plan_preview_get = read_json('ACTOR_PLAN_PREVIEW_GET_PATH')
 actor_apply_record = read_json('ACTOR_APPLY_RECORD_PATH')
@@ -1034,6 +1107,31 @@ assert f"{apply_record['id']} is already terminal with status failed" in termina
 assert os.environ['TERMINAL_APPLY_CLAIM_STATUS'] == '409', os.environ['TERMINAL_APPLY_CLAIM_STATUS']
 assert 'apply request lifecycle transition is invalid:' in terminal_apply_claim, terminal_apply_claim
 assert f"only queued apply requests can be claimed; {apply_record['id']} is failed" in terminal_apply_claim, terminal_apply_claim
+claim_transition_step = int(os.environ['CLAIM_TRANSITION_STEP'])
+assert os.environ['MANUAL_CLAIMED_APPLY_TRANSITION_STATUS'] == '200', os.environ['MANUAL_CLAIMED_APPLY_TRANSITION_STATUS']
+assert claimed_apply_record['id'] == os.environ['CLAIM_TRANSITION_APPLY_ID'], claimed_apply_record
+assert claimed_apply_record['status'] == 'running', claimed_apply_record
+assert claimed_apply_record['claim']['workerId'] == 'smoke-worker', claimed_apply_record
+assert isinstance(claimed_apply_record['claim'].get('claimedAt'), str) and claimed_apply_record['claim']['claimedAt'], claimed_apply_record
+assert claimed_apply_record['lifecycle']['startedAt'] == claimed_apply_record['claim']['claimedAt'], claimed_apply_record
+assert claimed_apply_record['lifecycle']['currentStep'] == 1, claimed_apply_record
+assert claimed_apply_record['lifecycle']['totalSteps'] == len(claimed_apply_record['operations']), claimed_apply_record
+assert any('live AWS mutation' in detail for detail in claimed_apply_record.get('details', [])), claimed_apply_record
+assert claimed_apply_transition['id'] == claimed_apply_record['id'], (claimed_apply_transition, claimed_apply_record)
+assert claimed_apply_transition == claim_transition_apply_record_get, (claimed_apply_transition, claim_transition_apply_record_get)
+assert claimed_apply_transition['status'] == 'failed', claimed_apply_transition
+assert claimed_apply_transition['error'] == 'manual claimed local-safe transition failed', claimed_apply_transition
+assert claimed_apply_transition['details'] == ['manual claimed local-safe transition advanced through POST /v1/applies/{applyId}/transitions'], claimed_apply_transition
+assert claimed_apply_transition['claim'] == claimed_apply_record['claim'], (claimed_apply_transition, claimed_apply_record)
+assert claimed_apply_transition['lifecycle']['startedAt'] == claimed_apply_record['lifecycle']['startedAt'], claimed_apply_transition
+assert claimed_apply_transition['lifecycle']['currentStep'] == claim_transition_step, claimed_apply_transition
+assert claimed_apply_transition['lifecycle'].get('completedSteps', 0) == claim_transition_step - 1, claimed_apply_transition
+assert claimed_apply_transition['lifecycle']['totalSteps'] == len(claimed_apply_transition['operations']), claimed_apply_transition
+assert isinstance(claimed_apply_transition['lifecycle'].get('finishedAt'), str) and claimed_apply_transition['lifecycle']['finishedAt'], claimed_apply_transition
+assert [transition['status'] for transition in claimed_apply_transition['transitions']] == ['running', 'failed'], claimed_apply_transition
+assert claimed_apply_transition['operations'][claim_transition_step - 1]['status'] == 'failed', claimed_apply_transition
+assert [operation['status'] for operation in claimed_apply_transition['operations'][:claim_transition_step - 1]] == ['succeeded'] * (claim_transition_step - 1), claimed_apply_transition
+assert all(operation['status'] == 'queued' for operation in claimed_apply_transition['operations'][claim_transition_step:]), claimed_apply_transition
 assert actor_plan_preview['deploymentName'] == 'payments-api-staging', actor_plan_preview
 assert actor_plan_preview['actor']['available'] is True, actor_plan_preview
 assert actor_plan_preview['actor']['id'] == 'explicit-456', actor_plan_preview

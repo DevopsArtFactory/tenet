@@ -12485,6 +12485,98 @@ func TestRouterClaimApplyRequest(t *testing.T) {
 }
 
 func TestRouterTransitionApplyRequest(t *testing.T) {
+	t.Run("claimed apply can transition while preserving claim metadata", func(t *testing.T) {
+		store := applyrequest.NewFileStore(t.TempDir() + "/apply-requests.json")
+		createdAt := "2026-04-18T08:05:00Z"
+		queued := applyrequest.Record{
+			ID:             "apply_1234abcd",
+			PlanID:         "plan_1234abcd",
+			DeploymentName: "api-prod",
+			Status:         applyrequest.StatusQueued,
+			CreatedAt:      createdAt,
+			Details: []string{
+				"Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true enabled the local-safe executor handoff path.",
+				"Tenet will advance this same applyId locally, but live AWS mutation is still not implemented for this backend slice.",
+			},
+			Lifecycle: applyrequest.Lifecycle{UpdatedAt: createdAt, TotalSteps: 2},
+			Operations: []applyrequest.Operation{
+				{Status: applyrequest.OperationStatusQueued, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+				{Status: applyrequest.OperationStatusQueued, Phase: "Promoting", Target: "api-prod listener", Summary: "Shift production traffic."},
+			},
+			Source: applyrequest.SourceContext{PlanID: "plan_1234abcd", Route: "/v1/plans/plan_1234abcd", PlanStatus: "ready", Fingerprint: "plan_input"},
+		}
+		if err := applyrequest.Save(store.Path, []applyrequest.Record{queued}); err != nil {
+			t.Fatalf("seed apply request store: %v", err)
+		}
+		now := time.Date(2026, 4, 18, 8, 10, 0, 0, time.UTC)
+		service := applyrequest.Service{
+			Store: store,
+			Now: func() time.Time {
+				return now
+			},
+		}
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			ClaimApplyRequest: func(ctx context.Context, applyID string, req applyrequest.ClaimRequest) (applyrequest.Record, error) {
+				return service.Claim(ctx, applyID, req)
+			},
+			TransitionApplyRequest: func(ctx context.Context, applyID string, req applyrequest.TransitionRequest) (applyrequest.Record, error) {
+				return service.Transition(ctx, applyID, req)
+			},
+		})
+
+		claimReq := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/claim", strings.NewReader(`{"workerId":"worker-a"}`))
+		claimReq.Header.Set("Content-Type", "application/json")
+		claimResp := httptest.NewRecorder()
+		router.ServeHTTP(claimResp, claimReq)
+		if claimResp.Code != http.StatusOK {
+			t.Fatalf("expected claim 200, got %d with body %q", claimResp.Code, claimResp.Body.String())
+		}
+		var claimed applyrequest.Record
+		if err := json.Unmarshal(claimResp.Body.Bytes(), &claimed); err != nil {
+			t.Fatalf("decode claimed apply response: %v", err)
+		}
+		if claimed.Status != applyrequest.StatusRunning || claimed.Claim == nil || claimed.Claim.WorkerID != "worker-a" || claimed.Claim.ClaimedAt != "2026-04-18T08:10:00Z" {
+			t.Fatalf("expected running claim metadata, got %+v", claimed)
+		}
+
+		now = time.Date(2026, 4, 18, 8, 12, 0, 0, time.UTC)
+		transitionReq := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/transitions", strings.NewReader(`{"status":"failed","step":2,"error":"manual claimed local-safe transition failed","details":["manual claimed local-safe transition advanced through POST /v1/applies/{applyId}/transitions"]}`))
+		transitionReq.Header.Set("Content-Type", "application/json")
+		transitionResp := httptest.NewRecorder()
+		router.ServeHTTP(transitionResp, transitionReq)
+		if transitionResp.Code != http.StatusOK {
+			t.Fatalf("expected transition 200, got %d with body %q", transitionResp.Code, transitionResp.Body.String())
+		}
+		var transitioned applyrequest.Record
+		if err := json.Unmarshal(transitionResp.Body.Bytes(), &transitioned); err != nil {
+			t.Fatalf("decode transitioned apply response: %v", err)
+		}
+		if transitioned.ID != queued.ID || transitioned.Status != applyrequest.StatusFailed || transitioned.Error != "manual claimed local-safe transition failed" {
+			t.Fatalf("expected failed transition on stable apply id, got %+v", transitioned)
+		}
+		if transitioned.Claim == nil || *transitioned.Claim != *claimed.Claim {
+			t.Fatalf("expected transition to preserve claim metadata, before=%+v after=%+v", claimed.Claim, transitioned.Claim)
+		}
+		if transitioned.Lifecycle.StartedAt != "2026-04-18T08:10:00Z" || transitioned.Lifecycle.UpdatedAt != "2026-04-18T08:12:00Z" || transitioned.Lifecycle.FinishedAt != "2026-04-18T08:12:00Z" || transitioned.Lifecycle.CurrentStep != 2 || transitioned.Lifecycle.CompletedSteps != 1 || transitioned.Lifecycle.TotalSteps != 2 {
+			t.Fatalf("expected transition to preserve and advance lifecycle metadata, got %+v", transitioned.Lifecycle)
+		}
+		if statuses := []applyrequest.OperationStatus{transitioned.Operations[0].Status, transitioned.Operations[1].Status}; !reflect.DeepEqual(statuses, []applyrequest.OperationStatus{applyrequest.OperationStatusSucceeded, applyrequest.OperationStatusFailed}) {
+			t.Fatalf("expected transitioned operation statuses, got %+v", transitioned.Operations)
+		}
+		if len(transitioned.Transitions) != 2 || transitioned.Transitions[0].Status != applyrequest.StatusRunning || transitioned.Transitions[1].Status != applyrequest.StatusFailed {
+			t.Fatalf("expected claim and transition history, got %+v", transitioned.Transitions)
+		}
+
+		persisted, err := service.Get(context.Background(), queued.ID)
+		if err != nil {
+			t.Fatalf("read persisted transitioned apply: %v", err)
+		}
+		if persisted.Claim == nil || *persisted.Claim != *transitioned.Claim || persisted.Lifecycle != transitioned.Lifecycle {
+			t.Fatalf("expected persisted readback to keep claim/lifecycle metadata, got %+v", persisted)
+		}
+	})
+
 	t.Run("transition payload", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
