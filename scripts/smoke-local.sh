@@ -1772,7 +1772,7 @@ assert "meta.setAttribute('role', 'status');" in ui, ui
 assert "meta.setAttribute('aria-live', 'polite');" in ui, ui
 assert "meta.setAttribute('aria-atomic', 'true');" in ui, ui
 assert "['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)]" in ui, ui
-assert "container.append(createElement('strong', '', 'Runtime'));" in ui, ui
+assert "container.append(createElement('strong', '', 'Latest runtime change'));" in ui, ui
 assert 'Applications JSON' in ui, ui
 assert "createNavLink('/v1/overview/applications', 'Applications JSON')" in ui, ui
 assert 'Copy read route' in ui, ui
@@ -1798,7 +1798,7 @@ assert "return `Clear ${count} ${count === 1 ? 'filter' : 'filters'}`;" in ui, u
 assert "const clearLabel = applicationsClearFiltersAriaLabel(active);" in ui, ui
 assert "clearButton.setAttribute('aria-label', clearLabel);" in ui, ui
 assert "clearButton.setAttribute('title', clearLabel);" in ui, ui
-assert "const latestRuntimeSignalParts = (deployment) => {" in ui, ui
+assert "const latestRuntimeChangeParts = (deployment) => {" in ui, ui
 assert "buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name })" in ui, ui
 assert 'Operator context' in ui, ui
 assert "const operatorContextRoute = () => '/v1/operator/context';" in ui, ui
