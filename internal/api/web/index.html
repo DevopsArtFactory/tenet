@@ -7587,6 +7587,10 @@
             isLoading || !deploymentName,
             () => renderDeploymentEventsSection(section, deploymentName, { force: true }).catch(() => {}),
           ),
+          createCopyReadRouteButton(
+            deploymentEventsReadRoute(deploymentName, currentPageState.eventLimit, currentPageState.eventSource),
+            'Copy runtime events route',
+          ),
         ];
         if (!isLoading && deploymentName && deploymentEventsHasManagedDrift(result)) {
           actions.push(createNavLink(buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }), 'Open field-level drift', '_self'));

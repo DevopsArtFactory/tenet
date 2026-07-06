@@ -1489,6 +1489,9 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"const createDeploymentEventsActions = (section, deploymentName, isLoading = false, result = null) => {",
 		"'Refresh runtime events'",
 		"() => renderDeploymentEventsSection(section, deploymentName, { force: true }).catch(() => {}),",
+		"createCopyReadRouteButton(",
+		"deploymentEventsReadRoute(deploymentName, currentPageState.eventLimit, currentPageState.eventSource)",
+		"'Copy runtime events route'",
 		"const sortTimelineEvents = (events) => (events || [])",
 		"const renderDeploymentEventsState = (section, deploymentName, text, className = '', detailText = '', isLoading = false, limit = currentPageState.eventLimit) => {",
 		"createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, isLoading))",
@@ -3764,6 +3767,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Refresh runtime events' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh runtime events")
 	}
+	if !strings.Contains(text, "assert 'Copy runtime events route' in ui, ui") || !strings.Contains(text, "assert \"deploymentEventsReadRoute(deploymentName, currentPageState.eventLimit, currentPageState.eventSource)\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert runtime events copy-route handoff")
+	}
 	if !strings.Contains(text, "assert 'Refresh drift workspace' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh drift workspace")
 	}
@@ -4185,6 +4191,8 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert \"Controller-derived runtime events from ${deploymentEventsReadRoute('{deploymentName}', limit, source)}. Tenet shows the selected bounded window, newest first; use Event window to change how much controller history this panel reads without leaving the application drill-down. This is not audit/auth history.\" in ui, ui",
 		"assert 'Event source' in ui, ui",
 		"assert 'Refresh runtime events' in ui, ui",
+		"assert 'Copy runtime events route' in ui, ui",
+		"assert \"deploymentEventsReadRoute(deploymentName, currentPageState.eventLimit, currentPageState.eventSource)\" in ui, ui",
 		"assert 'Loading controller runtime events…' in ui, ui",
 		"assert 'No controller runtime events are retained for this application yet.' in ui, ui",
 		"assert \"const createDeploymentEventsFreshnessMeta = (result) => {\" in ui, ui",

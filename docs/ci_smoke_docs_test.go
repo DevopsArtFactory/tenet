@@ -324,6 +324,7 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 		"Invalid source values return `400 Bad Request` with `invalid source query`",
 		"direct-process smoke covers that validation while Compose smoke keeps the bounded `?limit=1` runtime-events `resultScope` and `sourceSummary` contract exercised",
 		"`eventLimit` and optional `eventSource`",
+		"`Copy runtime events route` handoff for the exact selected read",
 		"the selector offers `All sources`, `controller`, `deployment-controller`, and `github`",
 		"exact bookmarked custom source values remain visible instead of being discarded",
 		"`retention.limit` may still be non-zero",
@@ -345,6 +346,7 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 		"compact boolean alias `truncated`",
 		"keeps selected source state in `eventSource`",
 		"preserves `eventLimit` plus `eventSource` in share links",
+		"`Copy runtime events route` handoff for the exact selected read",
 		"The selector offers `All sources`, `controller`, `deployment-controller`, and `github`",
 		"exact bookmarked custom source values remain visible instead of being discarded",
 	} {
@@ -382,6 +384,7 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 			"Jump to oldest visible event",
 			"eventLimit",
 			"eventSource",
+			"Copy runtime events route",
 		} {
 			if !strings.Contains(doc.text, fragment) {
 				t.Fatalf("expected %s deployment-events docs to include %q", doc.name, fragment)
@@ -402,6 +405,8 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 			"Oldest visible event",
 			"Jump to newest event",
 			"Jump to oldest visible event",
+			"Copy runtime events route",
+			"deploymentEventsReadRoute(deploymentName, currentPageState.eventLimit, currentPageState.eventSource)",
 			"const createDeploymentEventsNavigation = (deploymentName, eventRows, limit, source) => {",
 		} {
 			if !strings.Contains(doc.text, fragment) {
