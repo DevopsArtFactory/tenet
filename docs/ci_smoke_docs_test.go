@@ -122,6 +122,29 @@ func TestOverviewDashboardDocumentsOperatorContextFreshnessPlacement(t *testing.
 	}
 }
 
+func TestOverviewUIDocumentsApplicationFilterResetTooltips(t *testing.T) {
+	overviewText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
+	section := markdownSection(t, overviewText, "### 1. Applications overview")
+	for _, fragment := range []string{
+		"the toolbar and filtered-empty reset buttons mirror that same active-filter list in their native tooltip",
+		"pointer users can inspect the exact `q`, `sync`, `health`, and `account` state before clearing it",
+	} {
+		if !strings.Contains(section, fragment) {
+			t.Fatalf("expected overview UI docs to include application filter reset tooltip contract %q", fragment)
+		}
+	}
+
+	readmeText := readTextFile(t, "../README.md")
+	for _, fragment := range []string{
+		"active-filter tooltip",
+		"names the exact search, sync, health, and account state before reset",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README to include application filter reset tooltip summary %q", fragment)
+		}
+	}
+}
+
 func TestSmokeHelperScriptsRemainDirectlyRunnable(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{

@@ -164,10 +164,9 @@ client secrets, SAML private material, session secrets, and tokens redacted.
 
 Start at `/` for the applications overview. The overview keeps the first page
 compact with application rows, status chips, filters, a count-aware `Clear N filters`
-reset action when filter state is active, `Open application`, a self-describing
+reset action with an active-filter tooltip that names the exact search, sync, health, and account state before reset, `Open application`, a self-describing
 `More actions for {deploymentName}` disclosure with an accessible secondary-action
-group label, and `Applications JSON` / `Copy read route` handoffs for
-`GET /v1/overview/applications`. Each row keeps a compact `Last update` field
+group label, and `Applications JSON` / `Copy read route` handoffs for `GET /v1/overview/applications`. Each row keeps a compact `Last update` field
 from the joined runtime summary, falling back to `Latest runtime status` when no timestamp is present. The secondary account
 drill-down keeps its toolbar `Refresh account detail` action; account/group JSON handoffs include adjacent `Copy account read route`
 / `Copy group read route` controls for exact scoped `GET /v1/overview/accounts/...`
