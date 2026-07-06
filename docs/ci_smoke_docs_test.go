@@ -745,6 +745,7 @@ func TestLocalRuntimeDocsSeparateShippedWriteRoutesFromDeferredAWSMutation(t *te
 		"shipped immutable plan/apply write routes",
 		"`POST /v1/plans/deployments/{deploymentName}`",
 		"`POST /v1/applies/plans/{planId}`",
+		"`POST /v1/applies/{applyId}/claim`",
 		"`POST /v1/applies/{applyId}/transitions`",
 		"`TENET_AWS_ENABLE_APPLY=true` queued local-safe handoff",
 		"without AWS mutation",
