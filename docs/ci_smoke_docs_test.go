@@ -886,6 +886,30 @@ func TestOverviewDashboardRuntimeEventCueDocumentsDeterministicTieBreak(t *testi
 	}
 }
 
+func TestOverviewDashboardDocumentsRuntimeRetentionAndLatestRuntimeCueGuard(t *testing.T) {
+	overviewText := readTextFile(t, "features/overview-dashboard.md")
+
+	applicationsSection := markdownSection(t, overviewText, "### Applications overview")
+	for _, fragment := range []string{
+		"`Last update`, `Visible subset last update`, and the optional row-local `Runtime` line are latest controller-runtime cues, not UI read-freshness cues",
+		"`Applications read refreshed` is the only applications-overview cue for when the browser last fetched `GET /v1/overview/applications`",
+	} {
+		if !strings.Contains(applicationsSection, fragment) {
+			t.Fatalf("expected applications overview docs to include latest-runtime cue guard %q", fragment)
+		}
+	}
+
+	runtimeEventsSection := markdownSection(t, overviewText, "### Deployment runtime events API")
+	for _, fragment := range []string{
+		"Retention metadata is independent of the selected query window: `retention` describes the controller-retained history, while `resultScope` describes only the rows returned by the current `source` / `limit` read",
+		"`retentionStatus: \"at_retention_limit\"` is not the same signal as `truncationStatus: \"truncated\"`",
+	} {
+		if !strings.Contains(runtimeEventsSection, fragment) {
+			t.Fatalf("expected runtime events docs to include retention release guard %q", fragment)
+		}
+	}
+}
+
 func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditChips(t *testing.T) {
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
 	section := markdownSection(t, overviewText, "### Deployment-scoped audit workspace")
