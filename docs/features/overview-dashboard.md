@@ -347,6 +347,7 @@ Routes:
 - `/?page=plan&deployment={name}`
 - `/?page=plan&deployment={name}&planId={planId}`
 - `/?page=plan&deployment={name}&planId={planId}&applyId={applyId}`
+- `/?page=applies`
 
 ### Drift workspace
 
@@ -425,6 +426,10 @@ Current plan/apply workspace behavior:
 
 - returns to the application detail page through the embedded back link so the drill-down path stays tight
 - keeps the toolbar `Audit log` link deployment-scoped so operators land on `/?page=audit&deployment={name}` instead of the global audit slice
+
+### Queued applies monitor
+
+The bookmarkable `/?page=applies` monitor is a narrow read-only shell over `GET /v1/applies?status=queued`. It renders loading, empty, unavailable, generic fetch-error, and shared operator-read `401` / `403` guidance states without changing apply executor behavior. Populated rows show deployment name, apply id, status, created time, operation progress, and claim freshness fields (`claim.lastHeartbeatAt` / `claim.expiresAt`) when present, with `_self` `Open plan/apply workspace` links back to `/?page=plan&deployment={deploymentName}&applyId={applyId}` for deeper review.
 
 ## Quick links
 
@@ -514,4 +519,4 @@ Likely next UI slices:
 - deeper drift diagnostics once the backend exposes richer live drift sources beyond the current derived read model
 - eventual extraction into a dedicated frontend only if the current read-model/UI surface becomes too large for embedded HTML
 
-`GET /v1/applies?status=queued` follows the same collection contract for executor-facing queued immutable apply records and returns `200 OK` with `[]` when no queued records are visible.
+`GET /v1/applies?status=queued` follows the same collection contract for executor-facing queued immutable apply records and returns `200 OK` with `[]` when no queued records are visible; `/?page=applies` is only the embedded monitor for that read.

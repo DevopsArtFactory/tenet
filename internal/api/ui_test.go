@@ -513,6 +513,41 @@ func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIIncludesQueuedAppliesMonitorContracts(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const validPages = new Set(['applications', 'application', 'account', 'resource', 'drift', 'plan', 'audit', 'applies']);",
+		"const queuedAppliesReadRoute = () => 'GET /v1/applies?status=queued';",
+		"const fetchQueuedApplies = () => fetchEmbeddedReadRouteJSON('/v1/applies?status=queued', {",
+		"return 'Queued applies monitor';",
+		"return queuedAppliesReadRoute();",
+		"renderQueuedAppliesPage(appliesState);",
+		"renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
+		"createNavLink(buildPageURL('plan', { deployment: record.deploymentName, applyId: record.id }), 'Open plan/apply workspace', '_self')",
+		"['Operation progress', applyOperationProgressSummary(record.operations || []), 'summary']",
+		"['Last heartbeat', applyClaimFreshnessValue(record, 'lastHeartbeatAt')]",
+		"['Claim expires', applyClaimFreshnessValue(record, 'expiresAt')]",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected queued applies monitor contract fragment %q", fragment)
+		}
+	}
+
+	contracts := []string{
+		`const renderQueuedAppliesState = \(text, className = '', actions = \[\]\) => \{[\s\S]*?const stateNode = createElement\('div', 'empty', text\);[\s\S]*?markPoliteStatusNode\(stateNode\);[\s\S]*?document\.getElementById\('accounts'\)\.replaceChildren\(stateNode\);`,
+		`const renderQueuedAppliesPage = \(state\) => \{[\s\S]*?renderQueuedAppliesState\('Loading queued apply requests from GET /v1/applies\?status=queued…'\)`,
+		`const renderQueuedAppliesPage = \(state\) => \{[\s\S]*?renderQueuedAppliesState\('No queued apply requests are visible right now\. GET /v1/applies\?status=queued returned an empty collection\.'`,
+		`const renderQueuedAppliesPage = \(state\) => \{[\s\S]*?renderQueuedAppliesState\(` + "`" + `Queued applies are temporarily unavailable\.\$\{detail\}` + "`" + `, 'error'`,
+		`const renderQueuedAppliesPage = \(state\) => \{[\s\S]*?renderQueuedAppliesState\(` + "`" + `Failed to load queued applies: \$\{state\.error\?\.message \|\| 'unknown error'\}` + "`" + `, 'error'`,
+	}
+	for _, contract := range contracts {
+		if !regexp.MustCompile(contract).MatchString(body) {
+			t.Fatalf("expected queued applies monitor status contract %s", contract)
+		}
+	}
+}
+
 func TestEmbeddedUILazyLoadsDeploymentDetailsOnExpandOnly(t *testing.T) {
 	body := string(indexHTML)
 
@@ -872,7 +907,7 @@ func TestEmbeddedUIIncludesDriftSectionNavigation(t *testing.T) {
 		"target.scrollIntoView({ block: 'start', behavior: 'auto' });",
 		"focusCurrentHashTarget(target);",
 		"window.addEventListener('hashchange', () => {",
-		"if (currentPageState.page !== 'application' && currentPageState.page !== 'account' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan' && currentPageState.page !== 'audit') return;",
+		"if (currentPageState.page !== 'application' && currentPageState.page !== 'account' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan' && currentPageState.page !== 'audit' && currentPageState.page !== 'applies') return;",
 		"syncActiveResourceQuickNav();",
 		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {",
 		"const trackCurrentSection = Boolean(currentSectionEmptyLabel) && sectionLinks.some((sectionLink) => sectionLink?.sectionID);",
@@ -1067,7 +1102,7 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 	for _, fragment := range []string{
 		"const parsePageState = () => {",
 		"const page = params.get('page') || params.get('view') || 'applications';",
-		"const validPages = new Set(['applications', 'application', 'account', 'resource', 'drift', 'plan', 'audit']);",
+		"const validPages = new Set(['applications', 'application', 'account', 'resource', 'drift', 'plan', 'audit', 'applies']);",
 		"page: validPages.has(page) ? page : 'applications',",
 		"accountId: params.get('accountId') || '',",
 		"healthState: params.get('health') || 'all',",
