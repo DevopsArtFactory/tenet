@@ -847,6 +847,8 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 			"perform live AWS mutation",
 			"read-only `/?page=applies` monitor is backed by",
 			"that queued collection read",
+			"Refresh applies",
+			"fresh/stale/pending operator copy",
 		} {
 			if !strings.Contains(text, fragment) {
 				t.Fatalf("expected %s docs to include local-safe apply release guard fragment %q", name, fragment)
