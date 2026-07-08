@@ -825,6 +825,38 @@ func TestClaimedApplyTransitionGuardDocsAndSmoke(t *testing.T) {
 	}
 }
 
+func TestExpiredApplyClaimRecoveryDocsAndSmoke(t *testing.T) {
+	readmeText := readTextFile(t, "../README.md")
+	localRuntimeText := readTextFile(t, "architecture/tenet-v1-local-runtime.md")
+	smokeLocalText := readTextFile(t, "../scripts/smoke-local.sh")
+
+	for _, fragment := range []string{
+		"\"allowExpiredClaim\":true",
+		"only when the persisted `claim.expiresAt` is expired",
+		"fresh competing claims still return `409 Conflict`",
+		"legacy stale claims without persisted `claim.expiresAt` remain manual-recovery conflicts",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README to document explicit expired claim recovery %q", fragment)
+		}
+		if !strings.Contains(localRuntimeText, fragment) {
+			t.Fatalf("expected local runtime docs to document explicit expired claim recovery %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"stale_claim_recovery_apply_id",
+		"allowExpiredClaim\":true",
+		"stale_claim_recovery_record",
+		"STALE_CLAIM_RECOVERY_APPLY_ID",
+		"expired local-safe claim recovery",
+	} {
+		if !strings.Contains(smokeLocalText, fragment) {
+			t.Fatalf("expected smoke-local to cover expired claim recovery %q", fragment)
+		}
+	}
+}
+
 func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 	docs := map[string]string{
 		"README":            readTextFile(t, "../README.md"),
