@@ -708,8 +708,8 @@ func TestAuthToggleDocsUseReadableBooleanExamples(t *testing.T) {
 		"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` is enabled, `GET /v1/overview/applications`",
 		"when `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true` is also enabled, the same guarded read routes additionally require",
 		"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` is enabled, stored `GET /v1/plans/{planId}`",
-		"when `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true` is enabled, `POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, `POST /v1/applies/{applyId}/claim`, and `POST /v1/applies/{applyId}/transitions`",
-		"when that same `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` setting is enabled, `POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, `POST /v1/applies/{applyId}/claim`, and `POST /v1/applies/{applyId}/transitions`",
+		"when `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true` is enabled, `POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, `POST /v1/applies/{applyId}/claim`, `POST /v1/applies/{applyId}/heartbeat`, and `POST /v1/applies/{applyId}/transitions`",
+		"when that same `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` setting is enabled, `POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, `POST /v1/applies/{applyId}/claim`, `POST /v1/applies/{applyId}/heartbeat`, and `POST /v1/applies/{applyId}/transitions`",
 		"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` is enabled, stored `GET /v1/applies/{applyId}`",
 		"`GET /v1/applies?status=active` follows the same collection contract",
 	} {
@@ -849,6 +849,8 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 			"perform live AWS mutation",
 			"read-only `/?page=applies` monitor is backed by",
 			"queued subset read",
+			"Refresh applies",
+			"fresh/stale/pending operator copy",
 		} {
 			if !strings.Contains(text, fragment) {
 				t.Fatalf("expected %s docs to include local-safe apply release guard fragment %q", name, fragment)

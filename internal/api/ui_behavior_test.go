@@ -10944,9 +10944,32 @@ const queuedRecords = [
     ],
     claim: {
       workerId: 'worker-a',
-      lastHeartbeatAt: '2026-04-18T08:01:00Z',
-      expiresAt: '2026-04-18T08:06:00Z',
+      freshness: { state: 'fresh', reason: 'executor heartbeat is within the claim lease window' },
+      lastHeartbeatAt: '2099-04-18T08:01:00Z',
+      expiresAt: '2099-04-18T08:06:00Z',
     },
+  },
+  {
+    id: 'apply_running_stale',
+    planId: 'plan_ready_stale',
+    deploymentName: 'worker-prod',
+    status: 'running',
+    createdAt: '2026-04-18T08:10:00Z',
+    operations: [{ status: 'running', phase: 'Executing', target: 'target-stale', summary: 'Run stale claim' }],
+    claim: {
+      workerId: 'worker-stale',
+      freshness: { state: 'expired', reason: 'lease expired before the executor heartbeat refreshed it' },
+      lastHeartbeatAt: '2000-04-18T08:01:00Z',
+      expiresAt: '2000-04-18T08:06:00Z',
+    },
+  },
+  {
+    id: 'apply_pending_claim',
+    planId: 'plan_ready_pending',
+    deploymentName: 'reporting-prod',
+    status: 'queued',
+    createdAt: '2026-04-18T08:20:00Z',
+    operations: [{ status: 'queued', phase: 'Waiting', target: 'target-pending', summary: 'Wait for worker' }],
   },
 ];
 const scenarios = [
@@ -10962,9 +10985,14 @@ const scenarios = [
       'Apply status | Queued',
       'Created at | 2026-04-18T08:00:00Z',
       'Operation progress | 1/3 terminal · 1 running · 1 queued',
+      'Claim status | Claimed by worker-a; heartbeat freshness looks current. Lease expires at 2099-04-18T08:06:00Z.',
       'Executor worker | worker-a',
-      'Last heartbeat | 2026-04-18T08:01:00Z',
-      'Claim expires | 2026-04-18T08:06:00Z',
+      'Last heartbeat | 2099-04-18T08:01:00Z',
+      'Claim expires | 2099-04-18T08:06:00Z',
+      'worker-prod',
+      'Claim status | Claimed by worker-stale, but attention is needed. Reason: lease expired before the executor heartbeat refreshed it',
+      'reporting-prod',
+      'Claim status | Pending executor claim — no local-safe executor has claimed this apply request yet.',
     ],
     link: { href: '/?page=plan&deployment=api-prod&applyId=apply_queued_123', text: 'Open plan/apply workspace' },
   },
@@ -10975,6 +11003,7 @@ const scenarios = [
     expected: [
       'No queued apply requests are visible right now.',
       'GET /v1/applies?status=queued returned an empty collection.',
+      'Refresh applies',
     ],
   },
   {
@@ -11023,6 +11052,20 @@ const scenarios = [
     if (scenario.link) {
       const link = collectNodes(root, (node) => node.tagName === 'A').find((node) => node.href === scenario.link.href && node.textContent === scenario.link.text);
       if (!link || link.target !== '_self' || link.rel) throw new Error('expected _self plan/apply workspace link for ' + scenario.name + ': ' + JSON.stringify(scenario.link));
+    }
+    const refreshButton = collectNodes(root, (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh applies')[0];
+    if (scenario.name !== 'denied collection reuses operator read guidance') {
+      if (!refreshButton) throw new Error('expected refresh applies control for ' + scenario.name);
+      if (refreshButton.disabled) throw new Error('expected refresh applies control to be enabled after load for ' + scenario.name);
+    }
+    if (scenario.name === 'happy path') {
+      refreshButton.dispatch('click');
+      const loadingButton = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh applies')[0];
+      if (!loadingButton || !loadingButton.disabled) throw new Error('expected refresh applies control to disable while the collection reloads');
+      if (window.location.search !== scenario.search) throw new Error('expected refresh to preserve applies URL state, got ' + window.location.search);
+      await settle();
+      await waitForFetchCount(fetchCalls, 3);
+      if (fetchCalls.join(', ') !== '/v1/operator/context, /v1/applies?status=queued, /v1/applies?status=queued') throw new Error('unexpected fetch sequence after refresh: ' + fetchCalls.join(', '));
     }
   }
 })();
