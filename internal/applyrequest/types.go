@@ -149,6 +149,11 @@ type ClaimRequest struct {
 	WorkerID string `json:"workerId"`
 }
 
+// HeartbeatRequest captures one claimed executor's local-safe lease refresh.
+type HeartbeatRequest struct {
+	WorkerID string `json:"workerId"`
+}
+
 // TransitionRequest captures one validated lifecycle advance for a persisted apply request.
 type TransitionRequest struct {
 	Status  Status   `json:"status"`
@@ -175,4 +180,11 @@ type Store interface {
 // local-safe executor handoff path.
 type ClaimStore interface {
 	Claim(context.Context, string, ClaimRequest, func(Record) (Record, error)) (Record, error)
+}
+
+// HeartbeatStore atomically refreshes one claimed apply request when the backend
+// can protect the read/check/write boundary. FileStore implements this for the
+// local-safe executor lease path.
+type HeartbeatStore interface {
+	Heartbeat(context.Context, string, HeartbeatRequest, func(Record) (Record, error)) (Record, error)
 }

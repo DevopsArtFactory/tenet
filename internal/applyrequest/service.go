@@ -204,7 +204,15 @@ func (s Service) Claim(ctx context.Context, id string, request ClaimRequest) (Re
 }
 
 func normalizeClaimRequest(request ClaimRequest) (string, error) {
-	workerID := strings.TrimSpace(request.WorkerID)
+	return normalizeWorkerID(request.WorkerID)
+}
+
+func normalizeHeartbeatRequest(request HeartbeatRequest) (string, error) {
+	return normalizeWorkerID(request.WorkerID)
+}
+
+func normalizeWorkerID(value string) (string, error) {
+	workerID := strings.TrimSpace(value)
 	if workerID == "" {
 		return "", fmt.Errorf("%w: workerId is required", ErrInvalidClaimRequest)
 	}
@@ -279,7 +287,7 @@ func alreadyClaimedError(record Record, now time.Time) error {
 		}
 	}
 	state := "active claim"
-	if parsed, err := time.Parse(time.RFC3339, expiresAt); err == nil && !parsed.After(now.UTC()) {
+	if expired, _, _ := claimExpired(*claim, now); expired {
 		state = "stale claim"
 	}
 	detail := fmt.Sprintf("%s has %s held by worker %s", record.ID, state, claim.WorkerID)
@@ -298,6 +306,100 @@ func alreadyClaimedError(record Record, now time.Time) error {
 		detail += "; manual recovery is required before another worker can claim it"
 	}
 	return fmt.Errorf("%w: %s", ErrAlreadyClaimed, detail)
+}
+
+func claimExpired(claim Claim, now time.Time) (bool, string, string) {
+	lastHeartbeatAt, source := claim.LastHeartbeatAt, "lastHeartbeatAt"
+	if strings.TrimSpace(lastHeartbeatAt) == "" {
+		lastHeartbeatAt, source = claim.ClaimedAt, "claimedAt"
+	}
+	expiresAt := claim.ExpiresAt
+	if strings.TrimSpace(expiresAt) == "" {
+		if parsed, err := time.Parse(time.RFC3339, lastHeartbeatAt); err == nil {
+			expiresAt = parsed.Add(claimFreshnessTTL).UTC().Format(time.RFC3339)
+		}
+	}
+	parsed, err := time.Parse(time.RFC3339, expiresAt)
+	if err != nil {
+		return false, expiresAt, source
+	}
+	return !parsed.After(now.UTC()), expiresAt, source
+}
+
+// Heartbeat refreshes the current executor lease for a claimed apply request.
+// It preserves the stable immutable apply ID and lifecycle/operation state.
+func (s Service) Heartbeat(ctx context.Context, id string, request HeartbeatRequest) (Record, error) {
+	if s.Store == nil {
+		return Record{}, fmt.Errorf("apply request store is required")
+	}
+	if _, err := normalizeHeartbeatRequest(request); err != nil {
+		return Record{}, err
+	}
+	heartbeatFn := s.heartbeatRecord(request)
+	if heartbeatStore, ok := s.Store.(HeartbeatStore); ok {
+		record, err := heartbeatStore.Heartbeat(ctx, id, request, heartbeatFn)
+		if err != nil {
+			return Record{}, err
+		}
+		return NormalizeOperationIDs(record), nil
+	}
+
+	record, err := s.Store.Get(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+	record, err = heartbeatFn(record)
+	if err != nil {
+		return Record{}, err
+	}
+	if err := s.Store.Update(ctx, record); err != nil {
+		return Record{}, err
+	}
+	stored, err := s.Store.Get(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+	return NormalizeOperationIDs(stored), nil
+}
+
+func (s Service) heartbeatRecord(request HeartbeatRequest) func(Record) (Record, error) {
+	return func(record Record) (Record, error) {
+		workerID, err := normalizeHeartbeatRequest(request)
+		if err != nil {
+			return Record{}, err
+		}
+		record = NormalizeOperationIDs(record)
+		if record.Status.IsTerminal() {
+			return Record{}, fmt.Errorf("%w: %s is already terminal with status %s", ErrInvalidState, record.ID, record.Status)
+		}
+		if record.Claim == nil {
+			return Record{}, fmt.Errorf("%w: %s is not currently claimed", ErrInvalidState, record.ID)
+		}
+		if record.Claim.WorkerID != workerID {
+			return Record{}, fmt.Errorf("%w: %s claim is held by worker %s; worker %s cannot heartbeat it", ErrAlreadyClaimed, record.ID, record.Claim.WorkerID, workerID)
+		}
+		if record.Status != StatusRunning {
+			return Record{}, fmt.Errorf("%w: only running apply requests can heartbeat; %s is %s", ErrInvalidState, record.ID, record.Status)
+		}
+
+		now := s.now().UTC()
+		if expired, expiresAt, source := claimExpired(*record.Claim, now); expired {
+			detail := fmt.Sprintf("%s claim for worker %s is stale", record.ID, workerID)
+			if strings.TrimSpace(expiresAt) != "" {
+				detail += "; expired at " + expiresAt
+			}
+			if source == "claimedAt" {
+				detail += "; legacy claim metadata used claimedAt as lastHeartbeatAt"
+			}
+			detail += "; create a new claim after manual stale-lease recovery instead of extending an expired lease"
+			return Record{}, fmt.Errorf("%w: %s", ErrInvalidState, detail)
+		}
+		claim := *record.Claim
+		claim.LastHeartbeatAt = now.Format(time.RFC3339)
+		claim.ExpiresAt = now.Add(claimFreshnessTTL).Format(time.RFC3339)
+		record.Claim = &claim
+		return record, nil
+	}
 }
 
 // Transition advances one persisted apply request to a validated lifecycle state without changing

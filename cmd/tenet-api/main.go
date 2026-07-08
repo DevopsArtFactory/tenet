@@ -335,6 +335,7 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 		options.ApplyRequests = applyService.List
 		options.ApplyRequest = applyService.Get
 		options.ClaimApplyRequest = applyService.Claim
+		options.HeartbeatApplyRequest = applyService.Heartbeat
 		options.TransitionApplyRequest = applyService.Transition
 		controllerRefreshAuditStorePath := envOrDefault("TENET_CONTROLLER_REFRESH_AUDIT_STORE_PATH", defaultControllerRefreshAuditStorePath())
 		controllerRefreshAuditStore := controllerrefreshaudit.NewFileStore(controllerRefreshAuditStorePath)

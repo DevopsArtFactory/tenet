@@ -1003,7 +1003,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if operatorWrite["allowed"] != true || operatorWrite["requiresOperatorRole"] != true || operatorWrite["reason"] != "guarded operator write prerequisites are satisfied for this request" {
 		t.Fatalf("expected allowed write verdict, got %#v", operatorWrite)
 	}
-	if !reflect.DeepEqual(operatorWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/claim", "POST /v1/applies/{applyId}/transitions", "POST /v1/controller/refresh"}) {
+	if !reflect.DeepEqual(operatorWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/claim", "POST /v1/applies/{applyId}/heartbeat", "POST /v1/applies/{applyId}/transitions", "POST /v1/controller/refresh"}) {
 		t.Fatalf("expected operator write route examples, got %#v", operatorWrite["exampleRoutes"])
 	}
 	if !reflect.DeepEqual(operatorWrite["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles"}) {
@@ -1026,7 +1026,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if deploymentScopedWrite["allowed"] != true || deploymentScopedWrite["requiresExactDeploymentAllowlistMatch"] != true || deploymentScopedWrite["acceptsProjectEnvironmentScopes"] != true {
 		t.Fatalf("expected conditional deployment write verdict, got %#v", deploymentScopedWrite)
 	}
-	if !reflect.DeepEqual(deploymentScopedWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/claim", "POST /v1/applies/{applyId}/transitions"}) {
+	if !reflect.DeepEqual(deploymentScopedWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/claim", "POST /v1/applies/{applyId}/heartbeat", "POST /v1/applies/{applyId}/transitions"}) {
 		t.Fatalf("expected deployment-scoped write route examples, got %#v", deploymentScopedWrite["exampleRoutes"])
 	}
 	if !reflect.DeepEqual(deploymentScopedWrite["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments", "X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"}) {
@@ -12524,6 +12524,205 @@ func TestRouterClaimApplyRequest(t *testing.T) {
 	})
 }
 
+func TestRouterHeartbeatApplyRequest(t *testing.T) {
+	t.Run("heartbeat payload", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			HeartbeatApplyRequest: func(ctx context.Context, applyID string, req applyrequest.HeartbeatRequest) (applyrequest.Record, error) {
+				if applyID != "apply_1234abcd" {
+					t.Fatalf("unexpected apply heartbeat for %s", applyID)
+				}
+				if req.WorkerID != "worker-a" {
+					t.Fatalf("unexpected heartbeat request: %+v", req)
+				}
+				return applyrequest.Record{
+					ID:             applyID,
+					PlanID:         "plan_1234abcd",
+					DeploymentName: "api-prod",
+					Status:         applyrequest.StatusRunning,
+					CreatedAt:      "2026-04-18T08:05:00Z",
+					Details:        []string{"Executor worker-a claimed this queued apply request for local-safe handoff; no live AWS mutation has been attempted by the claim route."},
+					Lifecycle:      applyrequest.Lifecycle{UpdatedAt: "2026-04-18T08:10:00Z", StartedAt: "2026-04-18T08:10:00Z", CurrentStep: 1, TotalSteps: 2},
+					Claim:          &applyrequest.Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z", LastHeartbeatAt: "2026-04-18T08:12:30Z", ExpiresAt: "2026-04-18T08:17:30Z"},
+					Transitions: []applyrequest.Transition{{
+						TransitionedAt: "2026-04-18T08:10:00Z",
+						PreviousStatus: applyrequest.StatusQueued,
+						Status:         applyrequest.StatusRunning,
+						Step:           1,
+					}},
+					Operations: []applyrequest.Operation{
+						{Status: applyrequest.OperationStatusRunning, Phase: "Promoting", Target: "api-prod listener", Summary: "Shift production traffic."},
+						{Status: applyrequest.OperationStatusQueued, Phase: "Finalizing", Target: "api-prod alarms", Summary: "Verify final health."},
+					},
+					Source: applyrequest.SourceContext{PlanID: "plan_1234abcd", Route: "/v1/plans/plan_1234abcd", PlanStatus: "ready", Fingerprint: "plan_input"},
+				}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/heartbeat", strings.NewReader(`{"workerId":"worker-a"}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var record applyrequest.Record
+		if err := json.Unmarshal(resp.Body.Bytes(), &record); err != nil {
+			t.Fatalf("failed to decode apply heartbeat payload: %v", err)
+		}
+		if record.ID != "apply_1234abcd" || record.Status != applyrequest.StatusRunning || record.Claim == nil || record.Claim.WorkerID != "worker-a" {
+			t.Fatalf("unexpected apply heartbeat payload: %+v", record)
+		}
+		if record.Claim.LastHeartbeatAt != "2026-04-18T08:12:30Z" || record.Claim.ExpiresAt != "2026-04-18T08:17:30Z" {
+			t.Fatalf("expected refreshed heartbeat fields, got %+v", record.Claim)
+		}
+		if record.Lifecycle.UpdatedAt != "2026-04-18T08:10:00Z" || record.Lifecycle.CurrentStep != 1 || record.Operations[0].Status != applyrequest.OperationStatusRunning || len(record.Transitions) != 1 {
+			t.Fatalf("heartbeat must preserve lifecycle, operations, and transitions, got %+v", record)
+		}
+	})
+
+	t.Run("unavailable", func(t *testing.T) {
+		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/heartbeat", strings.NewReader(`{"workerId":"worker-a"}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d", resp.Code)
+		}
+	})
+
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{name: "empty body", body: ""},
+		{name: "unknown field", body: `{"workerId":"worker-a","unexpected":true}`},
+		{name: "trailing payload", body: `{"workerId":"worker-a"}{"workerId":"worker-b"}`},
+	} {
+		t.Run("invalid body "+tc.name, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				HeartbeatApplyRequest: func(context.Context, string, applyrequest.HeartbeatRequest) (applyrequest.Record, error) {
+					t.Fatalf("apply heartbeat provider should not run on invalid body")
+					return applyrequest.Record{}, nil
+				},
+			})
+			req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/heartbeat", strings.NewReader(tc.body))
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d", tc.name, resp.Code)
+			}
+			if body := resp.Body.String(); body != "invalid apply heartbeat request body\n" {
+				t.Fatalf("expected invalid body response, got %q", body)
+			}
+		})
+	}
+
+	t.Run("invalid heartbeat request", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			HeartbeatApplyRequest: func(context.Context, string, applyrequest.HeartbeatRequest) (applyrequest.Record, error) {
+				return applyrequest.Record{}, fmt.Errorf("%w: workerId is required", applyrequest.ErrInvalidClaimRequest)
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/heartbeat", strings.NewReader(`{"workerId":"   "}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if body := resp.Body.String(); !strings.Contains(body, "workerId is required") {
+			t.Fatalf("expected workerId validation response, got %q", body)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			HeartbeatApplyRequest: func(context.Context, string, applyrequest.HeartbeatRequest) (applyrequest.Record, error) {
+				return applyrequest.Record{}, applyrequest.ErrNotFound
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_missing/heartbeat", strings.NewReader(`{"workerId":"worker-a"}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.Code)
+		}
+	})
+
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "wrong worker", err: fmt.Errorf("%w: apply_1234abcd claim is held by worker worker-b; worker worker-a cannot heartbeat it", applyrequest.ErrAlreadyClaimed)},
+		{name: "unclaimed", err: fmt.Errorf("%w: apply_1234abcd is not currently claimed", applyrequest.ErrInvalidState)},
+		{name: "terminal", err: fmt.Errorf("%w: apply_1234abcd is already terminal with status failed", applyrequest.ErrInvalidState)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				HeartbeatApplyRequest: func(context.Context, string, applyrequest.HeartbeatRequest) (applyrequest.Record, error) {
+					return applyrequest.Record{}, tc.err
+				},
+			})
+			req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/heartbeat", strings.NewReader(`{"workerId":"worker-a"}`))
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusConflict {
+				t.Fatalf("expected 409, got %d", resp.Code)
+			}
+		})
+	}
+
+	t.Run("deployment authorization allows authorized heartbeat", func(t *testing.T) {
+		applyLookupCalls := 0
+		heartbeatCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
+				applyLookupCalls++
+				return applyrequest.Record{ID: "apply_1234abcd", DeploymentName: "api-prod", Status: applyrequest.StatusRunning, CreatedAt: "2026-04-18T08:00:00Z"}, nil
+			},
+			HeartbeatApplyRequest: func(_ context.Context, applyID string, req applyrequest.HeartbeatRequest) (applyrequest.Record, error) {
+				heartbeatCalls++
+				if applyID != "apply_1234abcd" || req.WorkerID != "worker-a" {
+					t.Fatalf("unexpected heartbeat request %q %+v", applyID, req)
+				}
+				return applyrequest.Record{ID: applyID, DeploymentName: "api-prod", Status: applyrequest.StatusRunning, CreatedAt: "2026-04-18T08:00:00Z", Claim: &applyrequest.Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z", LastHeartbeatAt: "2026-04-18T08:12:30Z"}}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/heartbeat", strings.NewReader(`{"workerId":"worker-a"}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		req.Header.Set(requestactor.AuthorizedDeploymentsHeader, "api-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if applyLookupCalls != 1 || heartbeatCalls != 1 {
+			t.Fatalf("expected one apply lookup and one heartbeat, got %d/%d", applyLookupCalls, heartbeatCalls)
+		}
+	})
+}
+
 func TestRouterTransitionApplyRequest(t *testing.T) {
 	t.Run("claimed apply can transition while preserving claim metadata", func(t *testing.T) {
 		store := applyrequest.NewFileStore(t.TempDir() + "/apply-requests.json")
@@ -13212,5 +13411,17 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 	}
 	if allow := resp.Header().Get("Allow"); allow != http.MethodPost {
 		t.Fatalf("expected Allow header for /v1/applies/apply_1234abcd/transitions, got %q", allow)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/v1/applies/apply_1234abcd/heartbeat", nil)
+	resp = httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 for /v1/applies/apply_1234abcd/heartbeat, got %d", resp.Code)
+	}
+	if allow := resp.Header().Get("Allow"); allow != http.MethodPost {
+		t.Fatalf("expected Allow header for /v1/applies/apply_1234abcd/heartbeat, got %q", allow)
 	}
 }

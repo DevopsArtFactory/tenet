@@ -710,6 +710,7 @@ var (
 		"POST /v1/plans/deployments/{deploymentName}",
 		"POST /v1/applies/plans/{planId}",
 		"POST /v1/applies/{applyId}/claim",
+		"POST /v1/applies/{applyId}/heartbeat",
 		"POST /v1/applies/{applyId}/transitions",
 		"POST /v1/controller/refresh",
 	}
@@ -722,6 +723,7 @@ var (
 		"POST /v1/plans/deployments/{deploymentName}",
 		"POST /v1/applies/plans/{planId}",
 		"POST /v1/applies/{applyId}/claim",
+		"POST /v1/applies/{applyId}/heartbeat",
 		"POST /v1/applies/{applyId}/transitions",
 	}
 	operatorContextCollectionReadExampleRoutes = []string{
@@ -2372,6 +2374,7 @@ type Options struct {
 	ApplyRequests                        func(context.Context, applyrequest.ListQuery) ([]applyrequest.Record, error)
 	ApplyRequest                         func(context.Context, string) (applyrequest.Record, error)
 	ClaimApplyRequest                    func(context.Context, string, applyrequest.ClaimRequest) (applyrequest.Record, error)
+	HeartbeatApplyRequest                func(context.Context, string, applyrequest.HeartbeatRequest) (applyrequest.Record, error)
 	TransitionApplyRequest               func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error)
 	DeploymentStatuses                   func(context.Context) ([]statusstore.Snapshot, error)
 	DeploymentStatus                     func(context.Context, string) (statusstore.Snapshot, error)
@@ -3310,6 +3313,52 @@ func NewRouter(options Options) http.Handler {
 				return
 			}
 			record, err := options.ClaimApplyRequest(r.Context(), segments[0], req)
+			if err != nil {
+				respondApplyClaimError(w, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(record)
+		case len(segments) == 2 && segments[0] != "" && segments[1] == "heartbeat":
+			if !requireMethod(w, r, http.MethodPost) {
+				return
+			}
+			if (options.RequireAuthenticatedIdentity || options.RequireDeploymentReadAuthorization) && !requireAuthenticatedIdentity(w, r) {
+				return
+			}
+			if !requireOperatorRoleForWrite(w, r, options) {
+				return
+			}
+			if options.RequireDeploymentReadAuthorization {
+				if options.ApplyRequest == nil {
+					http.Error(w, "apply request unavailable", http.StatusServiceUnavailable)
+					return
+				}
+				record, err := options.ApplyRequest(r.Context(), segments[0])
+				if err != nil {
+					respondLookupError(w, err)
+					return
+				}
+				if !requireDeploymentWriteAuthorization(w, r, options, record.DeploymentName) {
+					return
+				}
+			}
+			if options.HeartbeatApplyRequest == nil {
+				http.Error(w, "apply request heartbeat unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			var req applyrequest.HeartbeatRequest
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&req); err != nil {
+				http.Error(w, "invalid apply heartbeat request body", http.StatusBadRequest)
+				return
+			}
+			if err := decoder.Decode(&struct{}{}); err != nil && !errors.Is(err, io.EOF) {
+				http.Error(w, "invalid apply heartbeat request body", http.StatusBadRequest)
+				return
+			}
+			record, err := options.HeartbeatApplyRequest(r.Context(), segments[0], req)
 			if err != nil {
 				respondApplyClaimError(w, err)
 				return

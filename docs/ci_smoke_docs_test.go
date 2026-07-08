@@ -799,8 +799,10 @@ func TestClaimedApplyTransitionGuardDocsAndSmoke(t *testing.T) {
 
 	for _, fragment := range []string{
 		"claimed apply can still advance through `POST /v1/applies/{applyId}/transitions`",
+		"`POST /v1/applies/{applyId}/heartbeat`",
+		"the heartbeat response updates `claim.lastHeartbeatAt` / `claim.expiresAt` while preserving the stable apply ID, lifecycle state, operation state, details, and transition history",
 		"the transition response keeps `claim.workerId`, `claim.claimedAt`, `claim.lastHeartbeatAt`, `claim.expiresAt`, and additive lifecycle metadata",
-		"local-safe only: claim/transition records update Tenet's persisted apply lifecycle without live AWS mutation",
+		"local-safe only: claim/heartbeat/transition records update Tenet's persisted apply lifecycle without live AWS mutation",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README to document claimed apply transition guard %q", fragment)
@@ -811,7 +813,9 @@ func TestClaimedApplyTransitionGuardDocsAndSmoke(t *testing.T) {
 		"claim_transition_apply_id",
 		"claimed_apply_transition_status",
 		"/v1/applies/$claim_transition_apply_id/claim",
+		"/v1/applies/$claim_transition_apply_id/heartbeat",
 		"/v1/applies/$claim_transition_apply_id/transitions",
+		"claimed_apply_heartbeat",
 		"MANUAL_CLAIMED_APPLY_TRANSITION_STATUS",
 		"manual claimed local-safe transition",
 	} {

@@ -842,9 +842,11 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`POST /v1/applies/plans/{planId}`",
 		"`GET /v1/applies/{applyId}`",
+		"`POST /v1/applies/{applyId}/heartbeat`",
 		"`POST /v1/applies/{applyId}/transitions`",
 		"`applyrequest.TransitionRequest` state model internally",
 		"`TENET_PLAN_STORE_PATH`",
+		"`invalid apply heartbeat request body`",
 		"`invalid apply transition request body`",
 		"`apply request not found`",
 		"`TENET_APPLY_STORE_PATH`",
@@ -882,10 +884,11 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 
 	localRuntimeDoc := readRepoFile(t, "docs/architecture/tenet-v1-local-runtime.md")
 	for _, fragment := range []string{
+		"`POST /v1/applies/{applyId}/heartbeat`",
 		"`POST /v1/applies/{applyId}/transitions`",
 		"`400` malformed JSON",
 		"`404` unknown apply",
-		"`409` invalid terminal move",
+		"`409` invalid terminal move/heartbeat",
 		"operator-facing text",
 		"smoke-created terminal `applyId`",
 		"unique non-empty `op_...` IDs",
@@ -914,6 +917,10 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"records `claim.workerId`, `claim.claimedAt`, `claim.lastHeartbeatAt`, and `claim.expiresAt`",
 		"active-vs-stale `409 Conflict` guidance",
 		"performs no live AWS mutation",
+		"`POST /v1/applies/{applyId}/heartbeat`",
+		"only the currently claimed worker may refresh the lease",
+		"updates `claim.lastHeartbeatAt` and `claim.expiresAt`",
+		"wrong-worker, unclaimed, or terminal-state heartbeats",
 		"`POST /v1/applies/{applyId}/transitions`",
 		"preserving the immutable stable `applyId`",
 		"failed immutable contract with operator-facing error/details",
