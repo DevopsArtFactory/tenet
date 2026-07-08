@@ -151,8 +151,8 @@ The local-safe apply executor remains opt-in:
 TENET_AWS_ENABLE_APPLY=true make docker-up
 ```
 
-That mode exercises the queued apply handoff locally; live AWS mutation is still
-not implemented for this backend slice.
+Local-safe apply executor release guard: reviewers should verify the queued collection (`GET /v1/applies?status=queued`), stored apply read (`GET /v1/applies/{applyId}`), claim (`POST /v1/applies/{applyId}/claim`), heartbeat (`POST /v1/applies/{applyId}/heartbeat`), and transition (`POST /v1/applies/{applyId}/transitions`) routes together.
+That mode advances Tenet apply metadata only; this local-safe record lifecycle does not perform live AWS mutation. The read-only `/?page=applies` monitor is backed by that queued collection read and links operators back to the plan/apply workspace for detail review.
 
 Optional managed-login provider modes are non-secret values: use
 `TENET_AUTH_PROVIDER=github`, `TENET_AUTH_PROVIDER=google_oidc`,

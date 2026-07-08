@@ -30,6 +30,16 @@ Both services mount `./examples` read-only so the Redis-backed status store can 
 
 This stack is not API-read-only: the shipped immutable plan/apply write routes `POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, `POST /v1/applies/{applyId}/claim`, `POST /v1/applies/{applyId}/heartbeat`, and `POST /v1/applies/{applyId}/transitions` persist Tenet-owned records, claim metadata, claim heartbeat freshness, and apply lifecycle transitions in the local stores. They still do not execute AWS mutations. The `TENET_AWS_ENABLE_APPLY=true` queued local-safe handoff creates queued-on-create apply records and lets the local-safe executor advance the same `applyId` through handoff states without AWS mutation.
 
+Local-safe apply executor release guard: reviewers should verify the
+queued collection (`GET /v1/applies?status=queued`), stored apply read
+(`GET /v1/applies/{applyId}`), claim (`POST /v1/applies/{applyId}/claim`),
+heartbeat (`POST /v1/applies/{applyId}/heartbeat`), and transition
+(`POST /v1/applies/{applyId}/transitions`) routes together. They persist and
+advance Tenet apply metadata only; this local-safe record lifecycle does not
+perform live AWS mutation. The read-only `/?page=applies` monitor is backed by
+that queued collection read and links operators back to the plan/apply workspace
+for detail review.
+
 For `tenet-api`, the local runtime also enables request-scoped JSON logs for every API/UI request. Operators can rely on the stable fields `request_id`, `method`, `path`, `status`, `duration_ms`, and `result`, plus an `error` field on timeout/panic paths. `TENET_API_REQUEST_TIMEOUT` defaults to `30s`; set it to `0` to disable the timeout wrapper for local debugging.
 
 ## Trusted front-door auth

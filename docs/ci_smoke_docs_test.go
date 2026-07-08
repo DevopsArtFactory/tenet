@@ -825,6 +825,51 @@ func TestClaimedApplyTransitionGuardDocsAndSmoke(t *testing.T) {
 	}
 }
 
+func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
+	docs := map[string]string{
+		"README":            readTextFile(t, "../README.md"),
+		"local runtime":     readTextFile(t, "architecture/tenet-v1-local-runtime.md"),
+		"operator contract": readTextFile(t, "architecture/tenet-v1-operator-contracts.md"),
+		"operator runbook":  readTextFile(t, "runbooks/operator-troubleshooting.md"),
+	}
+
+	for name, text := range docs {
+		for _, fragment := range []string{
+			"Local-safe apply executor release guard",
+			"queued collection (`GET /v1/applies?status=queued`)",
+			"stored apply read",
+			"(`GET /v1/applies/{applyId}`)",
+			"claim (`POST /v1/applies/{applyId}/claim`)",
+			"heartbeat (`POST /v1/applies/{applyId}/heartbeat`)",
+			"transition",
+			"(`POST /v1/applies/{applyId}/transitions`)",
+			"local-safe record lifecycle does not",
+			"perform live AWS mutation",
+			"read-only `/?page=applies` monitor is backed by",
+			"that queued collection read",
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s docs to include local-safe apply release guard fragment %q", name, fragment)
+			}
+		}
+	}
+
+	for name, text := range map[string]string{
+		"smoke-local":  readTextFile(t, "../scripts/smoke-local.sh"),
+		"smoke-docker": readTextFile(t, "../scripts/smoke-docker.sh"),
+	} {
+		for _, fragment := range []string{
+			"PAYLOAD_DIR=$(mktemp -d)",
+			"write_payload()",
+			"Path(sys.argv[1]).read_text",
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to keep apply release-guard payloads file-backed via %q", name, fragment)
+			}
+		}
+	}
+}
+
 func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{
