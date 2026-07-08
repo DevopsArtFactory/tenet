@@ -85,6 +85,24 @@ func (s *memoryStore) Claim(_ context.Context, id string, _ ClaimRequest, claim 
 	return updated, nil
 }
 
+func (s *memoryStore) Heartbeat(_ context.Context, id string, _ HeartbeatRequest, heartbeat func(Record) (Record, error)) (Record, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.records == nil {
+		return Record{}, ErrNotFound
+	}
+	record, ok := s.records[id]
+	if !ok {
+		return Record{}, ErrNotFound
+	}
+	updated, err := heartbeat(record)
+	if err != nil {
+		return Record{}, err
+	}
+	s.records[id] = updated
+	return updated, nil
+}
+
 func TestServiceCreatePersistsImmutableFailedApplyRequestWhenExecutionIsDisabled(t *testing.T) {
 	store := &memoryStore{}
 	plan := planpreview.Record{
@@ -462,6 +480,114 @@ func TestServiceClaimUsesAtomicStoreBoundary(t *testing.T) {
 	}
 	if stored.Claim == nil || (stored.Claim.WorkerID != "worker-a" && stored.Claim.WorkerID != "worker-b") {
 		t.Fatalf("expected one persisted worker claim, got %+v", stored.Claim)
+	}
+}
+
+func TestServiceHeartbeatRefreshesCurrentWorkerClaimOnly(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_claimed": {
+				ID:             "apply_claimed",
+				PlanID:         "plan_ready",
+				DeploymentName: "api-prod",
+				Status:         StatusRunning,
+				CreatedAt:      "2026-04-18T08:05:00Z",
+				Lifecycle:      Lifecycle{UpdatedAt: "2026-04-18T08:10:00Z", StartedAt: "2026-04-18T08:10:00Z", CurrentStep: 1, TotalSteps: 2},
+				Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z", LastHeartbeatAt: "2026-04-18T08:10:00Z", ExpiresAt: "2026-04-18T08:15:00Z"},
+				Transitions:    []Transition{{TransitionedAt: "2026-04-18T08:10:00Z", PreviousStatus: StatusQueued, Status: StatusRunning, Step: 1}},
+				Operations: []Operation{
+					{Status: OperationStatusRunning, Phase: "Promoting", Target: "api-prod listener", Summary: "Shift production traffic."},
+					{Status: OperationStatusQueued, Phase: "Finalizing", Target: "api-prod alarms", Summary: "Verify final health."},
+				},
+			},
+		},
+	}
+	service := Service{Store: store, Now: func() time.Time { return time.Date(2026, 4, 18, 8, 12, 30, 0, time.UTC) }}
+
+	heartbeat, err := service.Heartbeat(context.Background(), "apply_claimed", HeartbeatRequest{WorkerID: "worker-a"})
+	if err != nil {
+		t.Fatalf("Heartbeat returned error: %v", err)
+	}
+	if heartbeat.ID != "apply_claimed" || heartbeat.Status != StatusRunning {
+		t.Fatalf("expected stable running apply record, got %+v", heartbeat)
+	}
+	if heartbeat.Claim == nil || heartbeat.Claim.WorkerID != "worker-a" || heartbeat.Claim.ClaimedAt != "2026-04-18T08:10:00Z" || heartbeat.Claim.LastHeartbeatAt != "2026-04-18T08:12:30Z" || heartbeat.Claim.ExpiresAt != "2026-04-18T08:17:30Z" {
+		t.Fatalf("expected refreshed claim heartbeat metadata, got %+v", heartbeat.Claim)
+	}
+	if heartbeat.Lifecycle.UpdatedAt != "2026-04-18T08:10:00Z" || heartbeat.Lifecycle.CurrentStep != 1 || heartbeat.Lifecycle.TotalSteps != 2 {
+		t.Fatalf("heartbeat must preserve lifecycle state, got %+v", heartbeat.Lifecycle)
+	}
+	if statuses := []OperationStatus{heartbeat.Operations[0].Status, heartbeat.Operations[1].Status}; !reflect.DeepEqual(statuses, []OperationStatus{OperationStatusRunning, OperationStatusQueued}) {
+		t.Fatalf("heartbeat must preserve operation state, got %+v", heartbeat.Operations)
+	}
+	if len(heartbeat.Transitions) != 1 {
+		t.Fatalf("heartbeat must not append lifecycle transitions, got %+v", heartbeat.Transitions)
+	}
+}
+
+func TestServiceHeartbeatRejectsInvalidClaimStates(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_claimed": {
+				ID:     "apply_claimed",
+				Status: StatusRunning,
+				Claim:  &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z", LastHeartbeatAt: "2026-04-18T08:10:00Z", ExpiresAt: "2026-04-18T08:15:00Z"},
+			},
+			"apply_unclaimed": {
+				ID:     "apply_unclaimed",
+				Status: StatusRunning,
+			},
+			"apply_failed": {
+				ID:     "apply_failed",
+				Status: StatusFailed,
+				Claim:  &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z"},
+			},
+			"apply_stale_claim": {
+				ID:     "apply_stale_claim",
+				Status: StatusRunning,
+				Claim:  &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:00:00Z", LastHeartbeatAt: "2026-04-18T08:00:00Z", ExpiresAt: "2026-04-18T08:05:00Z"},
+			},
+			"apply_legacy_stale_claim": {
+				ID:     "apply_legacy_stale_claim",
+				Status: StatusRunning,
+				Claim:  &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:00:00Z"},
+			},
+		},
+	}
+	service := Service{Store: store, Now: func() time.Time { return time.Date(2026, 4, 18, 8, 12, 0, 0, time.UTC) }}
+
+	_, err := service.Heartbeat(context.Background(), "apply_claimed", HeartbeatRequest{WorkerID: "worker-b"})
+	if !errors.Is(err, ErrAlreadyClaimed) {
+		t.Fatalf("expected ErrAlreadyClaimed for wrong worker heartbeat, got %v", err)
+	}
+	for _, fragment := range []string{"held by worker worker-a", "worker worker-b cannot heartbeat"} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Fatalf("expected wrong-worker detail %q in %v", fragment, err)
+		}
+	}
+	_, err = service.Heartbeat(context.Background(), "apply_unclaimed", HeartbeatRequest{WorkerID: "worker-a"})
+	if !errors.Is(err, ErrInvalidState) || !strings.Contains(err.Error(), "is not currently claimed") {
+		t.Fatalf("expected unclaimed invalid state, got %v", err)
+	}
+	_, err = service.Heartbeat(context.Background(), "apply_failed", HeartbeatRequest{WorkerID: "worker-a"})
+	if !errors.Is(err, ErrInvalidState) || !strings.Contains(err.Error(), "already terminal") {
+		t.Fatalf("expected terminal invalid state, got %v", err)
+	}
+	_, err = service.Heartbeat(context.Background(), "apply_stale_claim", HeartbeatRequest{WorkerID: "worker-a"})
+	if !errors.Is(err, ErrInvalidState) || !strings.Contains(err.Error(), "claim for worker worker-a is stale") || !strings.Contains(err.Error(), "expired at 2026-04-18T08:05:00Z") {
+		t.Fatalf("expected stale-claim invalid state, got %v", err)
+	}
+	_, err = service.Heartbeat(context.Background(), "apply_legacy_stale_claim", HeartbeatRequest{WorkerID: "worker-a"})
+	if !errors.Is(err, ErrInvalidState) || !strings.Contains(err.Error(), "legacy claim metadata used claimedAt as lastHeartbeatAt") {
+		t.Fatalf("expected legacy stale-claim invalid state, got %v", err)
+	}
+	_, err = service.Heartbeat(context.Background(), "missing", HeartbeatRequest{WorkerID: "worker-a"})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for missing record, got %v", err)
+	}
+	_, err = service.Heartbeat(context.Background(), "apply_claimed", HeartbeatRequest{})
+	if !errors.Is(err, ErrInvalidClaimRequest) || !strings.Contains(err.Error(), "workerId is required") {
+		t.Fatalf("expected workerId validation error, got %v", err)
 	}
 }
 

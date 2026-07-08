@@ -156,6 +156,42 @@ func TestFileStoreUpdateReturnsNotFoundWhenMissing(t *testing.T) {
 	}
 }
 
+func TestFileStoreHeartbeatPersistsTransformedClaimAtomically(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "applies", "requests.json")
+	store := NewFileStore(path)
+	ctx := context.Background()
+	record := Record{
+		ID:             "apply_claimed",
+		PlanID:         "plan_ready",
+		DeploymentName: "api-prod",
+		Status:         StatusRunning,
+		Lifecycle:      Lifecycle{UpdatedAt: "2026-04-18T08:10:00Z", StartedAt: "2026-04-18T08:10:00Z", CurrentStep: 1, TotalSteps: 1},
+		Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z", LastHeartbeatAt: "2026-04-18T08:10:00Z", ExpiresAt: "2026-04-18T08:15:00Z"},
+	}
+	if err := store.Save(ctx, record); err != nil {
+		t.Fatalf("Save returned error: %v", err)
+	}
+
+	updated, err := store.Heartbeat(ctx, "apply_claimed", HeartbeatRequest{WorkerID: "worker-a"}, func(record Record) (Record, error) {
+		record.Claim.LastHeartbeatAt = "2026-04-18T08:12:30Z"
+		record.Claim.ExpiresAt = "2026-04-18T08:17:30Z"
+		return record, nil
+	})
+	if err != nil {
+		t.Fatalf("Heartbeat returned error: %v", err)
+	}
+	if updated.Claim == nil || updated.Claim.LastHeartbeatAt != "2026-04-18T08:12:30Z" || updated.Lifecycle.UpdatedAt != "2026-04-18T08:10:00Z" {
+		t.Fatalf("expected heartbeat transform to preserve non-claim state, got %+v", updated)
+	}
+	stored, err := store.Get(ctx, "apply_claimed")
+	if err != nil {
+		t.Fatalf("Get returned error: %v", err)
+	}
+	if stored.Claim == nil || stored.Claim.LastHeartbeatAt != "2026-04-18T08:12:30Z" || stored.Claim.ExpiresAt != "2026-04-18T08:17:30Z" {
+		t.Fatalf("expected heartbeat claim metadata persisted, got %+v", stored.Claim)
+	}
+}
+
 func TestFileStoreGetReturnsNotFoundWhenMissing(t *testing.T) {
 	store := NewFileStore(filepath.Join(t.TempDir(), "applies", "requests.json"))
 

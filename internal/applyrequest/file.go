@@ -209,3 +209,40 @@ func (s FileStore) Claim(_ context.Context, id string, _ ClaimRequest, claim fun
 	}
 	return Record{}, fmt.Errorf("%w: %s", ErrNotFound, id)
 }
+
+// Heartbeat protects the local file-backed claim refresh boundary with one
+// in-process lock per store path, then persists the transformed record in the
+// same load/check/save critical section.
+func (s FileStore) Heartbeat(_ context.Context, id string, _ HeartbeatRequest, heartbeat func(Record) (Record, error)) (Record, error) {
+	if s.Path == "" {
+		return Record{}, fmt.Errorf("file apply request store path is required")
+	}
+	lockValue, _ := claimLocks.LoadOrStore(s.Path, &sync.Mutex{})
+	lock := lockValue.(*sync.Mutex)
+	lock.Lock()
+	defer lock.Unlock()
+
+	records, err := Load(s.Path)
+	if err != nil {
+		var pathErr *os.PathError
+		if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
+			return Record{}, ErrNotFound
+		}
+		return Record{}, err
+	}
+	for i, existing := range records {
+		if existing.ID != id {
+			continue
+		}
+		updated, err := heartbeat(existing)
+		if err != nil {
+			return Record{}, err
+		}
+		records[i] = updated
+		if err := Save(s.Path, records); err != nil {
+			return Record{}, err
+		}
+		return updated, nil
+	}
+	return Record{}, fmt.Errorf("%w: %s", ErrNotFound, id)
+}

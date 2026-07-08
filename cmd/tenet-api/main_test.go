@@ -927,7 +927,7 @@ func TestAPIOptionsApplyRequestTransitionPersistsLifecycleUpdatesAndReusesStable
 	t.Setenv("TENET_AWS_ENABLE_APPLY", "true")
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
-	if options.CreateDeploymentPlanPreview == nil || options.CreateApplyRequest == nil || options.ApplyRequest == nil || options.ClaimApplyRequest == nil || options.TransitionApplyRequest == nil {
+	if options.CreateDeploymentPlanPreview == nil || options.CreateApplyRequest == nil || options.ApplyRequest == nil || options.ClaimApplyRequest == nil || options.HeartbeatApplyRequest == nil || options.TransitionApplyRequest == nil {
 		t.Fatalf("expected plan/apply providers to be wired")
 	}
 
@@ -938,6 +938,21 @@ func TestAPIOptionsApplyRequestTransitionPersistsLifecycleUpdatesAndReusesStable
 	created, err := options.CreateApplyRequest(context.Background(), plan.Record.ID)
 	if err != nil {
 		t.Fatalf("CreateApplyRequest returned error: %v", err)
+	}
+
+	claimed, err := options.ClaimApplyRequest(context.Background(), created.Record.ID, applyrequest.ClaimRequest{WorkerID: "worker-a"})
+	if err != nil {
+		t.Fatalf("ClaimApplyRequest returned error: %v", err)
+	}
+	heartbeat, err := options.HeartbeatApplyRequest(context.Background(), created.Record.ID, applyrequest.HeartbeatRequest{WorkerID: "worker-a"})
+	if err != nil {
+		t.Fatalf("HeartbeatApplyRequest returned error: %v", err)
+	}
+	if heartbeat.ID != created.Record.ID || heartbeat.Status != applyrequest.StatusRunning {
+		t.Fatalf("expected stable running heartbeat apply request, got %+v", heartbeat)
+	}
+	if heartbeat.Claim == nil || claimed.Claim == nil || heartbeat.Claim.WorkerID != "worker-a" || heartbeat.Claim.ClaimedAt != claimed.Claim.ClaimedAt || heartbeat.Claim.LastHeartbeatAt == "" || heartbeat.Claim.ExpiresAt == "" {
+		t.Fatalf("expected heartbeat to refresh existing claim metadata, before=%+v after=%+v", claimed.Claim, heartbeat.Claim)
 	}
 
 	running, err := options.TransitionApplyRequest(context.Background(), created.Record.ID, applyrequest.TransitionRequest{
