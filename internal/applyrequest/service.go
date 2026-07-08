@@ -232,12 +232,18 @@ func (s Service) claimRecord(ctx context.Context, request ClaimRequest) func(Rec
 		if record.Status != StatusQueued && record.Status != StatusRunning {
 			return Record{}, fmt.Errorf("%w: only queued apply requests can be claimed; %s is %s", ErrInvalidState, record.ID, record.Status)
 		}
+		now := s.now().UTC()
 		if record.Claim != nil {
 			if record.Claim.WorkerID == workerID && record.Status == StatusRunning {
 				return record, nil
 			}
 			if record.Claim.WorkerID != workerID {
-				return Record{}, alreadyClaimedError(record, s.now())
+				if request.AllowExpiredClaim {
+					if expired, expiresAt := persistedClaimExpiresAtExpired(*record.Claim, now); expired {
+						return recoverExpiredClaim(ctx, record, workerID, record.Claim.WorkerID, expiresAt, now), nil
+					}
+				}
+				return Record{}, alreadyClaimedError(record, now)
 			}
 			return Record{}, fmt.Errorf("%w: only queued apply requests can be claimed; %s is %s", ErrInvalidState, record.ID, record.Status)
 		}
@@ -245,7 +251,6 @@ func (s Service) claimRecord(ctx context.Context, request ClaimRequest) func(Rec
 			return Record{}, fmt.Errorf("%w: only queued apply requests can be claimed; %s is %s", ErrInvalidState, record.ID, record.Status)
 		}
 
-		now := s.now().UTC()
 		claimedAt := now.Format(time.RFC3339)
 		claim := Claim{
 			WorkerID:        workerID,
@@ -272,6 +277,61 @@ func (s Service) claimRecord(ctx context.Context, request ClaimRequest) func(Rec
 		})
 		return record, nil
 	}
+}
+
+func recoverExpiredClaim(ctx context.Context, record Record, workerID string, previousWorkerID string, expiredAt string, now time.Time) Record {
+	claimedAt := now.UTC().Format(time.RFC3339)
+	claim := Claim{
+		WorkerID:        workerID,
+		ClaimedAt:       claimedAt,
+		LastHeartbeatAt: claimedAt,
+		ExpiresAt:       now.UTC().Add(claimFreshnessTTL).Format(time.RFC3339),
+	}
+	previousStatus := record.Status
+	record.Claim = &claim
+	record.Status = StatusRunning
+	record.Error = ""
+	detail := "Executor " + workerID + " recovered expired local-safe claim from worker " + previousWorkerID + " for local-safe handoff"
+	if strings.TrimSpace(expiredAt) != "" {
+		detail += "; previous claim expired at " + expiredAt
+	}
+	detail += "; no live AWS mutation has been attempted by the claim route."
+	record.Details = []string{detail}
+	step := recoveryStep(record)
+	record.Operations = transitionOperations(record.Operations, StatusRunning, step)
+	record.Lifecycle = transitionLifecycle(record.Lifecycle, len(record.Operations), TransitionRequest{Status: StatusRunning, Step: step}, now)
+	record.Transitions = appendTransition(record.Transitions, Transition{
+		TransitionedAt: claim.ClaimedAt,
+		PreviousStatus: previousStatus,
+		Status:         StatusRunning,
+		Step:           step,
+		Actor:          requestactor.FromContext(ctx),
+		Details:        append([]string(nil), record.Details...),
+		Lifecycle:      record.Lifecycle,
+	})
+	return record
+}
+
+func recoveryStep(record Record) int {
+	if len(record.Operations) == 0 {
+		return 0
+	}
+	if record.Lifecycle.CurrentStep >= 1 && record.Lifecycle.CurrentStep <= len(record.Operations) {
+		return record.Lifecycle.CurrentStep
+	}
+	return firstRunnableStep(record)
+}
+
+func persistedClaimExpiresAtExpired(claim Claim, now time.Time) (bool, string) {
+	expiresAt := strings.TrimSpace(claim.ExpiresAt)
+	if expiresAt == "" {
+		return false, ""
+	}
+	parsed, err := time.Parse(time.RFC3339, expiresAt)
+	if err != nil {
+		return false, expiresAt
+	}
+	return !parsed.After(now.UTC()), expiresAt
 }
 
 func alreadyClaimedError(record Record, now time.Time) error {
@@ -305,6 +365,8 @@ func alreadyClaimedError(record Record, now time.Time) error {
 	}
 	if state == "active claim" {
 		detail += "; retry with the same workerId for idempotent recovery or wait for the lease to become stale"
+	} else if strings.TrimSpace(claim.ExpiresAt) != "" {
+		detail += "; retry with allowExpiredClaim=true to explicitly recover the expired local-safe claim"
 	} else {
 		detail += "; manual recovery is required before another worker can claim it"
 	}

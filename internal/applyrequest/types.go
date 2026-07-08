@@ -150,7 +150,8 @@ type Record struct {
 
 // ClaimRequest captures one executor's local-safe attempt to claim queued work.
 type ClaimRequest struct {
-	WorkerID string `json:"workerId"`
+	WorkerID          string `json:"workerId"`
+	AllowExpiredClaim bool   `json:"allowExpiredClaim,omitempty"`
 }
 
 // HeartbeatRequest captures one claimed executor's local-safe lease refresh.

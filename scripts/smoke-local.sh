@@ -407,7 +407,8 @@ terminal_apply_heartbeat_status=$(curl -sS -o "$TERMINAL_APPLY_HEARTBEAT_BODY" -
   --data '{"workerId":"worker-a"}' \
   "http://$HOST:$PORT/v1/applies/$apply_id/heartbeat")
 claim_transition_apply_id=apply_smoke_claim_transition
-claim_transition_step=$(PLAN_PREVIEW_PATH="$plan_preview_extract_path" APPLY_STORE_PATH="$APPLY_STORE_PATH" CLAIM_TRANSITION_APPLY_ID="$claim_transition_apply_id" python3 - <<'PY'
+stale_claim_recovery_apply_id=apply_smoke_stale_claim_recovery
+claim_transition_step=$(PLAN_PREVIEW_PATH="$plan_preview_extract_path" APPLY_STORE_PATH="$APPLY_STORE_PATH" CLAIM_TRANSITION_APPLY_ID="$claim_transition_apply_id" STALE_CLAIM_RECOVERY_APPLY_ID="$stale_claim_recovery_apply_id" python3 - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -423,7 +424,8 @@ if store_path.exists() and store_path.read_text(encoding='utf-8').strip():
 else:
     records = []
 apply_id = os.environ['CLAIM_TRANSITION_APPLY_ID']
-records = [record for record in records if record.get('id') != apply_id]
+stale_claim_apply_id = os.environ['STALE_CLAIM_RECOVERY_APPLY_ID']
+records = [record for record in records if record.get('id') not in {apply_id, stale_claim_apply_id}]
 created_at = '2026-04-18T08:05:00Z'
 records.append({
     'id': apply_id,
@@ -457,6 +459,60 @@ records.append({
         'fingerprint': (plan.get('source') or {}).get('fingerprint', ''),
     },
 })
+stale_created_at = '2026-04-18T08:04:00Z'
+stale_claimed_at = '2000-01-01T00:00:00Z'
+records.append({
+    'id': stale_claim_apply_id,
+    'planId': plan['id'],
+    'deploymentName': plan['deploymentName'],
+    'status': 'running',
+    'createdAt': stale_created_at,
+    'details': ['Seeded expired local-safe claim recovery smoke record.'],
+    'lifecycle': {
+        'updatedAt': stale_claimed_at,
+        'startedAt': stale_claimed_at,
+        'currentStep': step,
+        'completedSteps': step - 1,
+        'totalSteps': len(operations),
+    },
+    'claim': {
+        'workerId': 'worker-a',
+        'claimedAt': stale_claimed_at,
+        'lastHeartbeatAt': stale_claimed_at,
+        'expiresAt': stale_claimed_at,
+    },
+    'transitions': [{
+        'transitionedAt': stale_claimed_at,
+        'previousStatus': 'queued',
+        'status': 'running',
+        'step': step,
+        'details': ['Seeded expired local-safe claim recovery smoke record.'],
+        'lifecycle': {
+            'updatedAt': stale_claimed_at,
+            'startedAt': stale_claimed_at,
+            'currentStep': step,
+            'completedSteps': step - 1,
+            'totalSteps': len(operations),
+        },
+    }],
+    'operations': [
+        {
+            'id': operation.get('id', ''),
+            'status': 'succeeded' if index < step - 1 else 'running' if index == step - 1 else 'queued',
+            'phase': operation.get('phase', ''),
+            'target': operation.get('target', ''),
+            'summary': operation.get('summary', ''),
+        }
+        for index, operation in enumerate(operations)
+    ],
+    'source': {
+        'planId': plan['id'],
+        'route': f"/v1/plans/{plan['id']}",
+        'planStatus': plan['status'],
+        'planCreatedAt': plan.get('createdAt', ''),
+        'fingerprint': (plan.get('source') or {}).get('fingerprint', ''),
+    },
+})
 store_path.write_text(json.dumps(records, indent=2, sort_keys=True) + '\n', encoding='utf-8')
 print(step)
 PY
@@ -471,6 +527,11 @@ claimed_apply_heartbeat=$(curl -fsS \
   -H 'Content-Type: application/json' \
   --data '{"workerId":"worker-a"}' \
   "http://$HOST:$PORT/v1/applies/$claim_transition_apply_id/heartbeat")
+stale_claim_recovery_record=$(curl -fsS \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --data '{"workerId":"worker-b","allowExpiredClaim":true}' \
+  "http://$HOST:$PORT/v1/applies/$stale_claim_recovery_apply_id/claim")
 active_apply_records=$(curl -fsS "http://$HOST:$PORT/v1/applies?status=active")
 claimed_apply_transition_status=$(curl -sS -o "$CLAIMED_APPLY_TRANSITION_BODY" -w "%{http_code}" \
   -X POST \
@@ -695,6 +756,7 @@ unknown_apply_heartbeat_path=$(write_payload unknown-apply-heartbeat.txt "$(cat 
 terminal_apply_heartbeat_path=$(write_payload terminal-apply-heartbeat.txt "$(cat "$TERMINAL_APPLY_HEARTBEAT_BODY")")
 claimed_apply_record_path=$(write_payload claimed-apply-record.json "$claimed_apply_record")
 claimed_apply_heartbeat_path=$(write_payload claimed-apply-heartbeat.json "$claimed_apply_heartbeat")
+stale_claim_recovery_record_path=$(write_payload stale-claim-recovery-record.json "$stale_claim_recovery_record")
 active_apply_records_path=$(write_payload active-apply-records.json "$active_apply_records")
 claimed_apply_transition_path=$(write_payload claimed-apply-transition.json "$(cat "$CLAIMED_APPLY_TRANSITION_BODY")")
 claim_transition_apply_record_get_path=$(write_payload claim-transition-apply-record-get.json "$claim_transition_apply_record_get")
@@ -767,7 +829,7 @@ plan_ui_path=$(write_payload plan-ui.html "$plan_ui")
 apply_ui_path=$(write_payload apply-ui.html "$apply_ui")
 applies_ui_path=$(write_payload applies-ui.html "$applies_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" DEPLOYMENT_EVENTS_FIXTURE_LIMITED_PATH="$deployment_events_fixture_limited_path" DEPLOYMENT_EVENTS_FIXTURE_SOURCE_PATH="$deployment_events_fixture_source_path" INVALID_DEPLOYMENT_EVENTS_LIMIT_STATUS="$invalid_deployment_events_limit_status" INVALID_DEPLOYMENT_EVENTS_LIMIT_PATH="$invalid_deployment_events_limit_path" INVALID_DEPLOYMENT_EVENTS_SOURCE_STATUS="$invalid_deployment_events_source_status" INVALID_DEPLOYMENT_EVENTS_SOURCE_PATH="$invalid_deployment_events_source_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" QUEUED_APPLY_RECORDS_PATH="$queued_apply_records_path" ACTIVE_APPLY_RECORDS_PATH="$active_apply_records_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" INVALID_APPLY_CLAIM_STATUS="$invalid_apply_claim_status" INVALID_APPLY_CLAIM_PATH="$invalid_apply_claim_path" UNKNOWN_APPLY_CLAIM_STATUS="$unknown_apply_claim_status" UNKNOWN_APPLY_CLAIM_PATH="$unknown_apply_claim_path" TERMINAL_APPLY_CLAIM_STATUS="$terminal_apply_claim_status" TERMINAL_APPLY_CLAIM_PATH="$terminal_apply_claim_path" INVALID_APPLY_HEARTBEAT_STATUS="$invalid_apply_heartbeat_status" INVALID_APPLY_HEARTBEAT_PATH="$invalid_apply_heartbeat_path" UNKNOWN_APPLY_HEARTBEAT_STATUS="$unknown_apply_heartbeat_status" UNKNOWN_APPLY_HEARTBEAT_PATH="$unknown_apply_heartbeat_path" TERMINAL_APPLY_HEARTBEAT_STATUS="$terminal_apply_heartbeat_status" TERMINAL_APPLY_HEARTBEAT_PATH="$terminal_apply_heartbeat_path" CLAIM_TRANSITION_APPLY_ID="$claim_transition_apply_id" CLAIM_TRANSITION_STEP="$claim_transition_step" CLAIMED_APPLY_RECORD_PATH="$claimed_apply_record_path" CLAIMED_APPLY_HEARTBEAT_PATH="$claimed_apply_heartbeat_path" MANUAL_CLAIMED_APPLY_TRANSITION_STATUS="$claimed_apply_transition_status" CLAIMED_APPLY_TRANSITION_PATH="$claimed_apply_transition_path" CLAIM_TRANSITION_APPLY_RECORD_GET_PATH="$claim_transition_apply_record_get_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" STALE_APPLY_PLAN_PREVIEW_PATH="$stale_apply_plan_preview_path" STALE_APPLY_CONFLICT_PATH="$stale_apply_conflict_path" STALE_APPLY_CONFLICT_STATUS="$stale_apply_conflict_status" STALE_APPLY_AUDIT_LOGS_PATH="$stale_apply_audit_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_DELETED_PATH="$webhook_deleted_path" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" CONTROLLER_REFRESH_PATH="$controller_refresh_path" CONTROLLER_REFRESH_STATUS="$controller_refresh_status" CONTROLLER_REFRESH_READ_PATH="$controller_refresh_read_path" CONTROLLER_REFRESH_READ_STATUS="$controller_refresh_read_status" CONTROLLER_REFRESH_AUDIT_LOGS_PATH="$controller_refresh_audit_logs_path" RESOURCE_LOGS_PATH="$resource_logs_path" CODEDEPLOY_APPLICATION_RESOURCE_LOGS_PATH="$codedeploy_application_resource_logs_path" TEST_LISTENER_RESOURCE_LOGS_PATH="$test_listener_resource_logs_path" WORKER_CLUSTER_ARN="$worker_cluster_arn" SELECTED_WORKER_RESOURCE_LOGS_PATH="$selected_worker_resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" LIMITED_WORKER_RESOURCE_LOGS_PATH="$limited_worker_resource_logs_path" ECS_TASK_RESOURCE_LOGS_PATH="$ecs_task_resource_logs_path" ECS_TASK_RESOURCE_INSPECTION_PATH="$ecs_task_resource_inspection_path" INVALID_RESOURCE_LOG_LIMIT_STATUS="$invalid_resource_log_limit_status" INVALID_RESOURCE_LOG_LIMIT_PATH="$invalid_resource_log_limit_path" INVALID_RESOURCE_LOG_INSTANCE_STATUS="$invalid_resource_log_instance_status" INVALID_RESOURCE_LOG_INSTANCE_PATH="$invalid_resource_log_instance_path" INVALID_RESOURCE_INSPECTION_LIMIT_STATUS="$invalid_resource_inspection_limit_status" INVALID_RESOURCE_INSPECTION_LIMIT_PATH="$invalid_resource_inspection_limit_path" INVALID_RESOURCE_INSPECTION_INSTANCE_STATUS="$invalid_resource_inspection_instance_status" INVALID_RESOURCE_INSPECTION_INSTANCE_PATH="$invalid_resource_inspection_instance_path" BOOTSTRAP_RESOURCE_LOGS_PATH="$bootstrap_resource_logs_path" SELECTED_BOOTSTRAP_RESOURCE_LOGS_PATH="$selected_bootstrap_resource_logs_path" TRAFFIC_RESOURCE_LOGS_PATH="$traffic_resource_logs_path" PRODUCTION_LISTENER_RULE_RESOURCE_LOGS_PATH="$production_listener_rule_resource_logs_path" ACTIVE_TARGET_GROUP_RESOURCE_LOGS_PATH="$active_target_group_resource_logs_path" CANDIDATE_TARGET_GROUP_RESOURCE_LOGS_PATH="$candidate_target_group_resource_logs_path" BOOTSTRAP_RESOURCE_INSPECTION_PATH="$bootstrap_resource_inspection_path" SELECTED_BOOTSTRAP_RESOURCE_INSPECTION_PATH="$selected_bootstrap_resource_inspection_path" SELECTED_WORKER_RESOURCE_INSPECTION_PATH="$selected_worker_resource_inspection_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" BOUNDED_CANDIDATE_RESOURCE_INSPECTION_PATH="$bounded_candidate_resource_inspection_path" SELECTED_CANDIDATE_RESOURCE_INSPECTION_PATH="$selected_candidate_resource_inspection_path" CODEDEPLOY_APPLICATION_RESOURCE_INSPECTION_PATH="$codedeploy_application_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$blue_task_set_target_group_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" PRODUCTION_LISTENER_RULE_RESOURCE_INSPECTION_PATH="$production_listener_rule_resource_inspection_path" ACTIVE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$active_target_group_resource_inspection_path" CANDIDATE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$candidate_target_group_resource_inspection_path" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" ACCOUNT_UI_PATH="$account_ui_path" RESOURCE_UI_PATH="$resource_ui_path" ECS_RESOURCE_UI_PATH="$ecs_resource_ui_path" BOOTSTRAP_RESOURCE_UI_PATH="$bootstrap_resource_ui_path" CODEDEPLOY_APPLICATION_RESOURCE_UI_PATH="$codedeploy_application_resource_ui_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_UI_PATH="$blue_task_set_target_group_resource_ui_path" PRODUCTION_LISTENER_RULE_RESOURCE_UI_PATH="$production_listener_rule_resource_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLIES_UI_PATH="$applies_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" DEPLOYMENT_EVENTS_FIXTURE_LIMITED_PATH="$deployment_events_fixture_limited_path" DEPLOYMENT_EVENTS_FIXTURE_SOURCE_PATH="$deployment_events_fixture_source_path" INVALID_DEPLOYMENT_EVENTS_LIMIT_STATUS="$invalid_deployment_events_limit_status" INVALID_DEPLOYMENT_EVENTS_LIMIT_PATH="$invalid_deployment_events_limit_path" INVALID_DEPLOYMENT_EVENTS_SOURCE_STATUS="$invalid_deployment_events_source_status" INVALID_DEPLOYMENT_EVENTS_SOURCE_PATH="$invalid_deployment_events_source_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" QUEUED_APPLY_RECORDS_PATH="$queued_apply_records_path" ACTIVE_APPLY_RECORDS_PATH="$active_apply_records_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" INVALID_APPLY_CLAIM_STATUS="$invalid_apply_claim_status" INVALID_APPLY_CLAIM_PATH="$invalid_apply_claim_path" UNKNOWN_APPLY_CLAIM_STATUS="$unknown_apply_claim_status" UNKNOWN_APPLY_CLAIM_PATH="$unknown_apply_claim_path" TERMINAL_APPLY_CLAIM_STATUS="$terminal_apply_claim_status" TERMINAL_APPLY_CLAIM_PATH="$terminal_apply_claim_path" INVALID_APPLY_HEARTBEAT_STATUS="$invalid_apply_heartbeat_status" INVALID_APPLY_HEARTBEAT_PATH="$invalid_apply_heartbeat_path" UNKNOWN_APPLY_HEARTBEAT_STATUS="$unknown_apply_heartbeat_status" UNKNOWN_APPLY_HEARTBEAT_PATH="$unknown_apply_heartbeat_path" TERMINAL_APPLY_HEARTBEAT_STATUS="$terminal_apply_heartbeat_status" TERMINAL_APPLY_HEARTBEAT_PATH="$terminal_apply_heartbeat_path" CLAIM_TRANSITION_APPLY_ID="$claim_transition_apply_id" CLAIM_TRANSITION_STEP="$claim_transition_step" CLAIMED_APPLY_RECORD_PATH="$claimed_apply_record_path" CLAIMED_APPLY_HEARTBEAT_PATH="$claimed_apply_heartbeat_path" STALE_CLAIM_RECOVERY_APPLY_ID="$stale_claim_recovery_apply_id" STALE_CLAIM_RECOVERY_RECORD_PATH="$stale_claim_recovery_record_path" MANUAL_CLAIMED_APPLY_TRANSITION_STATUS="$claimed_apply_transition_status" CLAIMED_APPLY_TRANSITION_PATH="$claimed_apply_transition_path" CLAIM_TRANSITION_APPLY_RECORD_GET_PATH="$claim_transition_apply_record_get_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" STALE_APPLY_PLAN_PREVIEW_PATH="$stale_apply_plan_preview_path" STALE_APPLY_CONFLICT_PATH="$stale_apply_conflict_path" STALE_APPLY_CONFLICT_STATUS="$stale_apply_conflict_status" STALE_APPLY_AUDIT_LOGS_PATH="$stale_apply_audit_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_DELETED_PATH="$webhook_deleted_path" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" CONTROLLER_REFRESH_PATH="$controller_refresh_path" CONTROLLER_REFRESH_STATUS="$controller_refresh_status" CONTROLLER_REFRESH_READ_PATH="$controller_refresh_read_path" CONTROLLER_REFRESH_READ_STATUS="$controller_refresh_read_status" CONTROLLER_REFRESH_AUDIT_LOGS_PATH="$controller_refresh_audit_logs_path" RESOURCE_LOGS_PATH="$resource_logs_path" CODEDEPLOY_APPLICATION_RESOURCE_LOGS_PATH="$codedeploy_application_resource_logs_path" TEST_LISTENER_RESOURCE_LOGS_PATH="$test_listener_resource_logs_path" WORKER_CLUSTER_ARN="$worker_cluster_arn" SELECTED_WORKER_RESOURCE_LOGS_PATH="$selected_worker_resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" LIMITED_WORKER_RESOURCE_LOGS_PATH="$limited_worker_resource_logs_path" ECS_TASK_RESOURCE_LOGS_PATH="$ecs_task_resource_logs_path" ECS_TASK_RESOURCE_INSPECTION_PATH="$ecs_task_resource_inspection_path" INVALID_RESOURCE_LOG_LIMIT_STATUS="$invalid_resource_log_limit_status" INVALID_RESOURCE_LOG_LIMIT_PATH="$invalid_resource_log_limit_path" INVALID_RESOURCE_LOG_INSTANCE_STATUS="$invalid_resource_log_instance_status" INVALID_RESOURCE_LOG_INSTANCE_PATH="$invalid_resource_log_instance_path" INVALID_RESOURCE_INSPECTION_LIMIT_STATUS="$invalid_resource_inspection_limit_status" INVALID_RESOURCE_INSPECTION_LIMIT_PATH="$invalid_resource_inspection_limit_path" INVALID_RESOURCE_INSPECTION_INSTANCE_STATUS="$invalid_resource_inspection_instance_status" INVALID_RESOURCE_INSPECTION_INSTANCE_PATH="$invalid_resource_inspection_instance_path" BOOTSTRAP_RESOURCE_LOGS_PATH="$bootstrap_resource_logs_path" SELECTED_BOOTSTRAP_RESOURCE_LOGS_PATH="$selected_bootstrap_resource_logs_path" TRAFFIC_RESOURCE_LOGS_PATH="$traffic_resource_logs_path" PRODUCTION_LISTENER_RULE_RESOURCE_LOGS_PATH="$production_listener_rule_resource_logs_path" ACTIVE_TARGET_GROUP_RESOURCE_LOGS_PATH="$active_target_group_resource_logs_path" CANDIDATE_TARGET_GROUP_RESOURCE_LOGS_PATH="$candidate_target_group_resource_logs_path" BOOTSTRAP_RESOURCE_INSPECTION_PATH="$bootstrap_resource_inspection_path" SELECTED_BOOTSTRAP_RESOURCE_INSPECTION_PATH="$selected_bootstrap_resource_inspection_path" SELECTED_WORKER_RESOURCE_INSPECTION_PATH="$selected_worker_resource_inspection_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" BOUNDED_CANDIDATE_RESOURCE_INSPECTION_PATH="$bounded_candidate_resource_inspection_path" SELECTED_CANDIDATE_RESOURCE_INSPECTION_PATH="$selected_candidate_resource_inspection_path" CODEDEPLOY_APPLICATION_RESOURCE_INSPECTION_PATH="$codedeploy_application_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$blue_task_set_target_group_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" PRODUCTION_LISTENER_RULE_RESOURCE_INSPECTION_PATH="$production_listener_rule_resource_inspection_path" ACTIVE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$active_target_group_resource_inspection_path" CANDIDATE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$candidate_target_group_resource_inspection_path" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" ACCOUNT_UI_PATH="$account_ui_path" RESOURCE_UI_PATH="$resource_ui_path" ECS_RESOURCE_UI_PATH="$ecs_resource_ui_path" BOOTSTRAP_RESOURCE_UI_PATH="$bootstrap_resource_ui_path" CODEDEPLOY_APPLICATION_RESOURCE_UI_PATH="$codedeploy_application_resource_ui_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_UI_PATH="$blue_task_set_target_group_resource_ui_path" PRODUCTION_LISTENER_RULE_RESOURCE_UI_PATH="$production_listener_rule_resource_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLIES_UI_PATH="$applies_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -854,6 +916,7 @@ unknown_apply_heartbeat = read_text('UNKNOWN_APPLY_HEARTBEAT_PATH')
 terminal_apply_heartbeat = read_text('TERMINAL_APPLY_HEARTBEAT_PATH')
 claimed_apply_record = read_json('CLAIMED_APPLY_RECORD_PATH')
 claimed_apply_heartbeat = read_json('CLAIMED_APPLY_HEARTBEAT_PATH')
+stale_claim_recovery_record = read_json('STALE_CLAIM_RECOVERY_RECORD_PATH')
 claimed_apply_transition = read_json('CLAIMED_APPLY_TRANSITION_PATH')
 claim_transition_apply_record_get = read_json('CLAIM_TRANSITION_APPLY_RECORD_GET_PATH')
 actor_plan_preview = read_json('ACTOR_PLAN_PREVIEW_PATH')
@@ -1177,6 +1240,17 @@ assert isinstance(claimed_apply_heartbeat['claim'].get('expiresAt'), str) and cl
 assert claimed_apply_heartbeat['lifecycle'] == claimed_apply_record['lifecycle'], (claimed_apply_heartbeat, claimed_apply_record)
 assert claimed_apply_heartbeat['operations'] == claimed_apply_record['operations'], (claimed_apply_heartbeat, claimed_apply_record)
 assert claimed_apply_heartbeat['transitions'] == claimed_apply_record['transitions'], (claimed_apply_heartbeat, claimed_apply_record)
+assert stale_claim_recovery_record['id'] == os.environ['STALE_CLAIM_RECOVERY_APPLY_ID'], stale_claim_recovery_record
+assert stale_claim_recovery_record['status'] == 'running', stale_claim_recovery_record
+assert stale_claim_recovery_record['claim']['workerId'] == 'worker-b', stale_claim_recovery_record
+assert stale_claim_recovery_record['claim']['claimedAt'] == stale_claim_recovery_record['claim']['lastHeartbeatAt'], stale_claim_recovery_record
+assert stale_claim_recovery_record['claim']['expiresAt'] > stale_claim_recovery_record['claim']['claimedAt'], stale_claim_recovery_record
+assert stale_claim_recovery_record['lifecycle']['currentStep'] == claim_transition_step, stale_claim_recovery_record
+assert stale_claim_recovery_record['lifecycle'].get('completedSteps', 0) == claim_transition_step - 1, stale_claim_recovery_record
+assert stale_claim_recovery_record['operations'][claim_transition_step - 1]['status'] == 'running', stale_claim_recovery_record
+assert [operation['status'] for operation in stale_claim_recovery_record['operations'][:claim_transition_step - 1]] == ['succeeded'] * (claim_transition_step - 1), stale_claim_recovery_record
+assert [transition['status'] for transition in stale_claim_recovery_record['transitions']] == ['running', 'running'], stale_claim_recovery_record
+assert any('expired local-safe claim recovery' in detail or 'recovered expired local-safe claim' in detail for detail in stale_claim_recovery_record.get('details', [])), stale_claim_recovery_record
 assert active_apply_records, active_apply_records
 assert active_apply_records[0]['id'] == claimed_apply_heartbeat['id'], (active_apply_records, claimed_apply_heartbeat)
 assert active_apply_records[0]['status'] == 'running', active_apply_records
