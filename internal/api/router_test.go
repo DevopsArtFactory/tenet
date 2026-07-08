@@ -4055,6 +4055,46 @@ func TestDeploymentOverviewEventsRouteReportsRetainedHistoryCapSeparatelyFromQue
 	}
 }
 
+func TestDeploymentOverviewEventsRouteReportsConfiguredRetentionLimit(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			return catalog.DeploymentOverviewEvents{
+				DeploymentName: name,
+				Events: []domain.StatusHistoryEntry{
+					{Timestamp: "2026-05-06T01:00:00Z", Summary: "older event"},
+					{Timestamp: "2026-05-06T02:00:00Z", Summary: "newer event"},
+				},
+				Retention: catalog.RuntimeEventRetention{
+					Limit:              3,
+					RetainedEventCount: 2,
+					Status:             domain.RuntimeHistoryRetentionStatusWithinLimit,
+				},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode deployment events payload: %v", err)
+	}
+	retention, ok := payload["retention"].(map[string]any)
+	if !ok || retention["limit"] != float64(3) || retention["retainedEventCount"] != float64(2) || retention["status"] != domain.RuntimeHistoryRetentionStatusWithinLimit {
+		t.Fatalf("expected configured top-level retention metadata, got %#v", payload["retention"])
+	}
+	scope, ok := payload["resultScope"].(map[string]any)
+	if !ok || scope["retentionLimit"] != float64(3) || scope["retainedEventCount"] != float64(2) || scope["retentionStatus"] != domain.RuntimeHistoryRetentionStatusWithinLimit {
+		t.Fatalf("expected configured resultScope retention metadata, got %#v", payload["resultScope"])
+	}
+}
+
 func TestDeploymentOverviewEventsRouteReportsTimestampEnvelopeForReturnedWindow(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},

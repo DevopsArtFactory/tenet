@@ -1372,6 +1372,36 @@ func TestBuildDeploymentOverviewEventsReturnsEmptyListWhenHistoryMissing(t *test
 	}
 }
 
+func TestBuildDeploymentOverviewEventsUsesPersistedRuntimeHistoryRetention(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+	}
+	snapshots := []statusstore.Snapshot{{
+		DeploymentName: "payments-api-prod",
+		Status: domain.DeploymentStatus{
+			RuntimeHistoryRetention: &domain.RuntimeHistoryRetention{
+				Limit:              3,
+				RetainedEventCount: 2,
+				Status:             domain.RuntimeHistoryRetentionStatusWithinLimit,
+			},
+			History: []domain.StatusHistoryEntry{
+				{Timestamp: "2026-05-06T01:00:00Z", Source: "controller", Summary: "older event"},
+				{Timestamp: "2026-05-06T02:00:00Z", Source: "controller", Summary: "newer event"},
+			},
+		},
+	}}
+
+	events, err := BuildDeploymentOverviewEvents(catalog, snapshots, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildDeploymentOverviewEvents returned error: %v", err)
+	}
+	if events.Retention.Limit != 3 || events.Retention.RetainedEventCount != 2 || events.Retention.Status != domain.RuntimeHistoryRetentionStatusWithinLimit {
+		t.Fatalf("expected persisted runtime history retention metadata, got %+v", events.Retention)
+	}
+}
+
 func TestBuildDeploymentOverviewDetailRuntimeSummaryUsesLatestHistory(t *testing.T) {
 	catalog := manifest.Catalog{
 		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},

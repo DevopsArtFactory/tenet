@@ -119,6 +119,7 @@ func emitRuntimePlansForRefresh(ctx context.Context, logger *log.Logger, config 
 
 	planner := reconcile.Planner{}
 	liveInspectionService := resourceinspection.NewService(resourceinspection.Options{EnableAWS: true})
+	runtimeHistoryLimit := config.runtimeHistoryLimit()
 	for _, deployment := range compiled.Deployments {
 		status := statuses[deployment.Name]
 		previousStatus := status
@@ -130,9 +131,12 @@ func emitRuntimePlansForRefresh(ctx context.Context, logger *log.Logger, config 
 		liveTrafficRouting := runtimeLiveTrafficRouting(ctx, logger, liveInspectionService, compiled.Accounts, compiled.Environments, deployment)
 		status.ManagedDrift = deriveManagedDriftItems(deployment, status, liveCapacity, liveTrafficRouting...)
 		status = applyControllerManagedDriftStatus(status, plan)
-		status.History = appendRuntimeHistory(previousStatus, status)
+		status.History = appendRuntimeHistoryWithLimit(previousStatus, status, runtimeHistoryLimit)
 		if refresh != nil {
-			status.History = appendControllerRefreshHistory(status.History, status, *refresh, receivedAt, runtimeHistoryNow())
+			status.History = appendControllerRefreshHistoryWithLimit(status.History, status, *refresh, receivedAt, runtimeHistoryNow(), runtimeHistoryLimit)
+		}
+		if runtimeHistoryLimit != domain.RuntimeHistoryMaxEntries || previousStatus.RuntimeHistoryRetention != nil {
+			status.RuntimeHistoryRetention = buildRuntimeHistoryRetention(runtimeHistoryLimit, len(status.History))
 		}
 		currentStatuses[deployment.Name] = status
 		logger.Printf(
@@ -202,6 +206,11 @@ func runtimeStatusBatchWriter(store statusstore.Store) statusstore.BatchWriter {
 }
 
 func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.DeploymentStatus) []domain.StatusHistoryEntry {
+	return appendRuntimeHistoryWithLimit(previous, current, runtimeHistoryMaxEntries)
+}
+
+func appendRuntimeHistoryWithLimit(previous domain.DeploymentStatus, current domain.DeploymentStatus, limit int) []domain.StatusHistoryEntry {
+	limit = effectiveRuntimeHistoryLimit(limit)
 	history := append([]domain.StatusHistoryEntry(nil), current.History...)
 	entry := deriveRuntimeHistoryEntry(current)
 	previousEntry := deriveRuntimeHistoryEntry(previous)
@@ -221,7 +230,7 @@ func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.Deplo
 		history[len(history)-1] = normalizedLatest
 	}
 	if !runtimeHistoryMeaningfullyChanged(normalizedLatest, entry) {
-		return capRuntimeHistory(history)
+		return capRuntimeHistory(history, limit)
 	}
 
 	entry.Timestamp = runtimeHistoryNow().UTC().Format(time.RFC3339)
@@ -231,10 +240,15 @@ func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.Deplo
 		entry.Changes, entry.ChangeDetails = runtimeHistoryDiff(normalizedLatest, entry)
 	}
 	history = append(history, entry)
-	return capRuntimeHistory(history)
+	return capRuntimeHistory(history, limit)
 }
 
 func appendControllerRefreshHistory(history []domain.StatusHistoryEntry, current domain.DeploymentStatus, request controllerrefresh.Request, receivedAt time.Time, reconciledAt time.Time) []domain.StatusHistoryEntry {
+	return appendControllerRefreshHistoryWithLimit(history, current, request, receivedAt, reconciledAt, runtimeHistoryMaxEntries)
+}
+
+func appendControllerRefreshHistoryWithLimit(history []domain.StatusHistoryEntry, current domain.DeploymentStatus, request controllerrefresh.Request, receivedAt time.Time, reconciledAt time.Time, limit int) []domain.StatusHistoryEntry {
+	limit = effectiveRuntimeHistoryLimit(limit)
 	entry := deriveRuntimeHistoryEntry(current)
 	if reconciledAt.IsZero() {
 		reconciledAt = runtimeHistoryNow()
@@ -253,7 +267,7 @@ func appendControllerRefreshHistory(history []domain.StatusHistoryEntry, current
 		ReceivedAt:   formatRuntimeHistoryTime(receivedAt),
 		ReconciledAt: formatRuntimeHistoryTime(reconciledAt),
 	}
-	return capRuntimeHistory(append(append([]domain.StatusHistoryEntry(nil), history...), entry))
+	return capRuntimeHistory(append(append([]domain.StatusHistoryEntry(nil), history...), entry), limit)
 }
 
 func formatRuntimeHistoryTime(value time.Time) string {
@@ -1089,11 +1103,36 @@ func valueOrUnknown(value string) string {
 	return value
 }
 
-func capRuntimeHistory(history []domain.StatusHistoryEntry) []domain.StatusHistoryEntry {
-	if len(history) <= runtimeHistoryMaxEntries {
+func capRuntimeHistory(history []domain.StatusHistoryEntry, limit int) []domain.StatusHistoryEntry {
+	limit = effectiveRuntimeHistoryLimit(limit)
+	if len(history) <= limit {
 		return history
 	}
-	return append([]domain.StatusHistoryEntry(nil), history[len(history)-runtimeHistoryMaxEntries:]...)
+	return append([]domain.StatusHistoryEntry(nil), history[len(history)-limit:]...)
+}
+
+func (c startupConfig) runtimeHistoryLimit() int {
+	return effectiveRuntimeHistoryLimit(c.RuntimeHistoryLimit)
+}
+
+func effectiveRuntimeHistoryLimit(limit int) int {
+	if limit <= 0 {
+		return runtimeHistoryMaxEntries
+	}
+	return limit
+}
+
+func buildRuntimeHistoryRetention(limit int, retainedEventCount int) *domain.RuntimeHistoryRetention {
+	limit = effectiveRuntimeHistoryLimit(limit)
+	status := domain.RuntimeHistoryRetentionStatusWithinLimit
+	if retainedEventCount >= limit {
+		status = domain.RuntimeHistoryRetentionStatusAtLimit
+	}
+	return &domain.RuntimeHistoryRetention{
+		Limit:              limit,
+		RetainedEventCount: retainedEventCount,
+		Status:             status,
+	}
 }
 
 func deriveRuntimeHistoryEntry(status domain.DeploymentStatus) domain.StatusHistoryEntry {
