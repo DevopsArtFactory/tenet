@@ -886,6 +886,30 @@ func TestOverviewDashboardRuntimeEventCueDocumentsDeterministicTieBreak(t *testi
 	}
 }
 
+func TestRuntimeStateDocsDescribeConfigurableControllerHistoryRetention(t *testing.T) {
+	runtimeStateText := readTextFile(t, "architecture/tenet-v1-runtime-state-storage.md")
+	statusAPIText := readTextFile(t, "architecture/tenet-v1-deployment-status-api.md")
+
+	for _, doc := range []struct {
+		name string
+		text string
+	}{
+		{name: "runtime state storage docs", text: runtimeStateText},
+		{name: "deployment status API docs", text: statusAPIText},
+	} {
+		for _, fragment := range []string{
+			"`TENET_CONTROLLER_RUNTIME_HISTORY_LIMIT`",
+			"defaults to `10`",
+			"invalid, zero, negative, or above-1000 values fail controller startup",
+			"retention metadata reports the effective controller limit",
+		} {
+			if !strings.Contains(doc.text, fragment) {
+				t.Fatalf("expected %s to document configurable controller-history retention %q", doc.name, fragment)
+			}
+		}
+	}
+}
+
 func TestOverviewDashboardDocumentsRuntimeRetentionAndLatestRuntimeCueGuard(t *testing.T) {
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
 
