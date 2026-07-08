@@ -427,9 +427,9 @@ Current plan/apply workspace behavior:
 - returns to the application detail page through the embedded back link so the drill-down path stays tight
 - keeps the toolbar `Audit log` link deployment-scoped so operators land on `/?page=audit&deployment={name}` instead of the global audit slice
 
-### Queued applies monitor
+### Applies monitor
 
-The backend active apply collection is `GET /v1/applies?status=active`: it returns queued plus running local-safe apply handoff records newest-first, including claim freshness fields (`claim.lastHeartbeatAt` / `claim.expiresAt`) when present, and performs no executor mutation. `GET /v1/applies?status=queued` remains the exact queued subset. The bookmarkable `/?page=applies` monitor is still a narrow read-only shell over the queued subset. It renders loading, empty, unavailable, generic fetch-error, and shared operator-read `401` / `403` guidance states without changing apply executor behavior. Populated rows show deployment name, apply id, status, created time, operation progress, and claim freshness fields when present, with `_self` `Open plan/apply workspace` links back to `/?page=plan&deployment={deploymentName}&applyId={applyId}` for deeper review.
+The backend active apply collection is `GET /v1/applies?status=active`: it returns queued plus running local-safe apply handoff records newest-first, including claim freshness fields (`claim.lastHeartbeatAt` / `claim.expiresAt`) when present, and performs no executor mutation. `GET /v1/applies?status=queued` remains the exact queued subset. The bookmarkable `/?page=applies` monitor defaults to queued work, preserves manual `Refresh applies`, and exposes an explicit queued/active view control; `/?page=applies&appliesView=active` shows the active collection so operators can see claimed/running handoffs without leaving the embedded shell. The monitor renders loading, empty, unavailable, generic fetch-error, and shared operator-read `401` / `403` guidance states without changing apply executor behavior. Populated rows show deployment name, apply id, queued/running status, created time, operation progress, worker ID when claimed, and heartbeat/lease freshness copy, with `_self` `Open plan/apply workspace` links back to `/?page=plan&deployment={deploymentName}&applyId={applyId}` for deeper review.
 
 ## Quick links
 
@@ -519,4 +519,4 @@ Likely next UI slices:
 - deeper drift diagnostics once the backend exposes richer live drift sources beyond the current derived read model
 - eventual extraction into a dedicated frontend only if the current read-model/UI surface becomes too large for embedded HTML
 
-`GET /v1/applies?status=active` follows the same collection contract for executor-facing active immutable apply records and returns `200 OK` with `[]` when no queued or running records are visible. `GET /v1/applies?status=queued` remains the exact queued subset; `/?page=applies` is only the embedded monitor for that queued read.
+`GET /v1/applies?status=active` follows the same collection contract for executor-facing active immutable apply records and returns `200 OK` with `[]` when no queued or running records are visible. `GET /v1/applies?status=queued` remains the exact queued subset; `/?page=applies` defaults to queued work and `/?page=applies&appliesView=active` is the bookmarkable embedded active-handoff monitor view.

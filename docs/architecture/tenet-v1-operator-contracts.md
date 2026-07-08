@@ -755,11 +755,11 @@ active collection (`GET /v1/applies?status=active`), queued exact subset
 heartbeat (`POST /v1/applies/{applyId}/heartbeat`), and transition
 (`POST /v1/applies/{applyId}/transitions`) routes together. They persist and
 advance Tenet apply metadata only; this local-safe record lifecycle does not
-perform live AWS mutation. The read-only `/?page=applies` monitor is backed by
-the queued subset read, includes an explicit `Refresh applies` action that
-preserves the bookmarkable URL, translates claim heartbeat/lease metadata into
-fresh/stale/pending operator copy, and links operators back to the plan/apply
-workspace for detail review.
+perform live AWS mutation. The read-only `/?page=applies` monitor defaults to
+the queued subset read, adds a queued/active view control (`?appliesView=active`
+for the active collection), preserves the explicit `Refresh applies` action and
+bookmarkable URL, translates claim heartbeat/lease metadata into fresh/stale/pending
+operator copy, and links operators back to the plan/apply workspace for detail review.
 
 The same immutable stores also back a read-only audit projection route:
 - `GET /v1/audit-logs`

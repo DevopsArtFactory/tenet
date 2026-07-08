@@ -2026,22 +2026,27 @@ assert "createNavLink(buildPageURL('applications'), 'Back to applications', '_se
 assert 'without losing the current search, sync, health, or account filters' in ui, ui
 assert 'currentBookmarkableURL(operatorContextAccessDetailsPanelID)' in ui, ui
 assert "return 'Applications overview';" in ui, ui
-assert "return 'Queued applies monitor';" in applies_ui, applies_ui
-assert "const queuedAppliesRoutePath = () => '/v1/applies?status=queued';" in applies_ui, applies_ui
-assert "const fetchQueuedApplies = () => fetchEmbeddedReadRouteJSON(queuedAppliesRoutePath(), {" in applies_ui, applies_ui
-assert "return queuedAppliesReadRoute();" in applies_ui, applies_ui
+assert "return 'Applies monitor';" in applies_ui, applies_ui
+assert "const normalizeAppliesMonitorView = (view) => String(view || '').toLowerCase() === 'active' ? 'active' : 'queued';" in applies_ui, applies_ui
+assert "const appliesMonitorRoutePath = (view = 'queued') => `/v1/applies?status=${normalizeAppliesMonitorView(view)}`;" in applies_ui, applies_ui
+assert "const fetchAppliesMonitor = (view = 'queued') => fetchEmbeddedReadRouteJSON(appliesMonitorRoutePath(view), {" in applies_ui, applies_ui
+assert "return appliesMonitorReadRoute(pageState?.appliesView || 'queued');" in applies_ui, applies_ui
+assert "appliesView: normalizeAppliesMonitorView(params.get('appliesView') || params.get('applyView') || '')," in applies_ui, applies_ui
 assert "renderQueuedAppliesPage(appliesState);" in applies_ui, applies_ui
-assert "Loading queued apply requests from GET /v1/applies?status=queued…" in applies_ui, applies_ui
+assert "Loading ${view === 'active' ? 'active apply handoffs' : 'queued apply requests'} from ${readRoute}…" in applies_ui, applies_ui
 assert "No queued apply requests are visible right now. GET /v1/applies?status=queued returned an empty collection." in applies_ui, applies_ui
-assert "Queued applies are temporarily unavailable." in applies_ui, applies_ui
-assert "Failed to load queued applies:" in applies_ui, applies_ui
+assert "No active apply handoffs are visible right now. GET /v1/applies?status=active returned an empty collection." in applies_ui, applies_ui
+assert "${appliesMonitorViewLabel(view)} are temporarily unavailable." in applies_ui, applies_ui
+assert "Failed to load ${view} applies:" in applies_ui, applies_ui
+assert "setAppliesMonitorView(view);" in applies_ui, applies_ui
+assert "syncAppliesMonitorPageState();" in applies_ui, applies_ui
 assert "createNavLink(buildPageURL('plan', { deployment: record.deploymentName, applyId: record.id }), 'Open plan/apply workspace', '_self')" in applies_ui, applies_ui
 assert "['Operation progress', applyOperationProgressSummary(record.operations || []), 'summary']" in applies_ui, applies_ui
 assert "['Claim status', applyClaimFreshnessSummary(record), 'summary']" in applies_ui, applies_ui
 assert "Pending executor claim — no local-safe executor has claimed this apply request yet." in applies_ui, applies_ui
 assert "heartbeat freshness looks current" in applies_ui, applies_ui
 assert "heartbeat or lease is stale or expired" in applies_ui, applies_ui
-assert "createQueuedAppliesRefreshButton = (state) => createRefreshButton('Refresh applies'" in applies_ui, applies_ui
+assert "createAppliesMonitorRefreshButton = (state) => createRefreshButton('Refresh applies'" in applies_ui, applies_ui
 assert "['Last heartbeat', applyClaimFreshnessValue(record, 'lastHeartbeatAt')]" in applies_ui, applies_ui
 assert "['Claim expires', applyClaimFreshnessValue(record, 'expiresAt')]" in applies_ui, applies_ui
 assert "const setEmbeddedBrowserTitle = (...parts) => {" in ui, ui

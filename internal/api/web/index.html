@@ -2744,6 +2744,7 @@
           resourceInspectionLimit: normalizeResourceInspectionTaskLimit(params.get('resourceInspectionLimit') || ''),
           auditAction: normalizeAuditAction(params.get('action') || ''),
           auditLimit: normalizeAuditLimit(params.get('limit') || ''),
+          appliesView: normalizeAppliesMonitorView(params.get('appliesView') || params.get('applyView') || ''),
           driftQuery: driftFilters.query,
           driftSeverity: driftFilters.severity,
           driftSort: driftFilters.sort,
@@ -5032,7 +5033,7 @@
           case 'audit':
             return 'Audit log';
           case 'applies':
-            return 'Queued applies monitor';
+            return 'Applies monitor';
           default:
             return 'Operator detail';
         }
@@ -5099,7 +5100,7 @@
               limit: pageState?.auditLimit,
             })}`;
           case 'applies':
-            return queuedAppliesReadRoute();
+            return appliesMonitorReadRoute(pageState?.appliesView || 'queued');
           default:
             return 'GET operator read route';
         }
@@ -7243,12 +7244,18 @@
         unavailable: 'applications overview unavailable',
         failure: 'applications overview request failed',
       });
-      const queuedAppliesRoutePath = () => '/v1/applies?status=queued';
-      const queuedAppliesReadRoute = () => `GET ${queuedAppliesRoutePath()}`;
-      const fetchQueuedApplies = () => fetchEmbeddedReadRouteJSON(queuedAppliesRoutePath(), {
-        unavailable: 'queued applies API unavailable',
-        failure: 'queued applies request failed',
+      const normalizeAppliesMonitorView = (view) => String(view || '').toLowerCase() === 'active' ? 'active' : 'queued';
+      const appliesMonitorRoutePath = (view = 'queued') => `/v1/applies?status=${normalizeAppliesMonitorView(view)}`;
+      const appliesMonitorReadRoute = (view = 'queued') => `GET ${appliesMonitorRoutePath(view)}`;
+      const queuedAppliesRoutePath = () => appliesMonitorRoutePath('queued');
+      const queuedAppliesReadRoute = () => appliesMonitorReadRoute('queued');
+      const activeAppliesRoutePath = () => appliesMonitorRoutePath('active');
+      const activeAppliesReadRoute = () => appliesMonitorReadRoute('active');
+      const fetchAppliesMonitor = (view = 'queued') => fetchEmbeddedReadRouteJSON(appliesMonitorRoutePath(view), {
+        unavailable: `${normalizeAppliesMonitorView(view)} applies API unavailable`,
+        failure: `${normalizeAppliesMonitorView(view)} applies request failed`,
       });
+      const fetchQueuedApplies = () => fetchAppliesMonitor('queued');
       const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {
         unavailable: 'account detail unavailable',
         failure: 'account detail request failed',
@@ -8881,9 +8888,34 @@
         if (Array.isArray(result?.entries)) return result.entries;
         return [];
       };
-      const createQueuedAppliesRefreshButton = (state) => createRefreshButton('Refresh applies', state?.status === 'loading', () => state?.onRefresh?.().catch(() => {}));
-      const renderQueuedAppliesState = (text, className = '', actions = []) => {
-        document.getElementById('toolbar').replaceChildren();
+      const appliesMonitorViewLabel = (view) => normalizeAppliesMonitorView(view) === 'active' ? 'Active handoffs' : 'Queued applies';
+      const appliesMonitorEmptyText = (view) => normalizeAppliesMonitorView(view) === 'active'
+        ? 'No active apply handoffs are visible right now. GET /v1/applies?status=active returned an empty collection.'
+        : 'No queued apply requests are visible right now. GET /v1/applies?status=queued returned an empty collection.';
+      const createAppliesMonitorRefreshButton = (state) => createRefreshButton('Refresh applies', state?.status === 'loading', () => state?.onRefresh?.().catch(() => {}));
+      const createAppliesMonitorViewControl = (state) => {
+        const currentView = normalizeAppliesMonitorView(state?.view || currentPageState.appliesView || 'queued');
+        const wrap = createElement('div', 'toolbar-chips');
+        ['queued', 'active'].forEach((view) => {
+          const label = view === 'active' ? 'Active handoffs' : 'Queued applies';
+          const button = createElement('button', view === currentView ? 'toolbar-chip toolbar-chip-clear' : 'toolbar-chip-clear', label);
+          button.type = 'button';
+          button.disabled = state?.status === 'loading' && view !== currentView;
+          button.setAttribute('aria-pressed', view === currentView ? 'true' : 'false');
+          button.addEventListener('click', () => {
+            if (view === currentView) return;
+            setAppliesMonitorView(view);
+          });
+          wrap.append(button);
+        });
+        return wrap;
+      };
+      const renderQueuedAppliesState = (text, className = '', actions = [], state = {}) => {
+        const toolbar = document.getElementById('toolbar');
+        toolbar.replaceChildren();
+        const controls = createElement('div', 'toolbar-actions');
+        controls.append(createElement('div', 'toolbar-active', `Monitor view: ${appliesMonitorViewLabel(state.view || currentPageState.appliesView || 'queued')}`), createAppliesMonitorViewControl(state));
+        toolbar.append(controls);
         document.getElementById('summary').replaceChildren();
         const stateNode = createElement('div', 'empty', text);
         markPoliteStatusNode(stateNode);
@@ -8947,65 +8979,92 @@
         return row;
       };
       const renderQueuedAppliesPage = (state) => {
+        const view = normalizeAppliesMonitorView(state?.view || currentPageState.appliesView || 'queued');
+        const route = appliesMonitorRoutePath(view);
+        const readRoute = appliesMonitorReadRoute(view);
         if (state?.status === 'loading' && !(state.records || []).length) {
-          renderQueuedAppliesState('Loading queued apply requests from GET /v1/applies?status=queued…', '', [
-            createQueuedAppliesRefreshButton(state),
-          ]);
+          renderQueuedAppliesState(`Loading ${view === 'active' ? 'active apply handoffs' : 'queued apply requests'} from ${readRoute}…`, '', [
+            createAppliesMonitorRefreshButton(state),
+          ], state);
           return;
         }
         if (state?.status === 'unavailable') {
           const detail = state.error?.message ? ` ${state.error.message}` : '';
-          renderQueuedAppliesState(`Queued applies are temporarily unavailable.${detail}`, 'error', [
-            createQueuedAppliesRefreshButton(state),
+          renderQueuedAppliesState(`${appliesMonitorViewLabel(view)} are temporarily unavailable.${detail}`, 'error', [
+            createAppliesMonitorRefreshButton(state),
             createNavLink(currentBookmarkableURL(), 'Retry current page', '_self'),
-          ]);
+          ], state);
           return;
         }
         if (state?.status === 'error') {
-          renderQueuedAppliesState(`Failed to load queued applies: ${state.error?.message || 'unknown error'}`, 'error', [
-            createQueuedAppliesRefreshButton(state),
+          renderQueuedAppliesState(`Failed to load ${view} applies: ${state.error?.message || 'unknown error'}`, 'error', [
+            createAppliesMonitorRefreshButton(state),
             createNavLink(currentBookmarkableURL(), 'Retry current page', '_self'),
-          ]);
+          ], state);
           return;
         }
 
         const records = queuedApplyRecords(state?.records || []);
         if (!records.length) {
-          renderQueuedAppliesState('No queued apply requests are visible right now. GET /v1/applies?status=queued returned an empty collection.', '', [
-            createNavLink(queuedAppliesRoutePath(), 'Queued applies JSON'),
-            createCopyReadRouteButton(queuedAppliesReadRoute()),
-            createQueuedAppliesRefreshButton(state),
+          renderQueuedAppliesState(appliesMonitorEmptyText(view), '', [
+            createNavLink(route, `${appliesMonitorViewLabel(view)} JSON`),
+            createCopyReadRouteButton(readRoute),
+            createAppliesMonitorRefreshButton(state),
             createNavLink(buildPageURL('applications'), 'Applications overview', '_self'),
-          ]);
+          ], state);
           return;
         }
 
-        document.getElementById('toolbar').replaceChildren();
+        const toolbar = document.getElementById('toolbar');
+        toolbar.replaceChildren();
+        const controls = createElement('div', 'toolbar-actions');
+        controls.append(createElement('div', 'toolbar-active', `Monitor view: ${appliesMonitorViewLabel(view)}`), createAppliesMonitorViewControl(state));
+        toolbar.append(controls);
         const summary = document.getElementById('summary');
         summary.replaceChildren(
-          createMetric('Queued applies', String(records.length)),
-          createMetric('Read route', queuedAppliesReadRoute(), 'summary'),
+          createMetric(appliesMonitorViewLabel(view), String(records.length)),
+          createMetric('Read route', readRoute, 'summary'),
         );
 
         const header = createElement('article', 'account');
         const head = createElement('div', 'account-head');
         const intro = createElement('div');
         intro.append(
-          createElement('div', 'label', 'Queued applies monitor'),
-          createElement('h2', 'account-name', 'Queued applies monitor'),
-          createElement('div', 'account-meta', `Current queued applies read: ${queuedAppliesReadRoute()}.`),
+          createElement('div', 'label', 'Applies monitor'),
+          createElement('h2', 'account-name', 'Applies monitor'),
+          createElement('div', 'account-meta', `Current applies monitor read: ${readRoute}.`),
         );
         const actions = createElement('div', 'row-links account-links');
         actions.append(
-          createNavLink(queuedAppliesRoutePath(), 'Queued applies JSON'),
-          createCopyReadRouteButton(queuedAppliesReadRoute()),
-          createQueuedAppliesRefreshButton(state),
+          createNavLink(route, `${appliesMonitorViewLabel(view)} JSON`),
+          createCopyReadRouteButton(readRoute),
+          createAppliesMonitorRefreshButton(state),
         );
         head.append(intro, actions);
         const rows = createElement('div', 'rows');
         records.forEach((record) => rows.append(createQueuedApplyRow(record)));
         header.append(head, rows);
         document.getElementById('accounts').replaceChildren(header);
+      };
+      const syncAppliesMonitorPageState = () => {
+        const params = new URLSearchParams(window.location.search);
+        params.set('page', 'applies');
+        if (normalizeAppliesMonitorView(currentPageState.appliesView) === 'active') {
+          params.set('appliesView', 'active');
+        } else {
+          params.delete('appliesView');
+          params.delete('applyView');
+        }
+        const query = params.toString();
+        const hash = window.location.hash || '';
+        history.replaceState({}, '', query ? `${window.location.pathname}?${query}${hash}` : `${window.location.pathname}${hash}`);
+      };
+      const setAppliesMonitorView = (view) => {
+        currentPageState = { ...currentPageState, page: 'applies', appliesView: normalizeAppliesMonitorView(view) };
+        syncAppliesMonitorPageState();
+        if (typeof activeEmbeddedReadModelRefresh === 'function') {
+          activeEmbeddedReadModelRefresh({ force: true }).catch(() => {});
+        }
       };
       const recordOperationKind = (operation, index, fallbackPrefix) => {
         const kind = typeof operation?.kind === 'string' ? operation.kind.trim() : '';
@@ -10551,17 +10610,20 @@
       } else if (currentPageState.page === 'applies') {
         const appliesState = {
           status: 'loading',
+          view: normalizeAppliesMonitorView(currentPageState.appliesView || 'queued'),
           records: [],
           error: null,
           onRefresh: null,
         };
         const loadQueuedApplies = () => {
           appliesState.status = 'loading';
+          appliesState.view = normalizeAppliesMonitorView(currentPageState.appliesView || 'queued');
           appliesState.error = null;
           renderQueuedAppliesPage(appliesState);
-          return fetchQueuedApplies()
+          return fetchAppliesMonitor(appliesState.view)
             .then((result) => {
               appliesState.status = 'idle';
+              appliesState.view = normalizeAppliesMonitorView(currentPageState.appliesView || appliesState.view);
               appliesState.records = queuedApplyRecords(result);
               appliesState.error = null;
               renderQueuedAppliesPage(appliesState);
