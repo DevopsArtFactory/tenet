@@ -1795,7 +1795,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`POST /v1/applies/{applyId}/transitions`",
 		"`forbidden: authenticated operator role is required for this operator write route`",
 		"`operator` / `admin`",
-		"`POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, `POST /v1/applies/{applyId}/claim`, and `POST /v1/applies/{applyId}/transitions` require either an exact trusted `X-Tenet-Authorized-Deployments` grant",
+		"`POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, `POST /v1/applies/{applyId}/claim`, `POST /v1/applies/{applyId}/heartbeat`, and `POST /v1/applies/{applyId}/transitions` require either an exact trusted `X-Tenet-Authorized-Deployments` grant",
 		"`GET /v1/overview/deployments/{deploymentName}/events`",
 		"`GET /v1/overview/deployments/{deploymentName}/resource-logs`",
 		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
