@@ -10926,6 +10926,110 @@ async function settle() { await Promise.resolve(); await new Promise((resolve) =
 async function waitForFetchCount(fetchCalls, expected) { for (let attempt = 0; attempt < 20 && fetchCalls.length < expected; attempt += 1) await settle(); }
 `
 
+	t.Run("queued applies monitor renders collection states and plan workspace handoffs", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+` + domHarness + `
+const queuedRecords = [
+  {
+    id: 'apply_queued_123',
+    planId: 'plan_ready_123',
+    deploymentName: 'api-prod',
+    status: 'queued',
+    createdAt: '2026-04-18T08:00:00Z',
+    operations: [
+      { status: 'queued', phase: 'Preparing', target: 'target-a', summary: 'Prepare rollout' },
+      { status: 'running', phase: 'Promoting', target: 'target-b', summary: 'Promote traffic' },
+      { status: 'succeeded', phase: 'Verifying', target: 'target-c', summary: 'Verify rollout' },
+    ],
+    claim: {
+      workerId: 'worker-a',
+      lastHeartbeatAt: '2026-04-18T08:01:00Z',
+      expiresAt: '2026-04-18T08:06:00Z',
+    },
+  },
+];
+const scenarios = [
+  {
+    name: 'happy path',
+    search: '?page=applies',
+    response: { ok: true, json: () => Promise.resolve(queuedRecords) },
+    expected: [
+      'Queued applies monitor',
+      'Current queued applies read: GET /v1/applies?status=queued.',
+      'api-prod',
+      'apply_queued_123',
+      'Apply status | Queued',
+      'Created at | 2026-04-18T08:00:00Z',
+      'Operation progress | 1/3 terminal · 1 running · 1 queued',
+      'Executor worker | worker-a',
+      'Last heartbeat | 2026-04-18T08:01:00Z',
+      'Claim expires | 2026-04-18T08:06:00Z',
+    ],
+    link: { href: '/?page=plan&deployment=api-prod&applyId=apply_queued_123', text: 'Open plan/apply workspace' },
+  },
+  {
+    name: 'empty collection',
+    search: '?page=applies',
+    response: { ok: true, json: () => Promise.resolve([]) },
+    expected: [
+      'No queued apply requests are visible right now.',
+      'GET /v1/applies?status=queued returned an empty collection.',
+    ],
+  },
+  {
+    name: 'denied collection reuses operator read guidance',
+    search: '?page=applies',
+    response: { ok: false, status: 403, text: () => Promise.resolve('forbidden: authenticated viewer-capable role is required for this operator read route') },
+    expected: [
+      'Queued applies monitor',
+      'Viewer role required',
+      'Tenet rejected GET /v1/applies?status=queued after recognizing the caller\'s identity because this operator read route requires a trusted forwarded viewer/operator/admin role.',
+      'Open Operator context details',
+      'Retry current page after access update',
+    ],
+    unexpected: 'Failed to load queued applies:',
+  },
+];
+(async () => {
+  for (const scenario of scenarios) {
+    const document = new Document();
+    document.byID.set('operator-context', document.createElement('section'));
+    document.byID.set('operator-context-status', document.createElement('div'));
+    document.byID.set('toolbar', document.createElement('section'));
+    document.byID.set('summary', document.createElement('section'));
+    document.byID.set('accounts', document.createElement('section'));
+    const fetchCalls = [];
+    const window = { location: { pathname: '/', search: scenario.search, hash: '' } };
+    const history = { replaceState(_state, _title, url) { const [withoutHash, hash = ''] = String(url).split('#'); const [pathname, query = ''] = withoutHash.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
+    const fetch = (url) => {
+      fetchCalls.push(String(url));
+      if (url === '/v1/operator/context') return Promise.resolve({ ok: true, json: () => Promise.resolve({ trustedHeaders: { enabled: true }, identity: { authenticated: true }, roles: { canRead: true, canWrite: false }, deploymentAccess: { enforced: true, forwarded: true } }) });
+      if (url === '/v1/applies?status=queued') return Promise.resolve(scenario.response);
+      throw new Error('unexpected fetch url for ' + scenario.name + ': ' + url);
+    };
+    new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+    await settle();
+    await settle();
+    await settle();
+    if (fetchCalls.join(', ') !== '/v1/operator/context, /v1/applies?status=queued') throw new Error('unexpected fetch sequence for ' + scenario.name + ': ' + fetchCalls.join(', '));
+    if (window.location.search !== scenario.search) throw new Error('expected queued applies URL to stay bookmarkable for ' + scenario.name + ', got ' + window.location.search);
+    const root = document.getElementById('accounts');
+    const text = collectText(root).join(' | ');
+    scenario.expected.forEach((fragment) => {
+      if (!text.includes(fragment)) throw new Error('expected fragment for ' + scenario.name + ': ' + fragment + '\nUI text: ' + text);
+    });
+    if (scenario.unexpected && text.includes(scenario.unexpected)) throw new Error('unexpected fragment for ' + scenario.name + ': ' + scenario.unexpected + '\nUI text: ' + text);
+    if (scenario.link) {
+      const link = collectNodes(root, (node) => node.tagName === 'A').find((node) => node.href === scenario.link.href && node.textContent === scenario.link.text);
+      if (!link || link.target !== '_self' || link.rel) throw new Error('expected _self plan/apply workspace link for ' + scenario.name + ': ' + JSON.stringify(scenario.link));
+    }
+  }
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
 	t.Run("create flow renders server authored preview", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;

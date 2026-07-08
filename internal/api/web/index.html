@@ -2720,7 +2720,7 @@
       const parsePageState = () => {
         const params = new URLSearchParams(window.location.search);
         const page = params.get('page') || params.get('view') || 'applications';
-        const validPages = new Set(['applications', 'application', 'account', 'resource', 'drift', 'plan', 'audit']);
+        const validPages = new Set(['applications', 'application', 'account', 'resource', 'drift', 'plan', 'audit', 'applies']);
         const driftFilters = normalizeDriftFilters({
           query: params.get('driftQuery') || '',
           severity: params.get('driftSeverity') || '',
@@ -3050,7 +3050,7 @@
             renderOperatorContextBanner();
             return;
           }
-          if (currentPageState.page !== 'application' && currentPageState.page !== 'account' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan' && currentPageState.page !== 'audit') return;
+          if (currentPageState.page !== 'application' && currentPageState.page !== 'account' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan' && currentPageState.page !== 'audit' && currentPageState.page !== 'applies') return;
           syncActiveResourceQuickNav();
           scrollToCurrentHashTarget();
         });
@@ -5031,6 +5031,8 @@
             return 'Plan and apply';
           case 'audit':
             return 'Audit log';
+          case 'applies':
+            return 'Queued applies monitor';
           default:
             return 'Operator detail';
         }
@@ -5096,6 +5098,8 @@
               action: pageState?.auditAction,
               limit: pageState?.auditLimit,
             })}`;
+          case 'applies':
+            return queuedAppliesReadRoute();
           default:
             return 'GET operator read route';
         }
@@ -7239,6 +7243,11 @@
         unavailable: 'applications overview unavailable',
         failure: 'applications overview request failed',
       });
+      const queuedAppliesReadRoute = () => 'GET /v1/applies?status=queued';
+      const fetchQueuedApplies = () => fetchEmbeddedReadRouteJSON('/v1/applies?status=queued', {
+        unavailable: 'queued applies API unavailable',
+        failure: 'queued applies request failed',
+      });
       const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {
         unavailable: 'account detail unavailable',
         failure: 'account detail request failed',
@@ -8821,6 +8830,130 @@
         }
         return parts.length ? parts.join(' · ') : 'Lifecycle metadata is not available yet';
       };
+      const queuedApplyRecords = (result) => {
+        if (Array.isArray(result)) return result;
+        if (Array.isArray(result?.records)) return result.records;
+        if (Array.isArray(result?.applies)) return result.applies;
+        if (Array.isArray(result?.entries)) return result.entries;
+        return [];
+      };
+      const renderQueuedAppliesState = (text, className = '', actions = []) => {
+        document.getElementById('toolbar').replaceChildren();
+        document.getElementById('summary').replaceChildren();
+        const stateNode = createElement('div', 'empty', text);
+        markPoliteStatusNode(stateNode);
+        if (className) stateNode.classList.add(className);
+        if (actions.length) {
+          const actionBar = createElement('div', 'row-links');
+          actionBar.append(...actions);
+          stateNode.append(actionBar);
+        }
+        document.getElementById('accounts').replaceChildren(stateNode);
+      };
+      const queuedApplyClaimRows = (record) => {
+        const rows = [];
+        if (applyClaimWorkerValue(record) !== '—') {
+          rows.push(['Executor worker', applyClaimWorkerValue(record)]);
+        }
+        const lastHeartbeat = applyClaimFreshnessValue(record, 'lastHeartbeatAt');
+        if (lastHeartbeat !== '—') {
+          rows.push(['Last heartbeat', lastHeartbeat]);
+        }
+        const expiresAt = applyClaimFreshnessValue(record, 'expiresAt');
+        if (expiresAt !== '—') {
+          rows.push(['Claim expires', expiresAt]);
+        }
+        return rows;
+      };
+      const createQueuedApplyRow = (record) => {
+        const row = createElement('article', 'row');
+        const top = createElement('div', 'row-toggle');
+        const rowTop = createElement('div', 'row-top');
+        const title = createElement('div');
+        title.append(
+          createElement('h3', 'row-title', textOrDash(record?.deploymentName)),
+          createElement('div', 'row-subtitle', `Apply id · ${textOrDash(record?.id)}`),
+        );
+        rowTop.append(title, createElement('span', applyStatusPillClassName(normalizeApplyRecordStatus(record?.status)), applyRecordStatusLabel(record?.status)));
+        top.append(rowTop);
+
+        const metrics = createElement('div', 'application-row-core');
+        [
+          ['Deployment', metricValue(record?.deploymentName)],
+          ['Apply id', metricValue(record?.id)],
+          ['Apply status', applyRecordStatusLabel(record?.status)],
+          ['Created at', metricValue(record?.createdAt)],
+          ['Operation progress', applyOperationProgressSummary(record.operations || []), 'summary'],
+          ...queuedApplyClaimRows(record),
+        ].forEach(([label, value, className]) => metrics.append(createMetric(label, value, className || '')));
+        top.append(metrics);
+
+        const links = createElement('div', 'row-links row-links-shell');
+        if (record?.deploymentName && record?.id) {
+          links.append(createNavLink(buildPageURL('plan', { deployment: record.deploymentName, applyId: record.id }), 'Open plan/apply workspace', '_self'));
+        }
+        if (record?.id) {
+          links.append(createNavLink(buildApplyRequestRoute(record.id), 'Apply JSON'));
+        }
+        row.append(top, links);
+        return row;
+      };
+      const renderQueuedAppliesPage = (state) => {
+        if (state?.status === 'loading' && !(state.records || []).length) {
+          renderQueuedAppliesState('Loading queued apply requests from GET /v1/applies?status=queued…');
+          return;
+        }
+        if (state?.status === 'unavailable') {
+          const detail = state.error?.message ? ` ${state.error.message}` : '';
+          renderQueuedAppliesState(`Queued applies are temporarily unavailable.${detail}`, 'error', [
+            createNavLink(currentBookmarkableURL(), 'Retry current page', '_self'),
+          ]);
+          return;
+        }
+        if (state?.status === 'error') {
+          renderQueuedAppliesState(`Failed to load queued applies: ${state.error?.message || 'unknown error'}`, 'error', [
+            createNavLink(currentBookmarkableURL(), 'Retry current page', '_self'),
+          ]);
+          return;
+        }
+
+        const records = queuedApplyRecords(state?.records || []);
+        if (!records.length) {
+          renderQueuedAppliesState('No queued apply requests are visible right now. GET /v1/applies?status=queued returned an empty collection.', '', [
+            createNavLink('/v1/applies?status=queued', 'Queued applies JSON'),
+            createCopyReadRouteButton(queuedAppliesReadRoute()),
+            createNavLink(buildPageURL('applications'), 'Applications overview', '_self'),
+          ]);
+          return;
+        }
+
+        document.getElementById('toolbar').replaceChildren();
+        const summary = document.getElementById('summary');
+        summary.replaceChildren(
+          createMetric('Queued applies', String(records.length)),
+          createMetric('Read route', queuedAppliesReadRoute(), 'summary'),
+        );
+
+        const header = createElement('article', 'account');
+        const head = createElement('div', 'account-head');
+        const intro = createElement('div');
+        intro.append(
+          createElement('div', 'label', 'Queued applies monitor'),
+          createElement('h2', 'account-name', 'Queued applies monitor'),
+          createElement('div', 'account-meta', `Current queued applies read: ${queuedAppliesReadRoute()}.`),
+        );
+        const actions = createElement('div', 'row-links account-links');
+        actions.append(
+          createNavLink('/v1/applies?status=queued', 'Queued applies JSON'),
+          createCopyReadRouteButton(queuedAppliesReadRoute()),
+          createRefreshButton('Refresh queued applies', state?.status === 'loading', () => state?.onRefresh?.().catch(() => {})),
+        );
+        head.append(intro, actions);
+        const rows = createElement('div', 'rows');
+        records.forEach((record) => rows.append(createQueuedApplyRow(record)));
+        header.append(head, rows);
+        document.getElementById('accounts').replaceChildren(header);
+      };
       const recordOperationKind = (operation, index, fallbackPrefix) => {
         const kind = typeof operation?.kind === 'string' ? operation.kind.trim() : '';
         return kind || `${fallbackPrefix} ${index + 1}`;
@@ -10362,6 +10495,39 @@
           .catch((error) => {
             renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);
           });
+      } else if (currentPageState.page === 'applies') {
+        const appliesState = {
+          status: 'loading',
+          records: [],
+          error: null,
+          onRefresh: null,
+        };
+        const loadQueuedApplies = () => {
+          appliesState.status = 'loading';
+          appliesState.error = null;
+          renderQueuedAppliesPage(appliesState);
+          return fetchQueuedApplies()
+            .then((result) => {
+              appliesState.status = 'idle';
+              appliesState.records = queuedApplyRecords(result);
+              appliesState.error = null;
+              renderQueuedAppliesPage(appliesState);
+              return appliesState.records;
+            })
+            .catch((error) => {
+              if (operatorReadFailureHeading(error)) {
+                renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);
+                throw error;
+              }
+              appliesState.status = error.kind === 'unavailable' ? 'unavailable' : 'error';
+              appliesState.error = error;
+              renderQueuedAppliesPage(appliesState);
+              throw error;
+            });
+        };
+        appliesState.onRefresh = () => appliesState.status === 'loading' ? Promise.resolve(appliesState.records) : loadQueuedApplies();
+        activeEmbeddedReadModelRefresh = appliesState.onRefresh;
+        loadQueuedApplies().catch(() => {});
       } else if (currentPageState.page === 'audit') {
         activeEmbeddedReadModelRefresh = () => loadAuditLogsPage({ force: true });
         loadAuditLogsPage().catch(() => {});
