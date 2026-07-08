@@ -2015,8 +2015,8 @@ assert 'without losing the current search, sync, health, or account filters' in 
 assert 'currentBookmarkableURL(operatorContextAccessDetailsPanelID)' in ui, ui
 assert "return 'Applications overview';" in ui, ui
 assert "return 'Queued applies monitor';" in applies_ui, applies_ui
-assert "const queuedAppliesReadRoute = () => 'GET /v1/applies?status=queued';" in applies_ui, applies_ui
-assert "const fetchQueuedApplies = () => fetchEmbeddedReadRouteJSON('/v1/applies?status=queued', {" in applies_ui, applies_ui
+assert "const queuedAppliesRoutePath = () => '/v1/applies?status=queued';" in applies_ui, applies_ui
+assert "const fetchQueuedApplies = () => fetchEmbeddedReadRouteJSON(queuedAppliesRoutePath(), {" in applies_ui, applies_ui
 assert "return queuedAppliesReadRoute();" in applies_ui, applies_ui
 assert "renderQueuedAppliesPage(appliesState);" in applies_ui, applies_ui
 assert "Loading queued apply requests from GET /v1/applies?status=queued…" in applies_ui, applies_ui
@@ -2025,6 +2025,11 @@ assert "Queued applies are temporarily unavailable." in applies_ui, applies_ui
 assert "Failed to load queued applies:" in applies_ui, applies_ui
 assert "createNavLink(buildPageURL('plan', { deployment: record.deploymentName, applyId: record.id }), 'Open plan/apply workspace', '_self')" in applies_ui, applies_ui
 assert "['Operation progress', applyOperationProgressSummary(record.operations || []), 'summary']" in applies_ui, applies_ui
+assert "['Claim status', applyClaimFreshnessSummary(record), 'summary']" in applies_ui, applies_ui
+assert "Pending executor claim — no local-safe executor has claimed this apply request yet." in applies_ui, applies_ui
+assert "heartbeat freshness looks current" in applies_ui, applies_ui
+assert "heartbeat or lease is stale or expired" in applies_ui, applies_ui
+assert "createQueuedAppliesRefreshButton = (state) => createRefreshButton('Refresh applies'" in applies_ui, applies_ui
 assert "['Last heartbeat', applyClaimFreshnessValue(record, 'lastHeartbeatAt')]" in applies_ui, applies_ui
 assert "['Claim expires', applyClaimFreshnessValue(record, 'expiresAt')]" in applies_ui, applies_ui
 assert "const setEmbeddedBrowserTitle = (...parts) => {" in ui, ui
@@ -2075,7 +2080,7 @@ assert "const activeApplyClaimStatuses = ['pending', 'queued', 'running', 'in_pr
 assert "const hasApplyClaimCoreMetadata = (record) => applyClaimWorkerValue(record) !== '—' || applyClaimTimestampValue(record) !== '—';" in ui, ui
 assert "const applyClaimFreshnessRows = (record) => {" in ui, ui
 assert 'Freshness metadata unavailable for this active apply claim.' in ui, ui
-assert "const hasApplyClaimMetadata = (record) => hasApplyClaimCoreMetadata(record) || applyClaimFreshnessRows(record).length > 0;" in ui, ui
+assert "const hasApplyClaimMetadata = (record) => hasApplyClaimCoreMetadata(record) || hasApplyClaimFreshnessMetadata(record);" in ui, ui
 assert "const hasPendingApplyClaim = (record) => {" in ui, ui
 assert "return isActiveApplyRecord(record);" in ui, ui
 assert 'Linked resources' in ui, ui

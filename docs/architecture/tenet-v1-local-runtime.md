@@ -37,8 +37,10 @@ heartbeat (`POST /v1/applies/{applyId}/heartbeat`), and transition
 (`POST /v1/applies/{applyId}/transitions`) routes together. They persist and
 advance Tenet apply metadata only; this local-safe record lifecycle does not
 perform live AWS mutation. The read-only `/?page=applies` monitor is backed by
-that queued collection read and links operators back to the plan/apply workspace
-for detail review.
+that queued collection read, includes an explicit `Refresh applies` action that
+preserves the bookmarkable URL, translates claim heartbeat/lease metadata into
+fresh/stale/pending operator copy, and links operators back to the plan/apply
+workspace for detail review.
 
 For `tenet-api`, the local runtime also enables request-scoped JSON logs for every API/UI request. Operators can rely on the stable fields `request_id`, `method`, `path`, `status`, `duration_ms`, and `result`, plus an `error` field on timeout/panic paths. `TENET_API_REQUEST_TIMEOUT` defaults to `30s`; set it to `0` to disable the timeout wrapper for local debugging.
 

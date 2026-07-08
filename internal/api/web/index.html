@@ -7243,8 +7243,9 @@
         unavailable: 'applications overview unavailable',
         failure: 'applications overview request failed',
       });
-      const queuedAppliesReadRoute = () => 'GET /v1/applies?status=queued';
-      const fetchQueuedApplies = () => fetchEmbeddedReadRouteJSON('/v1/applies?status=queued', {
+      const queuedAppliesRoutePath = () => '/v1/applies?status=queued';
+      const queuedAppliesReadRoute = () => `GET ${queuedAppliesRoutePath()}`;
+      const fetchQueuedApplies = () => fetchEmbeddedReadRouteJSON(queuedAppliesRoutePath(), {
         unavailable: 'queued applies API unavailable',
         failure: 'queued applies request failed',
       });
@@ -8797,17 +8798,60 @@
       const activeApplyClaimStatuses = ['pending', 'queued', 'running', 'in_progress', 'in-progress'];
       const hasApplyClaimCoreMetadata = (record) => applyClaimWorkerValue(record) !== '—' || applyClaimTimestampValue(record) !== '—';
       const isActiveApplyRecord = (record) => activeApplyClaimStatuses.includes(String(record?.status || '').toLowerCase());
-      const applyClaimFreshnessRows = (record) => {
-        const rows = [
-          ['Claim freshness', applyClaimFreshnessValue(record, 'state')],
-          ['Freshness reason', applyClaimFreshnessValue(record, 'reason')],
-          ['Last heartbeat', applyClaimFreshnessValue(record, 'lastHeartbeatAt')],
-          ['Claim expires', applyClaimFreshnessValue(record, 'expiresAt')],
-        ].filter(([, value]) => value !== '—');
-        if (rows.length > 0 || !hasApplyClaimCoreMetadata(record) || !isActiveApplyRecord(record)) return rows;
-        return [['Claim freshness', 'Freshness metadata unavailable for this active apply claim.']];
+      const applyClaimFreshnessState = (record) => String(applyClaimFreshnessValue(record, 'state')).toLowerCase();
+      const applyClaimFreshnessReason = (record) => applyClaimFreshnessValue(record, 'reason');
+      const applyClaimDateValue = (record, field) => {
+        const raw = applyClaimFreshnessValue(record, field);
+        if (raw === '—') return null;
+        const date = new Date(raw);
+        return Number.isNaN(date.getTime()) ? null : date;
       };
-      const hasApplyClaimMetadata = (record) => hasApplyClaimCoreMetadata(record) || applyClaimFreshnessRows(record).length > 0;
+      const applyClaimFreshnessSummary = (record) => {
+        const worker = applyClaimWorkerValue(record);
+        const workerPart = worker !== '—' ? ` by ${worker}` : '';
+        const heartbeat = applyClaimFreshnessValue(record, 'lastHeartbeatAt');
+        const expires = applyClaimFreshnessValue(record, 'expiresAt');
+        const state = applyClaimFreshnessState(record);
+        const reason = applyClaimFreshnessReason(record);
+        const expiresAt = applyClaimDateValue(record, 'expiresAt');
+        const hasClaim = hasApplyClaimCoreMetadata(record);
+        const active = isActiveApplyRecord(record);
+        if (!hasClaim && active) {
+          return 'Pending executor claim — no local-safe executor has claimed this apply request yet.';
+        }
+        if (!hasClaim) return 'No executor claim metadata is attached to this apply request.';
+        const staleStates = ['stale', 'expired', 'lease_expired', 'lease-expired', 'heartbeat_stale', 'heartbeat-stale'];
+        const freshStates = ['fresh', 'healthy', 'active'];
+        if (staleStates.includes(state) || (expiresAt && expiresAt.getTime() <= Date.now())) {
+          const staleReason = reason !== '—' ? ` Reason: ${reason}` : ' The executor heartbeat or lease is stale or expired.';
+          return `Claimed${workerPart}, but attention is needed.${staleReason}`;
+        }
+        if (freshStates.includes(state) || heartbeat !== '—' || (expiresAt && expiresAt.getTime() > Date.now())) {
+          const expiryPart = expires !== '—' ? ` Lease expires at ${expires}.` : '';
+          return `Claimed${workerPart}; heartbeat freshness looks current.${expiryPart}`;
+        }
+        return `Claimed${workerPart}; freshness metadata is unavailable, so verify the executor before assuming progress.`;
+      };
+      const applyClaimFreshnessFieldRows = (record) => [
+        ['Claim freshness', applyClaimFreshnessValue(record, 'state')],
+        ['Freshness reason', applyClaimFreshnessValue(record, 'reason')],
+        ['Last heartbeat', applyClaimFreshnessValue(record, 'lastHeartbeatAt')],
+        ['Claim expires', applyClaimFreshnessValue(record, 'expiresAt')],
+      ].filter(([, value]) => value !== '—');
+      const hasApplyClaimFreshnessMetadata = (record) => applyClaimFreshnessFieldRows(record).length > 0;
+      const applyClaimFreshnessRows = (record) => {
+        const rows = [];
+        if (isActiveApplyRecord(record) || hasApplyClaimCoreMetadata(record)) {
+          rows.push(['Claim status', applyClaimFreshnessSummary(record), 'summary']);
+        }
+        const freshnessRows = applyClaimFreshnessFieldRows(record);
+        rows.push(...freshnessRows);
+        if (freshnessRows.length === 0 && hasApplyClaimCoreMetadata(record) && isActiveApplyRecord(record)) {
+          rows.push(['Claim freshness', 'Freshness metadata unavailable for this active apply claim.']);
+        }
+        return rows;
+      };
+      const hasApplyClaimMetadata = (record) => hasApplyClaimCoreMetadata(record) || hasApplyClaimFreshnessMetadata(record);
       const hasPendingApplyClaim = (record) => {
         if (hasApplyClaimMetadata(record)) return false;
         return isActiveApplyRecord(record);
@@ -8837,6 +8881,7 @@
         if (Array.isArray(result?.entries)) return result.entries;
         return [];
       };
+      const createQueuedAppliesRefreshButton = (state) => createRefreshButton('Refresh applies', state?.status === 'loading', () => state?.onRefresh?.().catch(() => {}));
       const renderQueuedAppliesState = (text, className = '', actions = []) => {
         document.getElementById('toolbar').replaceChildren();
         document.getElementById('summary').replaceChildren();
@@ -8852,6 +8897,9 @@
       };
       const queuedApplyClaimRows = (record) => {
         const rows = [];
+        if (isActiveApplyRecord(record) || hasApplyClaimCoreMetadata(record)) {
+          rows.push(['Claim status', applyClaimFreshnessSummary(record), 'summary']);
+        }
         if (applyClaimWorkerValue(record) !== '—') {
           rows.push(['Executor worker', applyClaimWorkerValue(record)]);
         }
@@ -8900,18 +8948,22 @@
       };
       const renderQueuedAppliesPage = (state) => {
         if (state?.status === 'loading' && !(state.records || []).length) {
-          renderQueuedAppliesState('Loading queued apply requests from GET /v1/applies?status=queued…');
+          renderQueuedAppliesState('Loading queued apply requests from GET /v1/applies?status=queued…', '', [
+            createQueuedAppliesRefreshButton(state),
+          ]);
           return;
         }
         if (state?.status === 'unavailable') {
           const detail = state.error?.message ? ` ${state.error.message}` : '';
           renderQueuedAppliesState(`Queued applies are temporarily unavailable.${detail}`, 'error', [
+            createQueuedAppliesRefreshButton(state),
             createNavLink(currentBookmarkableURL(), 'Retry current page', '_self'),
           ]);
           return;
         }
         if (state?.status === 'error') {
           renderQueuedAppliesState(`Failed to load queued applies: ${state.error?.message || 'unknown error'}`, 'error', [
+            createQueuedAppliesRefreshButton(state),
             createNavLink(currentBookmarkableURL(), 'Retry current page', '_self'),
           ]);
           return;
@@ -8920,8 +8972,9 @@
         const records = queuedApplyRecords(state?.records || []);
         if (!records.length) {
           renderQueuedAppliesState('No queued apply requests are visible right now. GET /v1/applies?status=queued returned an empty collection.', '', [
-            createNavLink('/v1/applies?status=queued', 'Queued applies JSON'),
+            createNavLink(queuedAppliesRoutePath(), 'Queued applies JSON'),
             createCopyReadRouteButton(queuedAppliesReadRoute()),
+            createQueuedAppliesRefreshButton(state),
             createNavLink(buildPageURL('applications'), 'Applications overview', '_self'),
           ]);
           return;
@@ -8944,9 +8997,9 @@
         );
         const actions = createElement('div', 'row-links account-links');
         actions.append(
-          createNavLink('/v1/applies?status=queued', 'Queued applies JSON'),
+          createNavLink(queuedAppliesRoutePath(), 'Queued applies JSON'),
           createCopyReadRouteButton(queuedAppliesReadRoute()),
-          createRefreshButton('Refresh queued applies', state?.status === 'loading', () => state?.onRefresh?.().catch(() => {})),
+          createQueuedAppliesRefreshButton(state),
         );
         head.append(intro, actions);
         const rows = createElement('div', 'rows');
