@@ -577,13 +577,21 @@ func BuildDeploymentOverviewEvents(c manifest.Catalog, snapshots []statusstore.S
 	if len(events) == 0 {
 		events = []domain.StatusHistoryEntry{}
 	}
+	retention := BuildRuntimeEventRetention(len(events))
+	for _, snapshot := range snapshots {
+		if snapshot.DeploymentName != detail.Name || snapshot.Status.RuntimeHistoryRetention == nil {
+			continue
+		}
+		retention = BuildRuntimeEventRetentionWithLimit(len(events), snapshot.Status.RuntimeHistoryRetention.Limit)
+		break
+	}
 
 	return DeploymentOverviewEvents{
 		DeploymentName:      detail.Name,
 		Events:              events,
 		SourceSummary:       BuildRuntimeEventSourceSummary(events),
 		ManagedDriftSummary: summarizeManagedDriftEvents(events),
-		Retention:           BuildRuntimeEventRetention(len(events)),
+		Retention:           retention,
 	}, nil
 }
 
@@ -621,12 +629,19 @@ func BuildRuntimeEventSourceSummary(events []domain.StatusHistoryEntry) []Runtim
 }
 
 func BuildRuntimeEventRetention(retainedEventCount int) RuntimeEventRetention {
+	return BuildRuntimeEventRetentionWithLimit(retainedEventCount, domain.RuntimeHistoryMaxEntries)
+}
+
+func BuildRuntimeEventRetentionWithLimit(retainedEventCount int, limit int) RuntimeEventRetention {
+	if limit <= 0 {
+		limit = domain.RuntimeHistoryMaxEntries
+	}
 	status := domain.RuntimeHistoryRetentionStatusWithinLimit
-	if retainedEventCount >= domain.RuntimeHistoryMaxEntries {
+	if retainedEventCount >= limit {
 		status = domain.RuntimeHistoryRetentionStatusAtLimit
 	}
 	return RuntimeEventRetention{
-		Limit:              domain.RuntimeHistoryMaxEntries,
+		Limit:              limit,
 		RetainedEventCount: retainedEventCount,
 		Status:             status,
 	}

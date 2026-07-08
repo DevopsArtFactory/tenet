@@ -2767,6 +2767,47 @@ func TestEmitRuntimePlansCapsRuntimeHistory(t *testing.T) {
 	if latest.Timestamp != "2026-04-16T06:45:00Z" || latest.Summary != "Creating candidate capacity for weighted target groups" || latest.CurrentStep != "CreateCandidateCapacity" {
 		t.Fatalf("expected newest controller-authored history entry to be retained after trimming, got %+v", latest)
 	}
+	if status.RuntimeHistoryRetention != nil {
+		t.Fatalf("expected default runtime history retention to preserve legacy snapshot shape, got %+v", status.RuntimeHistoryRetention)
+	}
+}
+
+func TestEmitRuntimePlansUsesConfiguredRuntimeHistoryLimit(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[],"history":[{"timestamp":"2026-04-16T05:00:00Z","source":"controller","summary":"entry-00","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Accepted","currentStep":"step-00"},{"timestamp":"2026-04-16T05:01:00Z","source":"controller","summary":"entry-01","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Accepted","currentStep":"step-01"},{"timestamp":"2026-04-16T05:02:00Z","source":"controller","summary":"entry-02","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Accepted","currentStep":"step-02"}]} }]`)
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 45, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath, RuntimeHistoryLimit: 2}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if len(status.History) != 2 {
+		t.Fatalf("expected configured limit to retain 2 history entries, got %+v", status.History)
+	}
+	if got := status.History[0].Summary; got != "entry-02" {
+		t.Fatalf("expected configured limit to trim oldest entries, got %+v", status.History)
+	}
+	latest := status.History[len(status.History)-1]
+	if latest.Timestamp != "2026-04-16T06:45:00Z" || latest.Summary != "Creating candidate capacity for weighted target groups" {
+		t.Fatalf("expected newest controller entry to be retained, got %+v", latest)
+	}
+	if status.RuntimeHistoryRetention == nil || status.RuntimeHistoryRetention.Limit != 2 || status.RuntimeHistoryRetention.RetainedEventCount != 2 || status.RuntimeHistoryRetention.Status != domain.RuntimeHistoryRetentionStatusAtLimit {
+		t.Fatalf("expected configured runtime history retention metadata, got %+v", status.RuntimeHistoryRetention)
+	}
 }
 
 func TestEmitRuntimePlansBootstrapsHistoryWithArtifactAndConditions(t *testing.T) {

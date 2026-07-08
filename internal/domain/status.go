@@ -21,12 +21,22 @@ const (
 )
 
 const (
-	// RuntimeHistoryMaxEntries is the controller-retained runtime history cap per deployment.
+	// RuntimeHistoryMaxEntries is the default controller-retained runtime history cap per deployment.
 	RuntimeHistoryMaxEntries = 10
+	// RuntimeHistoryMaxConfigurableEntries bounds configured controller history retention.
+	RuntimeHistoryMaxConfigurableEntries = 1000
 
 	RuntimeHistoryRetentionStatusWithinLimit = "within_retention_limit"
 	RuntimeHistoryRetentionStatusAtLimit     = "at_retention_limit"
 )
+
+// RuntimeHistoryRetention captures the effective controller-retained runtime
+// history window persisted with deployment status snapshots.
+type RuntimeHistoryRetention struct {
+	Limit              int    `json:"limit"`
+	RetainedEventCount int    `json:"retainedEventCount"`
+	Status             string `json:"status"`
+}
 
 // Valid reports whether the sync state is one of the supported values.
 func (s SyncState) Valid() bool {
@@ -272,14 +282,15 @@ func (s RuntimeSummary) MarshalJSON() ([]byte, error) {
 
 // DeploymentStatus captures observed state separate from desired spec.
 type DeploymentStatus struct {
-	ObservedGeneration int64                `json:"observedGeneration"`
-	Sync               Sync                 `json:"sync"`
-	Health             Health               `json:"health"`
-	Conditions         []Condition          `json:"conditions"`
-	ManagedDrift       []ManagedDriftItem   `json:"managedDrift,omitempty"`
-	History            []StatusHistoryEntry `json:"history,omitempty"`
-	DeployedArtifact   DeploymentArtifact   `json:"deployedArtifact,omitempty"`
-	Rollout            *RolloutSummary      `json:"rollout,omitempty"`
+	ObservedGeneration      int64                    `json:"observedGeneration"`
+	Sync                    Sync                     `json:"sync"`
+	Health                  Health                   `json:"health"`
+	Conditions              []Condition              `json:"conditions"`
+	ManagedDrift            []ManagedDriftItem       `json:"managedDrift,omitempty"`
+	History                 []StatusHistoryEntry     `json:"history,omitempty"`
+	RuntimeHistoryRetention *RuntimeHistoryRetention `json:"runtimeHistoryRetention,omitempty"`
+	DeployedArtifact        DeploymentArtifact       `json:"deployedArtifact,omitempty"`
+	Rollout                 *RolloutSummary          `json:"rollout,omitempty"`
 }
 
 // IsSynced reports whether the deployment is currently synced.

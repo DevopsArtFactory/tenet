@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -167,6 +168,40 @@ func TestLoadStartupConfigLoadsRuntimeSettings(t *testing.T) {
 	}
 	if config.RequeueInterval != 7*time.Second {
 		t.Fatalf("unexpected requeue interval: %s", config.RequeueInterval)
+	}
+	if config.RuntimeHistoryLimit != domain.RuntimeHistoryMaxEntries {
+		t.Fatalf("expected default runtime history limit %d, got %d", domain.RuntimeHistoryMaxEntries, config.RuntimeHistoryLimit)
+	}
+}
+
+func TestLoadStartupConfigLoadsRuntimeHistoryLimit(t *testing.T) {
+	config, err := loadStartupConfig(func(key string) string {
+		if key == "TENET_CONTROLLER_RUNTIME_HISTORY_LIMIT" {
+			return "3"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("loadStartupConfig returned error: %v", err)
+	}
+	if config.RuntimeHistoryLimit != 3 {
+		t.Fatalf("expected configured runtime history limit 3, got %d", config.RuntimeHistoryLimit)
+	}
+}
+
+func TestLoadStartupConfigRejectsInvalidRuntimeHistoryLimit(t *testing.T) {
+	for _, value := range []string{"bogus", "0", "-1", strconv.Itoa(domain.RuntimeHistoryMaxConfigurableEntries + 1)} {
+		t.Run(value, func(t *testing.T) {
+			_, err := loadStartupConfig(func(key string) string {
+				if key == "TENET_CONTROLLER_RUNTIME_HISTORY_LIMIT" {
+					return value
+				}
+				return ""
+			})
+			if err == nil || !strings.Contains(err.Error(), "TENET_CONTROLLER_RUNTIME_HISTORY_LIMIT") {
+				t.Fatalf("expected invalid runtime history limit error, got %v", err)
+			}
+		})
 	}
 }
 
