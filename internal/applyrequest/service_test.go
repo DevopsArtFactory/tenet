@@ -501,6 +501,128 @@ func TestServiceClaimRejectsCompetingWorkerAndInvalidStates(t *testing.T) {
 	}
 }
 
+func TestServiceClaimAllowsExplicitExpiredClaimTakeover(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_expired_claim": {
+				ID:             "apply_expired_claim",
+				PlanID:         "plan_ready",
+				DeploymentName: "api-prod",
+				Status:         StatusRunning,
+				CreatedAt:      "2026-04-18T08:05:00Z",
+				Lifecycle:      Lifecycle{UpdatedAt: "2026-04-18T08:10:00Z", StartedAt: "2026-04-18T08:10:00Z", CurrentStep: 2, CompletedSteps: 1, TotalSteps: 2},
+				Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z", LastHeartbeatAt: "2026-04-18T08:12:00Z", ExpiresAt: "2026-04-18T08:15:00Z"},
+				Transitions:    []Transition{{TransitionedAt: "2026-04-18T08:10:00Z", PreviousStatus: StatusQueued, Status: StatusRunning, Step: 1}},
+				Operations: []Operation{
+					{Status: OperationStatusSucceeded, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity."},
+					{Status: OperationStatusRunning, Phase: "Promoting", Target: "api-prod listener", Summary: "Shift production traffic."},
+				},
+			},
+		},
+	}
+	service := Service{Store: store, Now: func() time.Time { return time.Date(2026, 4, 18, 8, 16, 0, 0, time.UTC) }}
+
+	claimed, err := service.Claim(context.Background(), "apply_expired_claim", ClaimRequest{WorkerID: "worker-b", AllowExpiredClaim: true})
+	if err != nil {
+		t.Fatalf("expired claim takeover returned error: %v", err)
+	}
+	if claimed.Status != StatusRunning {
+		t.Fatalf("expected takeover to keep running status, got %+v", claimed)
+	}
+	if claimed.Claim == nil || claimed.Claim.WorkerID != "worker-b" || claimed.Claim.ClaimedAt != "2026-04-18T08:16:00Z" || claimed.Claim.LastHeartbeatAt != "2026-04-18T08:16:00Z" || claimed.Claim.ExpiresAt != "2026-04-18T08:21:00Z" {
+		t.Fatalf("expected refreshed takeover claim metadata, got %+v", claimed.Claim)
+	}
+	if claimed.Lifecycle.CurrentStep != 2 || claimed.Lifecycle.CompletedSteps != 1 || claimed.Lifecycle.StartedAt != "2026-04-18T08:10:00Z" || claimed.Lifecycle.UpdatedAt != "2026-04-18T08:16:00Z" {
+		t.Fatalf("expected takeover to preserve current step while updating lifecycle timestamp, got %+v", claimed.Lifecycle)
+	}
+	if statuses := []OperationStatus{claimed.Operations[0].Status, claimed.Operations[1].Status}; !reflect.DeepEqual(statuses, []OperationStatus{OperationStatusSucceeded, OperationStatusRunning}) {
+		t.Fatalf("expected takeover to preserve current operation progress, got %+v", claimed.Operations)
+	}
+	if len(claimed.Transitions) != 2 || claimed.Transitions[1].PreviousStatus != StatusRunning || claimed.Transitions[1].Status != StatusRunning || claimed.Transitions[1].Step != 2 {
+		t.Fatalf("expected takeover to append running recovery transition, got %+v", claimed.Transitions)
+	}
+	if !strings.Contains(claimed.Details[0], "recovered expired local-safe claim") || !strings.Contains(claimed.Details[0], "worker-a") || !strings.Contains(claimed.Details[0], "worker-b") {
+		t.Fatalf("expected takeover detail to name old and new workers, got %+v", claimed.Details)
+	}
+	stored, err := store.Get(context.Background(), "apply_expired_claim")
+	if err != nil {
+		t.Fatalf("Get returned error: %v", err)
+	}
+	if stored.Claim == nil || stored.Claim.WorkerID != "worker-b" {
+		t.Fatalf("expected takeover claim to persist, got %+v", stored.Claim)
+	}
+}
+
+func TestServiceClaimRequiresExpiredPersistedExpiresAtForTakeover(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_expired_without_opt_in": {
+				ID:             "apply_expired_without_opt_in",
+				PlanID:         "plan_ready",
+				DeploymentName: "api-prod",
+				Status:         StatusRunning,
+				Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z", LastHeartbeatAt: "2026-04-18T08:12:00Z", ExpiresAt: "2026-04-18T08:15:00Z"},
+			},
+			"apply_fresh_with_opt_in": {
+				ID:             "apply_fresh_with_opt_in",
+				PlanID:         "plan_ready",
+				DeploymentName: "api-prod",
+				Status:         StatusRunning,
+				Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:10:00Z", LastHeartbeatAt: "2026-04-18T08:12:00Z", ExpiresAt: "2026-04-18T08:20:00Z"},
+			},
+			"apply_legacy_without_expires_at": {
+				ID:             "apply_legacy_without_expires_at",
+				PlanID:         "plan_ready",
+				DeploymentName: "api-prod",
+				Status:         StatusRunning,
+				Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:00:00Z"},
+			},
+		},
+	}
+	service := Service{Store: store, Now: func() time.Time { return time.Date(2026, 4, 18, 8, 16, 0, 0, time.UTC) }}
+
+	for _, tc := range []struct {
+		id      string
+		request ClaimRequest
+		want    []string
+	}{
+		{
+			id:      "apply_expired_without_opt_in",
+			request: ClaimRequest{WorkerID: "worker-b"},
+			want:    []string{"stale claim", "retry with allowExpiredClaim=true to explicitly recover the expired local-safe claim"},
+		},
+		{
+			id:      "apply_fresh_with_opt_in",
+			request: ClaimRequest{WorkerID: "worker-b", AllowExpiredClaim: true},
+			want:    []string{"active claim", "retry with the same workerId for idempotent recovery"},
+		},
+		{
+			id:      "apply_legacy_without_expires_at",
+			request: ClaimRequest{WorkerID: "worker-b", AllowExpiredClaim: true},
+			want:    []string{"stale claim", "legacy claim metadata used claimedAt as lastHeartbeatAt"},
+		},
+	} {
+		t.Run(tc.id, func(t *testing.T) {
+			_, err := service.Claim(context.Background(), tc.id, tc.request)
+			if !errors.Is(err, ErrAlreadyClaimed) {
+				t.Fatalf("expected ErrAlreadyClaimed, got %v", err)
+			}
+			for _, fragment := range tc.want {
+				if !strings.Contains(err.Error(), fragment) {
+					t.Fatalf("expected error fragment %q in %v", fragment, err)
+				}
+			}
+			stored, getErr := store.Get(context.Background(), tc.id)
+			if getErr != nil {
+				t.Fatalf("Get returned error: %v", getErr)
+			}
+			if stored.Claim == nil || stored.Claim.WorkerID != "worker-a" {
+				t.Fatalf("claim conflict should preserve existing worker, got %+v", stored.Claim)
+			}
+		})
+	}
+}
+
 func TestServiceClaimUsesAtomicStoreBoundary(t *testing.T) {
 	store := &memoryStore{
 		records: map[string]Record{

@@ -12443,6 +12443,46 @@ func TestRouterClaimApplyRequest(t *testing.T) {
 		}
 	})
 
+	t.Run("claim forwards explicit expired claim recovery opt in", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			ClaimApplyRequest: func(ctx context.Context, applyID string, req applyrequest.ClaimRequest) (applyrequest.Record, error) {
+				if applyID != "apply_1234abcd" {
+					t.Fatalf("unexpected apply claim for %s", applyID)
+				}
+				if req.WorkerID != "worker-b" || !req.AllowExpiredClaim {
+					t.Fatalf("expected explicit expired-claim recovery request, got %+v", req)
+				}
+				return applyrequest.Record{
+					ID:             applyID,
+					PlanID:         "plan_1234abcd",
+					DeploymentName: "api-prod",
+					Status:         applyrequest.StatusRunning,
+					CreatedAt:      "2026-04-18T08:05:00Z",
+					Details:        []string{"Executor worker-b recovered expired local-safe claim from worker worker-a for local-safe handoff; no live AWS mutation has been attempted by the claim route."},
+					Claim:          &applyrequest.Claim{WorkerID: "worker-b", ClaimedAt: "2026-04-18T08:16:00Z", LastHeartbeatAt: "2026-04-18T08:16:00Z", ExpiresAt: "2026-04-18T08:21:00Z"},
+					Source:         applyrequest.SourceContext{PlanID: "plan_1234abcd", Route: "/v1/plans/plan_1234abcd", PlanStatus: "ready", Fingerprint: "plan_input"},
+				}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/claim", strings.NewReader(`{"workerId":"worker-b","allowExpiredClaim":true}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var record applyrequest.Record
+		if err := json.Unmarshal(resp.Body.Bytes(), &record); err != nil {
+			t.Fatalf("failed to decode apply claim payload: %v", err)
+		}
+		if record.Claim == nil || record.Claim.WorkerID != "worker-b" {
+			t.Fatalf("unexpected recovered apply claim payload: %+v", record)
+		}
+	})
+
 	t.Run("unavailable", func(t *testing.T) {
 		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/claim", strings.NewReader(`{"workerId":"worker-a"}`))
