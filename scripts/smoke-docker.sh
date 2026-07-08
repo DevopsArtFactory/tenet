@@ -3465,11 +3465,101 @@ queued_apply_id=$(json_string_field_from_path "$queued_apply_record_path" id)
 queued_apply_record_get=$(wait_for_apply_status "$queued_apply_id" failed)
 queued_plan_preview_get_path=$(write_payload queued-plan-preview-get.json "$queued_plan_preview_get")
 queued_apply_record_get_path=$(write_payload queued-apply-record-get.json "$queued_apply_record_get")
+file_backed_claim_apply_id=apply_smoke_docker_claim_heartbeat
+file_backed_queued_apply_id=apply_smoke_docker_queued_subset
+docker_apply_store_before_claim=$("${COMPOSE[@]}" exec -T api sh -c 'cat /tmp/tenet/apply-requests.json 2>/dev/null || printf "[]\n"')
+docker_apply_store_before_claim_path=$(write_payload docker-apply-store-before-claim.json "$docker_apply_store_before_claim")
+docker_apply_store_seeded_path="$PAYLOAD_DIR/docker-apply-store-seeded.json"
+PLAN_PREVIEW_PATH="$queued_plan_preview_path" \
+APPLY_STORE_PATH="$docker_apply_store_before_claim_path" \
+OUTPUT_PATH="$docker_apply_store_seeded_path" \
+CLAIM_APPLY_ID="$file_backed_claim_apply_id" \
+QUEUED_APPLY_ID="$file_backed_queued_apply_id" \
+python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+plan = json.loads(Path(os.environ["PLAN_PREVIEW_PATH"]).read_text(encoding="utf-8"))
+operations = plan.get("operations") or []
+if not operations:
+    raise SystemExit("plan preview must include operations for file-backed apply collection smoke")
+store_path = Path(os.environ["APPLY_STORE_PATH"])
+store_text = store_path.read_text(encoding="utf-8").strip()
+records = json.loads(store_text or "[]")
+claim_apply_id = os.environ["CLAIM_APPLY_ID"]
+queued_apply_id = os.environ["QUEUED_APPLY_ID"]
+records = [record for record in records if record.get("id") not in {claim_apply_id, queued_apply_id}]
+
+def apply_record(apply_id, created_at):
+    return {
+        "id": apply_id,
+        "planId": plan["id"],
+        "deploymentName": plan["deploymentName"],
+        "status": "queued",
+        "createdAt": created_at,
+        "details": [
+            "Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true enabled the local-safe executor handoff path.",
+            "Tenet will advance this same applyId locally, but live AWS mutation is still not implemented for this backend slice.",
+        ],
+        "lifecycle": {
+            "updatedAt": created_at,
+            "totalSteps": len(operations),
+        },
+        "operations": [
+            {
+                "id": operation.get("id", ""),
+                "status": "queued",
+                "phase": operation.get("phase", ""),
+                "target": operation.get("target", ""),
+                "summary": operation.get("summary", ""),
+            }
+            for operation in operations
+        ],
+        "source": {
+            "planId": plan["id"],
+            "route": f"/v1/plans/{plan['id']}",
+            "planStatus": plan["status"],
+            "planCreatedAt": plan.get("createdAt", ""),
+            "fingerprint": (plan.get("source") or {}).get("fingerprint", ""),
+        },
+    }
+
+records.append(apply_record(claim_apply_id, "2026-04-18T08:10:00Z"))
+records.append(apply_record(queued_apply_id, "2026-04-18T08:09:00Z"))
+Path(os.environ["OUTPUT_PATH"]).write_text(json.dumps(records, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+"${COMPOSE[@]}" exec -T api sh -c 'mkdir -p /tmp/tenet && cat > /tmp/tenet/apply-requests.json' <"$docker_apply_store_seeded_path"
+file_backed_active_apply_records_before_claim=$(curl -fsS "$API_BASE_URL/v1/applies?status=active")
+file_backed_claimed_apply_record=$(curl -fsS \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --data '{"workerId":"docker-smoke-worker"}' \
+  "$API_BASE_URL/v1/applies/$file_backed_claim_apply_id/claim")
+file_backed_claimed_apply_heartbeat=$(curl -fsS \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --data '{"workerId":"docker-smoke-worker"}' \
+  "$API_BASE_URL/v1/applies/$file_backed_claim_apply_id/heartbeat")
+file_backed_active_apply_records_after_heartbeat=$(curl -fsS "$API_BASE_URL/v1/applies?status=active")
+file_backed_queued_apply_records_after_heartbeat=$(curl -fsS "$API_BASE_URL/v1/applies?status=queued")
+file_backed_active_apply_records_before_claim_path=$(write_payload file-backed-active-apply-records-before-claim.json "$file_backed_active_apply_records_before_claim")
+file_backed_claimed_apply_record_path=$(write_payload file-backed-claimed-apply-record.json "$file_backed_claimed_apply_record")
+file_backed_claimed_apply_heartbeat_path=$(write_payload file-backed-claimed-apply-heartbeat.json "$file_backed_claimed_apply_heartbeat")
+file_backed_active_apply_records_after_heartbeat_path=$(write_payload file-backed-active-apply-records-after-heartbeat.json "$file_backed_active_apply_records_after_heartbeat")
+file_backed_queued_apply_records_after_heartbeat_path=$(write_payload file-backed-queued-apply-records-after-heartbeat.json "$file_backed_queued_apply_records_after_heartbeat")
 
 QUEUED_PLAN_PREVIEW_PATH="$queued_plan_preview_path" \
 QUEUED_PLAN_PREVIEW_GET_PATH="$queued_plan_preview_get_path" \
 QUEUED_APPLY_RECORD_PATH="$queued_apply_record_path" \
 QUEUED_APPLY_RECORD_GET_PATH="$queued_apply_record_get_path" \
+FILE_BACKED_ACTIVE_BEFORE_CLAIM_PATH="$file_backed_active_apply_records_before_claim_path" \
+FILE_BACKED_CLAIMED_APPLY_RECORD_PATH="$file_backed_claimed_apply_record_path" \
+FILE_BACKED_CLAIMED_APPLY_HEARTBEAT_PATH="$file_backed_claimed_apply_heartbeat_path" \
+FILE_BACKED_ACTIVE_AFTER_HEARTBEAT_PATH="$file_backed_active_apply_records_after_heartbeat_path" \
+FILE_BACKED_QUEUED_AFTER_HEARTBEAT_PATH="$file_backed_queued_apply_records_after_heartbeat_path" \
+FILE_BACKED_CLAIM_APPLY_ID="$file_backed_claim_apply_id" \
+FILE_BACKED_QUEUED_APPLY_ID="$file_backed_queued_apply_id" \
 python3 - <<'PY'
 import json
 import os
@@ -3482,6 +3572,19 @@ with open(os.environ["QUEUED_APPLY_RECORD_PATH"], encoding="utf-8") as fh:
     queued_apply_record = json.load(fh)
 with open(os.environ["QUEUED_APPLY_RECORD_GET_PATH"], encoding="utf-8") as fh:
     queued_apply_record_get = json.load(fh)
+with open(os.environ["FILE_BACKED_ACTIVE_BEFORE_CLAIM_PATH"], encoding="utf-8") as fh:
+    file_backed_active_before_claim = json.load(fh)
+with open(os.environ["FILE_BACKED_CLAIMED_APPLY_RECORD_PATH"], encoding="utf-8") as fh:
+    file_backed_claimed_apply_record = json.load(fh)
+with open(os.environ["FILE_BACKED_CLAIMED_APPLY_HEARTBEAT_PATH"], encoding="utf-8") as fh:
+    file_backed_claimed_apply_heartbeat = json.load(fh)
+with open(os.environ["FILE_BACKED_ACTIVE_AFTER_HEARTBEAT_PATH"], encoding="utf-8") as fh:
+    file_backed_active_after_heartbeat = json.load(fh)
+with open(os.environ["FILE_BACKED_QUEUED_AFTER_HEARTBEAT_PATH"], encoding="utf-8") as fh:
+    file_backed_queued_after_heartbeat = json.load(fh)
+
+file_backed_claim_apply_id = os.environ["FILE_BACKED_CLAIM_APPLY_ID"]
+file_backed_queued_apply_id = os.environ["FILE_BACKED_QUEUED_APPLY_ID"]
 
 assert queued_plan_preview["deploymentName"] == "worker-prod", queued_plan_preview
 assert queued_plan_preview["status"] == "ready", queued_plan_preview
@@ -3520,6 +3623,48 @@ assert queued_apply_record_get["lifecycle"]["currentStep"] == 1, queued_apply_re
 assert isinstance(queued_apply_record_get["lifecycle"].get("startedAt"), str) and queued_apply_record_get["lifecycle"]["startedAt"], queued_apply_record_get
 assert isinstance(queued_apply_record_get["lifecycle"].get("finishedAt"), str) and queued_apply_record_get["lifecycle"]["finishedAt"], queued_apply_record_get
 assert [operation["status"] for operation in queued_apply_record_get["operations"]] == ["failed"] + ["queued"] * (len(queued_apply_record_get["operations"]) - 1), queued_apply_record_get
+
+assert isinstance(file_backed_active_before_claim, list), file_backed_active_before_claim
+assert all(record.get("status") in {"queued", "running"} for record in file_backed_active_before_claim), file_backed_active_before_claim
+active_before_claim_by_id = {record.get("id"): record for record in file_backed_active_before_claim}
+assert active_before_claim_by_id[file_backed_claim_apply_id]["status"] == "queued", file_backed_active_before_claim
+assert active_before_claim_by_id[file_backed_queued_apply_id]["status"] == "queued", file_backed_active_before_claim
+
+assert file_backed_claimed_apply_record["id"] == file_backed_claim_apply_id, file_backed_claimed_apply_record
+assert file_backed_claimed_apply_record["status"] == "running", file_backed_claimed_apply_record
+assert file_backed_claimed_apply_record["claim"]["workerId"] == "docker-smoke-worker", file_backed_claimed_apply_record
+assert isinstance(file_backed_claimed_apply_record["claim"].get("claimedAt"), str) and file_backed_claimed_apply_record["claim"]["claimedAt"], file_backed_claimed_apply_record
+assert file_backed_claimed_apply_record["claim"]["lastHeartbeatAt"] == file_backed_claimed_apply_record["claim"]["claimedAt"], file_backed_claimed_apply_record
+assert isinstance(file_backed_claimed_apply_record["claim"].get("expiresAt"), str) and file_backed_claimed_apply_record["claim"]["expiresAt"], file_backed_claimed_apply_record
+assert file_backed_claimed_apply_record["lifecycle"]["startedAt"] == file_backed_claimed_apply_record["claim"]["claimedAt"], file_backed_claimed_apply_record
+assert file_backed_claimed_apply_record["lifecycle"]["currentStep"] == 1, file_backed_claimed_apply_record
+
+assert file_backed_claimed_apply_heartbeat["id"] == file_backed_claimed_apply_record["id"], (file_backed_claimed_apply_heartbeat, file_backed_claimed_apply_record)
+assert file_backed_claimed_apply_heartbeat["status"] == "running", file_backed_claimed_apply_heartbeat
+assert file_backed_claimed_apply_heartbeat["claim"]["workerId"] == "docker-smoke-worker", file_backed_claimed_apply_heartbeat
+assert file_backed_claimed_apply_heartbeat["claim"]["claimedAt"] == file_backed_claimed_apply_record["claim"]["claimedAt"], (file_backed_claimed_apply_heartbeat, file_backed_claimed_apply_record)
+assert file_backed_claimed_apply_heartbeat["claim"]["lastHeartbeatAt"] >= file_backed_claimed_apply_record["claim"]["lastHeartbeatAt"], (file_backed_claimed_apply_heartbeat, file_backed_claimed_apply_record)
+assert isinstance(file_backed_claimed_apply_heartbeat["claim"].get("expiresAt"), str) and file_backed_claimed_apply_heartbeat["claim"]["expiresAt"], file_backed_claimed_apply_heartbeat
+assert file_backed_claimed_apply_heartbeat["lifecycle"] == file_backed_claimed_apply_record["lifecycle"], (file_backed_claimed_apply_heartbeat, file_backed_claimed_apply_record)
+assert file_backed_claimed_apply_heartbeat["operations"] == file_backed_claimed_apply_record["operations"], (file_backed_claimed_apply_heartbeat, file_backed_claimed_apply_record)
+
+assert isinstance(file_backed_active_after_heartbeat, list), file_backed_active_after_heartbeat
+assert all(record.get("status") in {"queued", "running"} for record in file_backed_active_after_heartbeat), file_backed_active_after_heartbeat
+active_after_heartbeat_by_id = {record.get("id"): record for record in file_backed_active_after_heartbeat}
+active_claimed = active_after_heartbeat_by_id[file_backed_claim_apply_id]
+assert active_claimed["status"] == "running", file_backed_active_after_heartbeat
+assert active_claimed["claim"]["workerId"] == "docker-smoke-worker", file_backed_active_after_heartbeat
+assert active_claimed["claim"]["claimedAt"] == file_backed_claimed_apply_heartbeat["claim"]["claimedAt"], (file_backed_active_after_heartbeat, file_backed_claimed_apply_heartbeat)
+assert active_claimed["claim"]["lastHeartbeatAt"] == file_backed_claimed_apply_heartbeat["claim"]["lastHeartbeatAt"], (file_backed_active_after_heartbeat, file_backed_claimed_apply_heartbeat)
+assert active_claimed["claim"]["expiresAt"] == file_backed_claimed_apply_heartbeat["claim"]["expiresAt"], (file_backed_active_after_heartbeat, file_backed_claimed_apply_heartbeat)
+assert active_after_heartbeat_by_id[file_backed_queued_apply_id]["status"] == "queued", file_backed_active_after_heartbeat
+
+assert isinstance(file_backed_queued_after_heartbeat, list), file_backed_queued_after_heartbeat
+assert all(record.get("status") == "queued" for record in file_backed_queued_after_heartbeat), file_backed_queued_after_heartbeat
+queued_after_heartbeat_ids = {record.get("id") for record in file_backed_queued_after_heartbeat}
+assert file_backed_queued_apply_id in queued_after_heartbeat_ids, file_backed_queued_after_heartbeat
+assert file_backed_claim_apply_id not in queued_after_heartbeat_ids, file_backed_queued_after_heartbeat
+assert queued_after_heartbeat_ids.issubset(set(active_after_heartbeat_by_id)), (file_backed_queued_after_heartbeat, file_backed_active_after_heartbeat)
 PY
 
 echo "smoke-docker: compose stack path ok"
