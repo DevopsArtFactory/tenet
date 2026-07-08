@@ -31,6 +31,16 @@ Deployment-scoped refresh audit handoff: `/?page=audit&deployment={deploymentNam
 | Plan/apply | `/?page=plan&deployment={deploymentName}[&planId={planId}][&applyId={applyId}]` | `POST /v1/plans/deployments/{deploymentName}`; `GET /v1/plans/{planId}`; `POST /v1/applies/plans/{planId}`; `GET /v1/applies/{applyId}`; `POST /v1/applies/{applyId}/transitions` | `Request-Id`, persisted actor, `planId`, `applyId`, source fingerprint/`ifMatch`, operation IDs, lifecycle status/progress, and audit source routes. | Local writes persist immutable Tenet records but do not mutate AWS; stale reviewed plans return `409 Conflict`; guarded writes require identity, operator/admin role, and matching deployment or project/environment scope. | `curl -i -X POST "$TENET_API_BASE/v1/plans/deployments/{deploymentName}"` |
 | Queued applies | `/?page=applies` | `GET /v1/applies?status=queued` | `Request-Id`, returned immutable records, deployment names, `status=queued`, queued operations, lifecycle fields, claim `lastHeartbeatAt` / `expiresAt` when present, and related audit `apply.requested` / `apply.transitioned` rows. | Default local/no-AWS runs may return `[]`; with `TENET_AWS_ENABLE_APPLY=true`, queued-on-create records exercise the local-safe executor handoff without live AWS mutation. The embedded monitor is read-only and links rows back to `/?page=plan&deployment={deploymentName}&applyId={applyId}` for review. | `curl -i "$TENET_API_BASE/v1/applies?status=queued"` |
 
+Local-safe apply executor release guard: reviewers should verify the
+queued collection (`GET /v1/applies?status=queued`), stored apply read
+(`GET /v1/applies/{applyId}`), claim (`POST /v1/applies/{applyId}/claim`),
+heartbeat (`POST /v1/applies/{applyId}/heartbeat`), and transition
+(`POST /v1/applies/{applyId}/transitions`) routes together. They persist and
+advance Tenet apply metadata only; this local-safe record lifecycle does not
+perform live AWS mutation. The read-only `/?page=applies` monitor is backed by
+that queued collection read and links operators back to the plan/apply workspace
+for detail review.
+
 ## Unavailable-State Decoder
 
 | State | Meaning | Next check |
