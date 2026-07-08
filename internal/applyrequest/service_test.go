@@ -285,6 +285,77 @@ func TestServiceListFiltersQueuedApplyRequests(t *testing.T) {
 	}
 }
 
+func TestServiceListFiltersActiveApplyRequestsNewestFirst(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_failed_newest": {
+				ID:             "apply_failed_newest",
+				PlanID:         "plan_failed",
+				DeploymentName: "api-prod",
+				Status:         StatusFailed,
+				CreatedAt:      "2026-04-18T08:08:00Z",
+			},
+			"apply_queued_new": {
+				ID:             "apply_queued_new",
+				PlanID:         "plan_queued_new",
+				DeploymentName: "worker-prod",
+				Status:         StatusQueued,
+				CreatedAt:      "2026-04-18T08:07:00Z",
+			},
+			"apply_running": {
+				ID:             "apply_running",
+				PlanID:         "plan_running",
+				DeploymentName: "api-prod",
+				Status:         StatusRunning,
+				CreatedAt:      "2026-04-18T08:06:00Z",
+				Claim:          &Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:06:30Z", LastHeartbeatAt: "2026-04-18T08:07:30Z", ExpiresAt: "2026-04-18T08:12:30Z"},
+				Operations: []Operation{{
+					Status:  OperationStatusRunning,
+					Phase:   "Promoting",
+					Target:  "api-prod listener",
+					Summary: "Shift production traffic.",
+				}},
+			},
+			"apply_cancelled": {
+				ID:             "apply_cancelled",
+				PlanID:         "plan_cancelled",
+				DeploymentName: "worker-prod",
+				Status:         StatusCancelled,
+				CreatedAt:      "2026-04-18T08:05:00Z",
+			},
+			"apply_queued_old": {
+				ID:             "apply_queued_old",
+				PlanID:         "plan_queued_old",
+				DeploymentName: "api-prod",
+				Status:         StatusQueued,
+				CreatedAt:      "2026-04-18T08:04:00Z",
+			},
+		},
+	}
+	service := Service{Store: store}
+
+	records, err := service.List(context.Background(), ListQuery{Status: Status("active")})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	got := make([]string, 0, len(records))
+	for _, record := range records {
+		got = append(got, record.ID)
+		if record.Status != StatusQueued && record.Status != StatusRunning {
+			t.Fatalf("expected only queued/running active records, got %+v", records)
+		}
+	}
+	if want := []string{"apply_queued_new", "apply_running", "apply_queued_old"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected active apply records: got %+v want %+v", got, want)
+	}
+	if records[1].Claim == nil || records[1].Claim.LastHeartbeatAt != "2026-04-18T08:07:30Z" || records[1].Claim.ExpiresAt != "2026-04-18T08:12:30Z" {
+		t.Fatalf("expected listed running record to preserve claim freshness fields, got %+v", records[1].Claim)
+	}
+	if len(records[1].Operations) != 1 || records[1].Operations[0].ID == "" {
+		t.Fatalf("expected active listed records to normalize additive operation ids, got %+v", records[1].Operations)
+	}
+}
+
 func TestServiceListRequiresStore(t *testing.T) {
 	_, err := (Service{}).List(context.Background(), ListQuery{Status: StatusQueued})
 	if err == nil || !strings.Contains(err.Error(), "apply request store is required") {

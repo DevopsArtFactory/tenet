@@ -224,12 +224,23 @@ func validDeploymentEventsSource(source string) bool {
 }
 
 func parseApplyRequestListQuery(w http.ResponseWriter, r *http.Request) (applyrequest.ListQuery, bool) {
-	status := strings.TrimSpace(r.URL.Query().Get("status"))
-	if status != string(applyrequest.StatusQueued) {
-		http.Error(w, "status=queued is required", http.StatusBadRequest)
+	queryValues := r.URL.Query()
+	for key, values := range queryValues {
+		if key != "status" || len(values) != 1 {
+			http.Error(w, "unsupported apply request filter", http.StatusBadRequest)
+			return applyrequest.ListQuery{}, false
+		}
+	}
+	status := strings.TrimSpace(queryValues.Get("status"))
+	switch status {
+	case string(applyrequest.StatusQueued):
+		return applyrequest.ListQuery{Status: applyrequest.StatusQueued}, true
+	case string(applyrequest.ListStatusActive):
+		return applyrequest.ListQuery{Status: applyrequest.ListStatusActive}, true
+	default:
+		http.Error(w, "status=queued or status=active is required", http.StatusBadRequest)
 		return applyrequest.ListQuery{}, false
 	}
-	return applyrequest.ListQuery{Status: applyrequest.StatusQueued}, true
 }
 
 func applyAuditLogLimit(result auditlog.Result, query auditlog.Query) auditlog.Result {
@@ -2175,9 +2186,10 @@ func filterAuthorizedStatusSnapshots(snapshots []statusstore.Snapshot, visible m
 }
 
 func filterApplyRequestRecords(records []applyrequest.Record, status applyrequest.Status, visible map[string]struct{}, enabled bool) []applyrequest.Record {
+	query := applyrequest.ListQuery{Status: status}
 	filtered := make([]applyrequest.Record, 0, len(records))
 	for _, record := range records {
-		if status != "" && record.Status != status {
+		if !query.Matches(record) {
 			continue
 		}
 		if enabled {
@@ -2188,6 +2200,17 @@ func filterApplyRequestRecords(records []applyrequest.Record, status applyreques
 		filtered = append(filtered, record)
 	}
 	return filtered
+}
+
+func sortApplyRequestRecordsNewestFirst(records []applyrequest.Record) []applyrequest.Record {
+	sorted := append([]applyrequest.Record(nil), records...)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].CreatedAt != sorted[j].CreatedAt {
+			return sorted[i].CreatedAt > sorted[j].CreatedAt
+		}
+		return sorted[i].ID > sorted[j].ID
+	})
+	return sorted
 }
 
 func assignManagedDriftIDsToSnapshots(snapshots []statusstore.Snapshot) []statusstore.Snapshot {
@@ -3245,6 +3268,9 @@ func NewRouter(options Options) http.Handler {
 			authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())),
 			options.RequireDeploymentReadAuthorization,
 		)
+		if query.NewestFirst() {
+			records = sortApplyRequestRecordsNewestFirst(records)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(records)
 	})

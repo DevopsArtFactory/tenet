@@ -152,10 +152,13 @@ func (s Service) List(ctx context.Context, query ListQuery) ([]Record, error) {
 	}
 	listed := make([]Record, 0, len(records))
 	for _, record := range records {
-		if query.Status != "" && record.Status != query.Status {
+		if !query.Matches(record) {
 			continue
 		}
 		listed = append(listed, NormalizeOperationIDs(record))
+	}
+	if query.NewestFirst() {
+		return listNewestFirst(listed), nil
 	}
 	return list(listed), nil
 }

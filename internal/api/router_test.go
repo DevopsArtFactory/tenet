@@ -12141,6 +12141,24 @@ func TestRouterApplyRequestCollection(t *testing.T) {
 			Source:         applyrequest.SourceContext{PlanID: "plan_queued_worker", Route: "/v1/plans/plan_queued_worker", PlanStatus: "ready"},
 		},
 		{
+			ID:             "apply_running_api",
+			PlanID:         "plan_running_api",
+			DeploymentName: "api-prod",
+			Status:         applyrequest.StatusRunning,
+			CreatedAt:      "2026-04-18T08:07:00Z",
+			Details:        []string{"claimed for local-safe executor handoff"},
+			Lifecycle:      applyrequest.Lifecycle{UpdatedAt: "2026-04-18T08:07:30Z", StartedAt: "2026-04-18T08:07:00Z", CurrentStep: 1, TotalSteps: 2},
+			Claim:          &applyrequest.Claim{WorkerID: "worker-a", ClaimedAt: "2026-04-18T08:07:00Z", LastHeartbeatAt: "2026-04-18T08:07:30Z", ExpiresAt: "2026-04-18T08:12:30Z"},
+			Operations: []applyrequest.Operation{{
+				ID:      "op_shift_traffic",
+				Status:  applyrequest.OperationStatusRunning,
+				Phase:   "Promoting",
+				Target:  "api-prod listener",
+				Summary: "Shift production traffic.",
+			}},
+			Source: applyrequest.SourceContext{PlanID: "plan_running_api", Route: "/v1/plans/plan_running_api", PlanStatus: "ready"},
+		},
+		{
 			ID:             "apply_failed_api",
 			PlanID:         "plan_failed_api",
 			DeploymentName: "api-prod",
@@ -12206,6 +12224,55 @@ func TestRouterApplyRequestCollection(t *testing.T) {
 		}
 	})
 
+	t.Run("active payload includes queued and running records newest first with claim freshness fields", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			ApplyRequests: func(_ context.Context, query applyrequest.ListQuery) ([]applyrequest.Record, error) {
+				if query.Status != applyrequest.Status("active") {
+					t.Fatalf("expected active list query, got %+v", query)
+				}
+				return records, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/applies?status=active", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var got []applyrequest.Record
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode active applies payload: %v", err)
+		}
+		if len(got) != 3 || got[0].ID != "apply_running_api" || got[1].ID != "apply_queued_worker" || got[2].ID != "apply_queued_api" {
+			t.Fatalf("unexpected active applies payload: %+v", got)
+		}
+		for _, record := range got {
+			if record.Status != applyrequest.StatusQueued && record.Status != applyrequest.StatusRunning {
+				t.Fatalf("expected only queued/running active records, got %+v", got)
+			}
+		}
+		if got[0].Claim == nil || got[0].Claim.LastHeartbeatAt != "2026-04-18T08:07:30Z" || got[0].Claim.ExpiresAt != "2026-04-18T08:12:30Z" {
+			t.Fatalf("expected active running record to preserve claim freshness fields, got %+v", got[0].Claim)
+		}
+
+		var raw []map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw active applies payload: %v", err)
+		}
+		for _, key := range []string{"id", "planId", "deploymentName", "status", "createdAt", "details", "lifecycle", "claim", "operations", "source"} {
+			if _, ok := raw[0][key]; !ok {
+				t.Fatalf("expected active apply payload to include %q, got %#v", key, raw[0])
+			}
+		}
+		claim, ok := raw[0]["claim"].(map[string]any)
+		if !ok || claim["workerId"] != "worker-a" || claim["claimedAt"] != "2026-04-18T08:07:00Z" || claim["lastHeartbeatAt"] != "2026-04-18T08:07:30Z" || claim["expiresAt"] != "2026-04-18T08:12:30Z" {
+			t.Fatalf("expected raw active apply claim freshness metadata, got %#v", raw[0]["claim"])
+		}
+	})
+
 	t.Run("unavailable", func(t *testing.T) {
 		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 		req := httptest.NewRequest(http.MethodGet, "/v1/applies?status=queued", nil)
@@ -12234,7 +12301,7 @@ func TestRouterApplyRequestCollection(t *testing.T) {
 		assertInternalServerErrorResponse(t, resp, upstreamErr)
 	})
 
-	for _, path := range []string{"/v1/applies", "/v1/applies?status=failed", "/v1/applies?status=running"} {
+	for _, path := range []string{"/v1/applies", "/v1/applies?status=failed", "/v1/applies?status=running", "/v1/applies?status=active&deployment=api-prod", "/v1/applies?status=queued&workerId=worker-a"} {
 		t.Run("unsupported query "+path, func(t *testing.T) {
 			router := NewRouter(Options{
 				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},

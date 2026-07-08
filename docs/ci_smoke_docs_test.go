@@ -711,7 +711,7 @@ func TestAuthToggleDocsUseReadableBooleanExamples(t *testing.T) {
 		"when `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true` is enabled, `POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, `POST /v1/applies/{applyId}/claim`, `POST /v1/applies/{applyId}/heartbeat`, and `POST /v1/applies/{applyId}/transitions`",
 		"when that same `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` setting is enabled, `POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, `POST /v1/applies/{applyId}/claim`, `POST /v1/applies/{applyId}/heartbeat`, and `POST /v1/applies/{applyId}/transitions`",
 		"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` is enabled, stored `GET /v1/applies/{applyId}`",
-		"`GET /v1/applies?status=queued` follows the same collection contract",
+		"`GET /v1/applies?status=active` follows the same collection contract",
 	} {
 		if !strings.Contains(overviewText, fragment) {
 			t.Fatalf("expected overview dashboard docs to include readable boolean auth-toggle example %q", fragment)
@@ -836,7 +836,9 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 	for name, text := range docs {
 		for _, fragment := range []string{
 			"Local-safe apply executor release guard",
-			"queued collection (`GET /v1/applies?status=queued`)",
+			"active collection (`GET /v1/applies?status=active`)",
+			"queued exact subset",
+			"(`GET /v1/applies?status=queued`)",
 			"stored apply read",
 			"(`GET /v1/applies/{applyId}`)",
 			"claim (`POST /v1/applies/{applyId}/claim`)",
@@ -846,7 +848,7 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 			"local-safe record lifecycle does not",
 			"perform live AWS mutation",
 			"read-only `/?page=applies` monitor is backed by",
-			"that queued collection read",
+			"queued subset read",
 			"Refresh applies",
 			"fresh/stale/pending operator copy",
 		} {
