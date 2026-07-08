@@ -27,6 +27,10 @@ const (
 	StatusCancelled Status = "cancelled"
 )
 
+// ListStatusActive is the collection-only filter for non-terminal local-safe
+// apply handoff records. It is not a lifecycle status for persisted records.
+const ListStatusActive Status = "active"
+
 // Valid reports whether the apply-request lifecycle status is supported.
 func (s Status) Valid() bool {
 	switch s {
@@ -165,6 +169,23 @@ type TransitionRequest struct {
 // ListQuery captures the narrow read filters supported for apply requests.
 type ListQuery struct {
 	Status Status
+}
+
+// Matches reports whether record belongs in this list query.
+func (q ListQuery) Matches(record Record) bool {
+	switch q.Status {
+	case "":
+		return true
+	case ListStatusActive:
+		return record.Status == StatusQueued || record.Status == StatusRunning
+	default:
+		return record.Status == q.Status
+	}
+}
+
+// NewestFirst reports whether list results should use created-time descending order.
+func (q ListQuery) NewestFirst() bool {
+	return q.Status == ListStatusActive
 }
 
 // Store persists immutable apply-request records.

@@ -740,6 +740,7 @@ The same drill-down also includes read-only workspace surfaces:
 
 The backend now also exposes local-safe immutable apply-request routes:
 - `POST /v1/applies/plans/{planId}`
+- `GET /v1/applies?status=active`
 - `GET /v1/applies?status=queued`
 - `GET /v1/applies/{applyId}`
 - `POST /v1/applies/{applyId}/claim`
@@ -749,13 +750,13 @@ The backend now also exposes local-safe immutable apply-request routes:
 These routes are additive and local-friendly. They persist immutable records to `TENET_APPLY_STORE_PATH`, keep live execution intentionally disabled by default in this slice, attach additive ordered `operations[]` rows so operators can inspect and share the future executor-facing `status` / `phase` / `target` / `summary` path without mutating AWS, and keep Tenet-authored stable operation `id` values aligned between reviewed plan previews, reloaded plan reads, created apply records, and reloaded apply reads. The direct `make smoke-local` path locks that those IDs are non-empty `op_...` values, remain unique within a preview, and are preserved when plan operations project into apply operations. The apply record also exposes an additive `lifecycle` block so later executor transitions can report timing and step progress on the same stable `applyId`. `POST /v1/applies/{applyId}/heartbeat` accepts `{"workerId":"worker-a"}`-style bodies for the currently claimed worker only, updates `claim.lastHeartbeatAt` and `claim.expiresAt`, preserves stable `applyId`, lifecycle state, operation state, details, and transition history, returns clear `400` malformed/invalid body (`invalid apply heartbeat request body`), `404` missing apply, and `409` wrong-worker/unclaimed/terminal-state responses, and performs no live AWS mutation. The embedded `/?page=plan` workspace now renders those lifecycle fields directly when present and leaves missing step/timing fields as placeholders instead of inventing synthetic progress. `POST /v1/applies/plans/{planId}` also re-validates the current deployment-detail fingerprint against the reviewed plan fingerprint before persisting; stale plans fail with `409 Conflict` and operator-facing refresh guidance instead of writing a new apply record. Set `TENET_AWS_ENABLE_APPLY=true` when you want the backend contract to create a queued immutable apply request on a fresh plan/apply pair and then hand that new `applyId` to the local-safe executor stub while keeping this slice mutation-free.
 
 Local-safe apply executor release guard: reviewers should verify the
-queued collection (`GET /v1/applies?status=queued`), stored apply read
-(`GET /v1/applies/{applyId}`), claim (`POST /v1/applies/{applyId}/claim`),
+active collection (`GET /v1/applies?status=active`), queued exact subset
+(`GET /v1/applies?status=queued`), stored apply read (`GET /v1/applies/{applyId}`), claim (`POST /v1/applies/{applyId}/claim`),
 heartbeat (`POST /v1/applies/{applyId}/heartbeat`), and transition
 (`POST /v1/applies/{applyId}/transitions`) routes together. They persist and
 advance Tenet apply metadata only; this local-safe record lifecycle does not
 perform live AWS mutation. The read-only `/?page=applies` monitor is backed by
-that queued collection read and links operators back to the plan/apply workspace
+the queued subset read and links operators back to the plan/apply workspace
 for detail review.
 
 The same immutable stores also back a read-only audit projection route:
