@@ -3682,4 +3682,5 @@ assert file_backed_claim_apply_id not in queued_after_heartbeat_ids, file_backed
 assert queued_after_heartbeat_ids.issubset(set(active_after_heartbeat_by_id)), (file_backed_queued_after_heartbeat, file_backed_active_after_heartbeat)
 PY
 
+echo "Verified active/queued apply collection split and claim freshness"
 echo "smoke-docker: compose stack path ok"
