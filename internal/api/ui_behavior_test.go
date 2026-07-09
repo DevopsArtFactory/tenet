@@ -10978,8 +10978,8 @@ const scenarios = [
     search: '?page=applies',
     response: { ok: true, json: () => Promise.resolve(queuedRecords) },
     expected: [
-      'Queued applies monitor',
-      'Current queued applies read: GET /v1/applies?status=queued.',
+      'Applies monitor',
+      'Current applies monitor read: GET /v1/applies?status=queued.',
       'api-prod',
       'apply_queued_123',
       'Apply status | Queued',
@@ -11007,11 +11007,35 @@ const scenarios = [
     ],
   },
   {
+    name: 'active collection',
+    search: '?page=applies&appliesView=active',
+    response: { ok: true, json: () => Promise.resolve([queuedRecords[1]]) },
+    expected: [
+      'Applies monitor',
+      'Current applies monitor read: GET /v1/applies?status=active.',
+      'worker-prod',
+      'Apply status | Running',
+      'Executor worker | worker-stale',
+      'Claim status | Claimed by worker-stale, but attention is needed. Reason: lease expired before the executor heartbeat refreshed it',
+    ],
+    link: { href: '/?page=plan&deployment=worker-prod&applyId=apply_running_stale', text: 'Open plan/apply workspace' },
+  },
+  {
+    name: 'active empty collection',
+    search: '?page=applies&appliesView=active',
+    response: { ok: true, json: () => Promise.resolve([]) },
+    expected: [
+      'No active apply handoffs are visible right now.',
+      'GET /v1/applies?status=active returned an empty collection.',
+      'Refresh applies',
+    ],
+  },
+  {
     name: 'denied collection reuses operator read guidance',
     search: '?page=applies',
     response: { ok: false, status: 403, text: () => Promise.resolve('forbidden: authenticated viewer-capable role is required for this operator read route') },
     expected: [
-      'Queued applies monitor',
+      'Applies monitor',
       'Viewer role required',
       'Tenet rejected GET /v1/applies?status=queued after recognizing the caller\'s identity because this operator read route requires a trusted forwarded viewer/operator/admin role.',
       'Open Operator context details',
@@ -11034,15 +11058,16 @@ const scenarios = [
     const fetch = (url) => {
       fetchCalls.push(String(url));
       if (url === '/v1/operator/context') return Promise.resolve({ ok: true, json: () => Promise.resolve({ trustedHeaders: { enabled: true }, identity: { authenticated: true }, roles: { canRead: true, canWrite: false }, deploymentAccess: { enforced: true, forwarded: true } }) });
-      if (url === '/v1/applies?status=queued') return Promise.resolve(scenario.response);
+      if (url === '/v1/applies?status=queued' || url === '/v1/applies?status=active') return Promise.resolve(scenario.response);
       throw new Error('unexpected fetch url for ' + scenario.name + ': ' + url);
     };
     new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
     await settle();
     await settle();
     await settle();
-    if (fetchCalls.join(', ') !== '/v1/operator/context, /v1/applies?status=queued') throw new Error('unexpected fetch sequence for ' + scenario.name + ': ' + fetchCalls.join(', '));
-    if (window.location.search !== scenario.search) throw new Error('expected queued applies URL to stay bookmarkable for ' + scenario.name + ', got ' + window.location.search);
+    const expectedRoute = scenario.search.includes('appliesView=active') ? '/v1/applies?status=active' : '/v1/applies?status=queued';
+    if (fetchCalls.join(', ') !== '/v1/operator/context, ' + expectedRoute) throw new Error('unexpected fetch sequence for ' + scenario.name + ': ' + fetchCalls.join(', '));
+    if (window.location.search !== scenario.search) throw new Error('expected applies monitor URL to stay bookmarkable for ' + scenario.name + ', got ' + window.location.search);
     const root = document.getElementById('accounts');
     const text = collectText(root).join(' | ');
     scenario.expected.forEach((fragment) => {
@@ -11066,6 +11091,14 @@ const scenarios = [
       await settle();
       await waitForFetchCount(fetchCalls, 3);
       if (fetchCalls.join(', ') !== '/v1/operator/context, /v1/applies?status=queued, /v1/applies?status=queued') throw new Error('unexpected fetch sequence after refresh: ' + fetchCalls.join(', '));
+      const toolbarButtons = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+      const activeButton = toolbarButtons.find((node) => node.textContent === 'Active handoffs');
+      if (!activeButton) throw new Error('expected active handoffs view control');
+      activeButton.dispatch('click');
+      await settle();
+      await waitForFetchCount(fetchCalls, 4);
+      if (window.location.search !== '?page=applies&appliesView=active') throw new Error('expected active view to update bookmarkable URL, got ' + window.location.search);
+      if (fetchCalls[3] !== '/v1/applies?status=active') throw new Error('expected active view fetch, got ' + fetchCalls.join(', '));
     }
   }
 })();

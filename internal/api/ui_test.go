@@ -518,11 +518,13 @@ func TestEmbeddedUIIncludesQueuedAppliesMonitorContracts(t *testing.T) {
 
 	for _, fragment := range []string{
 		"const validPages = new Set(['applications', 'application', 'account', 'resource', 'drift', 'plan', 'audit', 'applies']);",
-		"const queuedAppliesRoutePath = () => '/v1/applies?status=queued';",
-		"const queuedAppliesReadRoute = () => `GET ${queuedAppliesRoutePath()}`;",
-		"const fetchQueuedApplies = () => fetchEmbeddedReadRouteJSON(queuedAppliesRoutePath(), {",
-		"return 'Queued applies monitor';",
-		"return queuedAppliesReadRoute();",
+		"const normalizeAppliesMonitorView = (view) => String(view || '').toLowerCase() === 'active' ? 'active' : 'queued';",
+		"const appliesMonitorRoutePath = (view = 'queued') => `/v1/applies?status=${normalizeAppliesMonitorView(view)}`;",
+		"const activeAppliesReadRoute = () => appliesMonitorReadRoute('active');",
+		"const fetchAppliesMonitor = (view = 'queued') => fetchEmbeddedReadRouteJSON(appliesMonitorRoutePath(view), {",
+		"return 'Applies monitor';",
+		"return appliesMonitorReadRoute(pageState?.appliesView || 'queued');",
+		"appliesView: normalizeAppliesMonitorView(params.get('appliesView') || params.get('applyView') || ''),",
 		"renderQueuedAppliesPage(appliesState);",
 		"renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
 		"createNavLink(buildPageURL('plan', { deployment: record.deploymentName, applyId: record.id }), 'Open plan/apply workspace', '_self')",
@@ -531,7 +533,11 @@ func TestEmbeddedUIIncludesQueuedAppliesMonitorContracts(t *testing.T) {
 		"Pending executor claim — no local-safe executor has claimed this apply request yet.",
 		"heartbeat freshness looks current",
 		"heartbeat or lease is stale or expired",
-		"const createQueuedAppliesRefreshButton = (state) => createRefreshButton('Refresh applies'",
+		"const createAppliesMonitorRefreshButton = (state) => createRefreshButton('Refresh applies'",
+		"const createAppliesMonitorViewControl = (state) => {",
+		"Monitor view: ${appliesMonitorViewLabel(state.view || currentPageState.appliesView || 'queued')}",
+		"setAppliesMonitorView(view);",
+		"syncAppliesMonitorPageState();",
 		"['Last heartbeat', applyClaimFreshnessValue(record, 'lastHeartbeatAt')]",
 		"['Claim expires', applyClaimFreshnessValue(record, 'expiresAt')]",
 	} {
@@ -541,11 +547,11 @@ func TestEmbeddedUIIncludesQueuedAppliesMonitorContracts(t *testing.T) {
 	}
 
 	contracts := []string{
-		`const renderQueuedAppliesState = \(text, className = '', actions = \[\]\) => \{[\s\S]*?const stateNode = createElement\('div', 'empty', text\);[\s\S]*?markPoliteStatusNode\(stateNode\);[\s\S]*?document\.getElementById\('accounts'\)\.replaceChildren\(stateNode\);`,
-		`const renderQueuedAppliesPage = \(state\) => \{[\s\S]*?renderQueuedAppliesState\('Loading queued apply requests from GET /v1/applies\?status=queued…', '', \[[\s\S]*?createQueuedAppliesRefreshButton\(state\)`,
-		`const renderQueuedAppliesPage = \(state\) => \{[\s\S]*?renderQueuedAppliesState\('No queued apply requests are visible right now\. GET /v1/applies\?status=queued returned an empty collection\.'`,
-		`const renderQueuedAppliesPage = \(state\) => \{[\s\S]*?renderQueuedAppliesState\(` + "`" + `Queued applies are temporarily unavailable\.\$\{detail\}` + "`" + `, 'error'`,
-		`const renderQueuedAppliesPage = \(state\) => \{[\s\S]*?renderQueuedAppliesState\(` + "`" + `Failed to load queued applies: \$\{state\.error\?\.message \|\| 'unknown error'\}` + "`" + `, 'error'`,
+		`const renderQueuedAppliesState = \(text, className = '', actions = \[\], state = \{\}\) => \{[\s\S]*?const stateNode = createElement\('div', 'empty', text\);[\s\S]*?markPoliteStatusNode\(stateNode\);[\s\S]*?document\.getElementById\('accounts'\)\.replaceChildren\(stateNode\);`,
+		`const renderQueuedAppliesPage = \(state\) => \{[\s\S]*?renderQueuedAppliesState\(` + "`" + `Loading \$\{view === 'active' \? 'active apply handoffs' : 'queued apply requests'\} from \$\{readRoute\}…` + "`" + `, '', \[[\s\S]*?createAppliesMonitorRefreshButton\(state\)`,
+		`const renderQueuedAppliesPage = \(state\) => \{[\s\S]*?renderQueuedAppliesState\(appliesMonitorEmptyText\(view\), '', \[[\s\S]*?createNavLink\(route, ` + "`" + `\$\{appliesMonitorViewLabel\(view\)\} JSON` + "`" + `\)`,
+		`const renderQueuedAppliesPage = \(state\) => \{[\s\S]*?renderQueuedAppliesState\(` + "`" + `\$\{appliesMonitorViewLabel\(view\)\} are temporarily unavailable\.\$\{detail\}` + "`" + `, 'error'`,
+		`const renderQueuedAppliesPage = \(state\) => \{[\s\S]*?renderQueuedAppliesState\(` + "`" + `Failed to load \$\{view\} applies: \$\{state\.error\?\.message \|\| 'unknown error'\}` + "`" + `, 'error'`,
 	}
 	for _, contract := range contracts {
 		if !regexp.MustCompile(contract).MatchString(body) {

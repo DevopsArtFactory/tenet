@@ -879,10 +879,12 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 			"(`POST /v1/applies/{applyId}/transitions`)",
 			"local-safe record lifecycle does not",
 			"perform live AWS mutation",
-			"read-only `/?page=applies` monitor is backed by",
+			"read-only `/?page=applies` monitor defaults to",
 			"queued subset read",
+			"queued/active view control",
+			"`?appliesView=active`",
 			"Refresh applies",
-			"fresh/stale/pending operator copy",
+			"fresh/stale/pending",
 		} {
 			if !strings.Contains(text, fragment) {
 				t.Fatalf("expected %s docs to include local-safe apply release guard fragment %q", name, fragment)

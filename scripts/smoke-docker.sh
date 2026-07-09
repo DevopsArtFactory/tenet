@@ -1123,12 +1123,17 @@ expected_audit_refs = {
 }
 for entry in audit_logs["entries"]:
     assert isinstance(entry.get("entryId"), str) and entry["entryId"].startswith("audit_"), entry
+    if "deploymentName" not in entry:
+        assert entry.get("action") == "controller.refresh.requested", entry
+        assert isinstance(entry.get("metadata", {}), dict), entry
+        assert isinstance(entry.get("source", {}), dict), entry
+        continue
     app_ref, environment_ref = expected_audit_refs[entry["deploymentName"]]
     assert entry["appRef"] == app_ref, entry
     assert entry["environmentRef"] == environment_ref, entry
     assert isinstance(entry.get("metadata", {}), dict), entry
     assert isinstance(entry.get("source", {}), dict), entry
-fallback_entries = [entry for entry in audit_logs["entries"] if entry["deploymentName"] == "payments-api-prod"]
+fallback_entries = [entry for entry in audit_logs["entries"] if entry.get("deploymentName") == "payments-api-prod"]
 assert fallback_entries, audit_logs
 for entry in fallback_entries:
     assert entry["actor"]["available"] is False, entry
@@ -1140,10 +1145,13 @@ assert actor_audit_logs["resultScope"]["action"] == "apply.requested", actor_aud
 assert actor_audit_logs["resultScope"]["limit"] == 1, actor_audit_logs
 assert actor_audit_logs["resultScope"]["requestedLimit"] == 1, actor_audit_logs
 assert actor_audit_logs["resultScope"]["effectiveLimit"] == 1, actor_audit_logs
-assert actor_audit_logs["resultScope"]["truncationStatus"] == "not_truncated", actor_audit_logs
-assert actor_audit_logs["resultScope"]["truncated"] is False, actor_audit_logs
 assert actor_audit_logs["resultScope"]["returnedEntryCount"] == 1, actor_audit_logs
 assert actor_audit_logs["resultScope"]["returnedCount"] == 1, actor_audit_logs
+actor_audit_total = actor_audit_logs["resultScope"].get("totalEntryCount", actor_audit_logs["resultScope"]["returnedEntryCount"])
+assert actor_audit_total >= actor_audit_logs["resultScope"]["returnedEntryCount"], actor_audit_logs
+expected_actor_audit_truncated = actor_audit_total > actor_audit_logs["resultScope"]["returnedEntryCount"]
+assert actor_audit_logs["resultScope"].get("truncated") is expected_actor_audit_truncated, actor_audit_logs
+assert actor_audit_logs["resultScope"].get("truncationStatus") == ("truncated" if expected_actor_audit_truncated else "not_truncated"), actor_audit_logs
 assert actor_audit_logs["entries"][0]["deploymentName"] == "payments-api-staging", actor_audit_logs
 assert actor_audit_logs["entries"][0]["actor"]["available"] is True, actor_audit_logs
 assert actor_audit_logs["entries"][0]["actor"]["id"] == "explicit-456", actor_audit_logs
@@ -1803,9 +1811,13 @@ assert_fragments("ui", ui, (
     "return message && message !== 'unknown error' ? message : 'Tenet could not load trusted front-door context.';",
     "summary.textContent = operatorContextFailureHeading(operatorContextState.error) ||",
     "fetchApplicationsOverview()",
-    "const queuedAppliesRoutePath = () => '/v1/applies?status=queued';",
-    "const queuedAppliesReadRoute = () => `GET ${queuedAppliesRoutePath()}`;",
-    "const fetchQueuedApplies = () => fetchEmbeddedReadRouteJSON(queuedAppliesRoutePath(), {",
+    "const appliesMonitorRoutePath = (view = 'queued') => `/v1/applies?status=${normalizeAppliesMonitorView(view)}`;",
+    "const appliesMonitorReadRoute = (view = 'queued') => `GET ${appliesMonitorRoutePath(view)}`;",
+    "const queuedAppliesRoutePath = () => appliesMonitorRoutePath('queued');",
+    "const queuedAppliesReadRoute = () => appliesMonitorReadRoute('queued');",
+    "const activeAppliesRoutePath = () => appliesMonitorRoutePath('active');",
+    "const activeAppliesReadRoute = () => appliesMonitorReadRoute('active');",
+    "const fetchAppliesMonitor = (view = 'queued') => fetchEmbeddedReadRouteJSON(appliesMonitorRoutePath(view), {",
     "renderQueuedAppliesPage(appliesState);",
     "createNavLink(buildPageURL('plan', { deployment: record.deploymentName, applyId: record.id }), 'Open plan/apply workspace', '_self')",
     "const applicationsOverviewReadRoute = () => 'GET /v1/overview/applications';",
@@ -2067,21 +2079,24 @@ for fragment in (
     assert fragment in ui, fragment
 
 assert_fragments("applies_ui", applies_ui, operator_read_auth_fragments + (
-    "return 'Queued applies monitor';",
-    "return queuedAppliesReadRoute();",
-    "const queuedAppliesRoutePath = () => '/v1/applies?status=queued';",
-    "const fetchQueuedApplies = () => fetchEmbeddedReadRouteJSON(queuedAppliesRoutePath(), {",
-    "Loading queued apply requests from GET /v1/applies?status=queued…",
+    "return 'Applies monitor';",
+    "return appliesMonitorReadRoute(pageState?.appliesView || 'queued');",
+    "const appliesMonitorRoutePath = (view = 'queued') => `/v1/applies?status=${normalizeAppliesMonitorView(view)}`;",
+    "const appliesMonitorReadRoute = (view = 'queued') => `GET ${appliesMonitorRoutePath(view)}`;",
+    "const queuedAppliesRoutePath = () => appliesMonitorRoutePath('queued');",
+    "const activeAppliesRoutePath = () => appliesMonitorRoutePath('active');",
+    "const fetchAppliesMonitor = (view = 'queued') => fetchEmbeddedReadRouteJSON(appliesMonitorRoutePath(view), {",
+    "renderQueuedAppliesState(`Loading ${view === 'active' ? 'active apply handoffs' : 'queued apply requests'} from ${readRoute}…`, '', [",
     "No queued apply requests are visible right now. GET /v1/applies?status=queued returned an empty collection.",
-    "Queued applies are temporarily unavailable.",
-    "Failed to load queued applies:",
+    "`${appliesMonitorViewLabel(view)} are temporarily unavailable.${detail}`",
+    "`Failed to load ${view} applies: ${state.error?.message || 'unknown error'}`",
     "createNavLink(buildPageURL('plan', { deployment: record.deploymentName, applyId: record.id }), 'Open plan/apply workspace', '_self')",
     "['Operation progress', applyOperationProgressSummary(record.operations || []), 'summary']",
     "['Claim status', applyClaimFreshnessSummary(record), 'summary']",
     "Pending executor claim — no local-safe executor has claimed this apply request yet.",
     "heartbeat freshness looks current",
     "heartbeat or lease is stale or expired",
-    "createQueuedAppliesRefreshButton = (state) => createRefreshButton('Refresh applies'",
+    "createAppliesMonitorRefreshButton = (state) => createRefreshButton('Refresh applies'",
     "['Last heartbeat', applyClaimFreshnessValue(record, 'lastHeartbeatAt')]",
     "['Claim expires', applyClaimFreshnessValue(record, 'expiresAt')]",
 ))
