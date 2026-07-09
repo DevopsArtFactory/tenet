@@ -3002,6 +3002,7 @@ assert 'Apply operations' in apply_ui, apply_ui
 assert 'Queued apply operation' in apply_ui, apply_ui
 assert '/v1/applies/' in apply_ui, apply_ui
 assert 'The ordered execution sequence below comes from the persisted apply record' in apply_ui, apply_ui
+print('Verified active/queued apply collection split and claim freshness')
 print('smoke-local: fixture api path ok')
 PY
 
