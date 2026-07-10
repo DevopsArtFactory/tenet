@@ -8994,6 +8994,84 @@
         if (Array.isArray(result?.entries)) return result.entries;
         return [];
       };
+      const applyExecutionReadinessSource = (record) => {
+        const candidates = [
+          record?.executionReadiness,
+          record?.applyExecutionReadiness,
+        ];
+        return candidates.find((candidate) => candidate && typeof candidate === 'object') || null;
+      };
+      const applyExecutionReadinessState = (record) => {
+        const readiness = applyExecutionReadinessSource(record);
+        const raw = String(readiness?.state || readiness?.status || readiness?.result || '').toLowerCase();
+        if (['ready', 'passed', 'pass', 'ok', 'healthy', 'preflight_ready', 'preflight-ready'].includes(raw)) return 'ready';
+        if (['blocked', 'failed', 'failure', 'error', 'unavailable', 'not_ready', 'not-ready'].includes(raw)) return 'blocked';
+        const status = String(record?.status || '').toLowerCase();
+        const error = String(record?.error || '').toLowerCase();
+        if (status === 'failed' && error.includes('apply execution is disabled')) return 'disabled';
+        if (readiness) return raw || 'reported';
+        if (['queued', 'running', 'pending', 'in_progress', 'in-progress'].includes(status)) return 'missing';
+        return 'not-reported';
+      };
+      const applyExecutionReadinessLabel = (record) => {
+        switch (applyExecutionReadinessState(record)) {
+          case 'ready':
+            return 'Preflight ready';
+          case 'blocked':
+            return 'Execution blocked';
+          case 'disabled':
+            return 'Local-safe disabled';
+          case 'missing':
+            return 'Readiness evidence missing';
+          case 'not-reported':
+            return 'Not reported';
+          default:
+            return 'Readiness reported';
+        }
+      };
+      const applyExecutionReadinessEvidenceText = (readiness) => {
+        const evidence = readiness?.evidence || readiness?.checks || readiness?.reasons || readiness?.details || [];
+        if (!Array.isArray(evidence) || !evidence.length) return '—';
+        return evidence.map((entry) => {
+          if (typeof entry === 'string') return entry.trim();
+          if (entry && typeof entry === 'object') return textOrDash(entry.summary || entry.message || entry.reason || entry.name || entry.id);
+          return '';
+        }).filter(Boolean).join('; ') || '—';
+      };
+      const applyExecutionReadinessSummary = (record) => {
+        const readiness = applyExecutionReadinessSource(record);
+        const summary = readiness?.summary || readiness?.message || readiness?.reason;
+        if (typeof summary === 'string' && summary.trim()) return summary.trim();
+        switch (applyExecutionReadinessState(record)) {
+          case 'disabled':
+            return 'Live AWS mutation is disabled for this local-safe apply record; this is expected metadata-only evidence, not an AWS readiness failure.';
+          case 'missing':
+            return 'No backend preflight readiness evidence is attached yet. Use claim/lifecycle metadata and local-safe docs before treating this as ready for live AWS execution.';
+          case 'ready':
+            return 'Backend preflight evidence says this local-safe handoff is ready to be claimed by the executor.';
+          case 'blocked':
+            return 'Backend preflight evidence says operators should resolve the reported blocker before expecting executor progress.';
+          default:
+            return 'No execution-readiness evidence is attached to this apply record.';
+        }
+      };
+      const applyExecutionReadinessCheckedAt = (record) => {
+        const readiness = applyExecutionReadinessSource(record);
+        const value = readiness?.checkedAt || readiness?.timestamp || readiness?.updatedAt;
+        return typeof value === 'string' && value.trim() ? value.trim() : '—';
+      };
+      const applyExecutionReadinessRows = (record) => {
+        const readiness = applyExecutionReadinessSource(record);
+        const rows = [
+          ['Execution readiness', applyExecutionReadinessLabel(record), 'summary'],
+          ['Readiness summary', applyExecutionReadinessSummary(record), 'summary'],
+        ];
+        const checkedAt = applyExecutionReadinessCheckedAt(record);
+        if (checkedAt !== '—') rows.push(['Readiness checked', checkedAt]);
+        const evidence = applyExecutionReadinessEvidenceText(readiness);
+        if (evidence !== '—') rows.push(['Readiness evidence', evidence, 'summary']);
+        return rows;
+      };
       const appliesMonitorViewLabel = (view) => {
         const normalized = normalizeAppliesMonitorView(view);
         return normalized === 'stale' ? 'Stale claims' : (normalized === 'active' ? 'Active handoffs' : 'Queued applies');
@@ -9086,6 +9164,7 @@
           ['Created at', metricValue(record?.createdAt)],
           ['Operation progress', applyOperationProgressSummary(record.operations || []), 'summary'],
           ...queuedApplyClaimRows(record),
+          ...applyExecutionReadinessRows(record),
         ].forEach(([label, value, className]) => metrics.append(createMetric(label, value, className || '')));
         top.append(metrics);
 
@@ -10259,6 +10338,7 @@
             const lifecycleSummaryGrid = createElement('div', 'detail-grid');
             const lifecycleMetadataGrid = createElement('div', 'detail-grid');
             const claimMetadataGrid = createElement('div', 'detail-grid');
+            const readinessGrid = createElement('div', 'detail-grid');
             const recordLinks = createElement('div', 'row-links');
             [
               ['Apply ID', metricValue(activeApplyRecord.id)],
@@ -10282,6 +10362,9 @@
               ['Cancelled operations', String(operationCounts.cancelled)],
             ].forEach(([label, value, className]) => {
               lifecycleSummaryGrid.append(createMetric(label, value, className || ''));
+            });
+            applyExecutionReadinessRows(activeApplyRecord).forEach(([label, value, className]) => {
+              readinessGrid.append(createMetric(label, value, className || ''));
             });
             if (hasApplyLifecycleMetadata(activeApplyRecord)) {
               [
@@ -10317,7 +10400,7 @@
               createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activeApplyRecord.planId || activePlanRecord?.id || currentPageState.planId, applyId: activeApplyRecord.id }), 'Open bookmarked apply', '_self'),
               createNavLink(buildApplyRequestRoute(activeApplyRecord.id), 'Apply JSON'),
             );
-            recordSection.append(recordGrid, lifecycleSummaryGrid);
+            recordSection.append(recordGrid, readinessGrid, lifecycleSummaryGrid);
             if (lifecycleMetadataGrid.children.length) {
               recordSection.append(lifecycleMetadataGrid);
             }
@@ -10326,6 +10409,15 @@
             }
             recordSection.append(recordLinks);
             pushPlanSection(recordSection, 'plan-stored-apply', 'Stored apply request');
+
+            const readinessSection = createDetailSection('Apply execution readiness');
+            const readinessIntro = createElement('div', 'detail-state', 'Execution-readiness copy is sourced from backend readiness evidence when present, or from the immutable apply record fallback state when evidence has not been reported yet. This keeps local-safe handoffs clear without implying live AWS mutation.');
+            const readinessDetailsGrid = createElement('div', 'detail-grid');
+            applyExecutionReadinessRows(activeApplyRecord).forEach(([label, value, className]) => {
+              readinessDetailsGrid.append(createMetric(label, value, className || ''));
+            });
+            readinessSection.append(readinessIntro, readinessDetailsGrid);
+            pushPlanSection(readinessSection, 'plan-apply-readiness', 'Apply execution readiness');
           }
 
           if (activeApplyRecord?.error || activeApplyRecord?.details?.length) {
