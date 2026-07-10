@@ -2590,6 +2590,14 @@ assert "const accountGroupDetailReadRoute = (accountID, group) => {" in account_
 assert "groupLinks.append(createCopyReadRouteButton(accountGroupDetailReadRoute(account.awsAccountId, group), 'Copy group read route'));" in account_ui, account_ui
 assert "return `GET /v1/overview/accounts/${encodedAccountID}/projects/${appRef}/environments/${environmentRef}`;" in account_ui, account_ui
 assert "const hasRuntimeEventsLinkEvidence = (deployment) => {" in account_ui, account_ui
+assert "const runtimeEventCueFromDeployments = (deployments = []) => {" in account_ui, account_ui
+assert "const createRuntimeEventCue = (deployments = [], scopeLabel = 'Account') => {" in account_ui, account_ui
+assert 'Runtime events retained' in account_ui, account_ui
+assert 'No recent runtime events' in account_ui, account_ui
+assert 'runtime-event-cue-empty' in account_ui, account_ui
+assert "`Latest event · ${cue.deploymentName}" in account_ui, account_ui
+assert "createRuntimeEventCue(account.deployments || [], 'Account')" in account_ui, account_ui
+assert "createRuntimeEventCue(group.deployments || [], 'Group')" in account_ui, account_ui
 assert "detailLinks.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name }), 'Open runtime events', '_self'));" in account_ui, account_ui
 assert "createAccountDetailActions(accountState).forEach((action) => {" in account_ui, account_ui
 assert "toolbar.replaceChildren(toolbarActions);" in account_ui, account_ui

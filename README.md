@@ -172,8 +172,7 @@ cue only when `runtimeSummary.changeDetails[]` carries controller-authored chang
 drill-down keeps its toolbar `Refresh account detail` action; account/group JSON handoffs include adjacent `Copy account read route`
 / `Copy group read route` controls for exact scoped `GET /v1/overview/accounts/...`
 handoffs, and deployment rows with meaningful runtime/event evidence add a `_self` `Open runtime events` link to `/?page=application&deployment={deploymentName}#application-runtime-events` while preserving `q` / `sync` / `account`. Expandable rows expose their controlled lazy-loaded detail panel with
-`aria-controls`; if duplicate panels wait on the same deployment detail read, the shared result updates every waiting panel instead of leaving stale loading copy behind. Application detail pages show the exact backing read route,
-`Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search
+`aria-controls`; if duplicate panels wait on the same deployment detail read, the shared result updates every waiting panel instead of leaving stale loading copy behind. The account drill-down header and each project/environment group header also show a compact retained runtime-events cue when the already-loaded `account.deployments[].runtimeSummary.historyCount` or `history[]` fields report controller history; the cue names the newest deployment/timestamp/summary or calmly says `No recent runtime events` without adding another backend read or changing the applications overview. Application detail pages show the exact backing read route, `Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search
 with visible/total impact and section-specific empty guidance alongside the inline
 `Clear resource filter`, plus compact resource-row `Evidence cues`:
 `Live evidence available` / `Recent logs supported` `_self` handoffs to the final

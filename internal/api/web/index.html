@@ -85,6 +85,8 @@
       .deployment-group-head { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; padding: 0 4px; }
       .deployment-group-title { margin:0; font-size: 16px; }
       .deployment-group-meta, .account-topology { color: var(--muted); font-size: 13px; margin-top: 6px; }
+      .runtime-event-cue { display:grid; gap: 2px; color: #c7d7f3; }
+      .runtime-event-latest { color: var(--muted); }
       .resource-filter-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
       .group-pill { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid rgba(103,183,255,.24); color: var(--blue); background: rgba(103,183,255,.08); }
       .group-rows { display:grid; gap: 12px; }
@@ -424,6 +426,90 @@
           runtimeSummary.currentStep,
         ].map((value) => String(value || '').trim()).filter((value) => value && value !== '—');
         return runtimeEvidence.length > 0;
+      };
+      const deploymentRuntimeEventCount = (deployment) => {
+        const historyCount = Number(deployment?.runtimeSummary?.historyCount);
+        if (Number.isFinite(historyCount) && historyCount > 0) return historyCount;
+        return Array.isArray(deployment?.history) ? deployment.history.length : 0;
+      };
+      const runtimeEventCandidateSummary = (candidate) => [
+        candidate?.summary,
+        candidate?.sync?.reason,
+        candidate?.health?.summary,
+        candidate?.rolloutPhase,
+        candidate?.currentStep,
+      ].map((value) => String(value || '').trim()).find(Boolean) || '';
+      const deploymentRuntimeEventCandidates = (deployment) => {
+        const runtimeSummary = deployment?.runtimeSummary || {};
+        const candidates = [];
+        if (runtimeSummary.timestamp || runtimeEventCandidateSummary(runtimeSummary) || runtimeSummary.source) {
+          candidates.push({
+            deploymentName: deployment?.name || 'Unknown deployment',
+            timestamp: runtimeSummary.timestamp || '',
+            source: runtimeSummary.source || '',
+            summary: runtimeEventCandidateSummary(runtimeSummary),
+          });
+        }
+        (Array.isArray(deployment?.history) ? deployment.history : []).forEach((event) => {
+          candidates.push({
+            deploymentName: deployment?.name || 'Unknown deployment',
+            timestamp: event?.timestamp || '',
+            source: event?.source || '',
+            summary: runtimeEventCandidateSummary(event),
+          });
+        });
+        return candidates;
+      };
+      const runtimeEventCandidateSortValue = (candidate) => String(candidate?.timestamp || '');
+      const compareRuntimeEventCandidates = (left, right) => {
+        const leftTimestamp = runtimeEventCandidateSortValue(left);
+        const rightTimestamp = runtimeEventCandidateSortValue(right);
+        if (leftTimestamp !== rightTimestamp) return rightTimestamp.localeCompare(leftTimestamp);
+        const leftName = String(left?.deploymentName || '');
+        const rightName = String(right?.deploymentName || '');
+        if (leftName !== rightName) return leftName.localeCompare(rightName);
+        const leftSource = String(left?.source || '');
+        const rightSource = String(right?.source || '');
+        if (leftSource !== rightSource) return leftSource.localeCompare(rightSource);
+        return String(left?.summary || '').localeCompare(String(right?.summary || ''));
+      };
+      const runtimeEventCueFromDeployments = (deployments = []) => {
+        const deploymentCues = (deployments || []).map((deployment) => {
+          const retainedEventCount = deploymentRuntimeEventCount(deployment);
+          if (retainedEventCount <= 0) return null;
+          const candidates = deploymentRuntimeEventCandidates(deployment).sort(compareRuntimeEventCandidates);
+          const latest = candidates[0] || { deploymentName: deployment?.name || 'Unknown deployment' };
+          return {
+            ...latest,
+            deploymentName: latest.deploymentName || deployment?.name || 'Unknown deployment',
+            retainedEventCount,
+          };
+        }).filter(Boolean).sort(compareRuntimeEventCandidates);
+        if (!deploymentCues.length) return null;
+        const retainedEventCount = deploymentCues.reduce((count, cue) => count + cue.retainedEventCount, 0);
+        return {
+          ...deploymentCues[0],
+          retainedEventCount,
+          eventDeploymentCount: deploymentCues.length,
+        };
+      };
+      const runtimeEventCueCountText = (cue) => {
+        const eventCount = Number(cue?.retainedEventCount) || 0;
+        const deploymentCount = Number(cue?.eventDeploymentCount) || 0;
+        return `${eventCount} event${eventCount === 1 ? '' : 's'} across ${deploymentCount} deployment${deploymentCount === 1 ? '' : 's'}`;
+      };
+      const createRuntimeEventCue = (deployments = [], scopeLabel = 'Account') => {
+        const cue = runtimeEventCueFromDeployments(deployments);
+        const title = scopeLabel === 'Account' ? 'Runtime events retained' : `${scopeLabel} runtime events retained`;
+        if (!cue) {
+          return createElement('div', 'account-topology runtime-event-cue runtime-event-cue-empty', `${title} · No recent runtime events`);
+        }
+        const node = createElement('div', 'account-topology runtime-event-cue', `${title} · ${runtimeEventCueCountText(cue)}`);
+        if (cue.deploymentName) {
+          const latestText = `Latest event · ${cue.deploymentName}${cue.timestamp ? ` · ${cue.timestamp}` : ''}${cue.summary ? ` · ${cue.summary}` : ''}`;
+          node.append(createElement('span', 'runtime-event-latest', latestText));
+        }
+        return node;
       };
       const createLatestRuntimeChangeCue = (deployment) => {
         const change = latestRuntimeChangeText(deployment);
@@ -10388,6 +10474,8 @@
               createElement('h3', 'deployment-group-title', `${metricValue(group.appRef)} · ${metricValue(group.environmentRef)}`),
               createElement('div', 'deployment-group-meta', `Project ${metricValue(group.appRef)} · Environment ${metricValue(group.environmentRef)} · Region ${metricValue(group.region)}`),
             );
+            const groupRuntimeEventCue = createRuntimeEventCue(group.deployments || [], 'Group');
+            if (groupRuntimeEventCue) groupTitleWrap.append(groupRuntimeEventCue);
             const groupLinks = createElement('div', 'row-links');
             groupLinks.classList.add('group-links');
             if (account.awsAccountId && group.appRef && group.environmentRef) {
@@ -10532,11 +10620,13 @@
 
         const detailSummary = createElement('article', 'account');
         detailSummary.id = 'account-summary';
+        const accountRuntimeEventCue = createRuntimeEventCue(account.deployments || [], 'Account');
         detailSummary.append(
           createElement('div', 'label', 'Account deployment overview'),
           createElement('h2', 'account-name', account.name || currentPageState.accountId || 'Account'),
           createElement('div', 'account-meta', `AWS account ${metricValue(account.awsAccountId)} · Regions: ${(account.allowedRegions || []).join(', ') || '—'}`),
           createElement('div', 'account-topology', `${account.projectCount ?? deriveProjectEnvironmentGroups(account).projectCount} projects · ${account.environmentCount ?? deriveProjectEnvironmentGroups(account).environmentCount} environments`),
+          ...(accountRuntimeEventCue ? [accountRuntimeEventCue] : []),
           createAccountDetailFreshnessMeta(accountState, account),
         );
         summary.replaceChildren(detailSummary);
