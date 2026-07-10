@@ -960,6 +960,43 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 	}
 }
 
+func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.T) {
+	docs := map[string]string{
+		"README":             readTextFile(t, "../README.md"),
+		"overview dashboard": readTextFile(t, "features/overview-dashboard.md"),
+		"local runtime":      readTextFile(t, "architecture/tenet-v1-local-runtime.md"),
+		"operator contract":  readTextFile(t, "architecture/tenet-v1-operator-contracts.md"),
+		"operator runbook":   readTextFile(t, "runbooks/operator-troubleshooting.md"),
+	}
+
+	for name, text := range docs {
+		for _, fragment := range []string{
+			"`TENET_AWS_ENABLE_APPLY=true` queues local-safe apply handoff metadata only",
+			"requires no live AWS credentials",
+			"does not perform live AWS mutation",
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to lock local-safe apply boundary fragment %q", name, fragment)
+			}
+		}
+	}
+
+	for name, text := range map[string]string{
+		"smoke-local":  readTextFile(t, "../scripts/smoke-local.sh"),
+		"smoke-docker": readTextFile(t, "../scripts/smoke-docker.sh"),
+	} {
+		for _, fragment := range []string{
+			"TENET_AWS_ENABLE_APPLY=true queues local-safe apply handoff metadata only",
+			"requires no live AWS credentials",
+			"does not perform live AWS mutation",
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to keep local-safe apply smoke contract fragment %q", name, fragment)
+			}
+		}
+	}
+}
+
 func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{

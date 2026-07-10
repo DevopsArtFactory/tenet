@@ -991,6 +991,53 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 	}
 }
 
+func TestLocalSafeApplyEnableApplyMetadataOnlyCredentialFreeContract(t *testing.T) {
+	for path, fragments := range map[string][]string{
+		"README.md": {
+			"`TENET_AWS_ENABLE_APPLY=true` queues local-safe apply handoff metadata only",
+			"requires no live AWS credentials",
+			"does not perform live AWS mutation",
+		},
+		"docs/features/overview-dashboard.md": {
+			"`TENET_AWS_ENABLE_APPLY=true` queues local-safe apply handoff metadata only",
+			"requires no live AWS credentials",
+			"does not perform live AWS mutation",
+		},
+		"docs/architecture/tenet-v1-local-runtime.md": {
+			"`TENET_AWS_ENABLE_APPLY=true` queues local-safe apply handoff metadata only",
+			"requires no live AWS credentials",
+			"does not perform live AWS mutation",
+		},
+		"docs/architecture/tenet-v1-operator-contracts.md": {
+			"`TENET_AWS_ENABLE_APPLY=true` queues local-safe apply handoff metadata only",
+			"requires no live AWS credentials",
+			"does not perform live AWS mutation",
+		},
+		"docs/runbooks/operator-troubleshooting.md": {
+			"`TENET_AWS_ENABLE_APPLY=true` queues local-safe apply handoff metadata only",
+			"requires no live AWS credentials",
+			"does not perform live AWS mutation",
+		},
+		"scripts/smoke-local.sh": {
+			"TENET_AWS_ENABLE_APPLY=true queues local-safe apply handoff metadata only",
+			"requires no live AWS credentials",
+			"does not perform live AWS mutation",
+		},
+		"scripts/smoke-docker.sh": {
+			"TENET_AWS_ENABLE_APPLY=true queues local-safe apply handoff metadata only",
+			"requires no live AWS credentials",
+			"does not perform live AWS mutation",
+		},
+	} {
+		body := readRepoFile(t, path)
+		for _, fragment := range fragments {
+			if !strings.Contains(body, fragment) {
+				t.Fatalf("expected %s to preserve local-safe apply boundary fragment %q", path, fragment)
+			}
+		}
+	}
+}
+
 func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *testing.T) {
 	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{

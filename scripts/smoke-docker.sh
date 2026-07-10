@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# TENET_AWS_ENABLE_APPLY=true queues local-safe apply handoff metadata only;
+# it requires no live AWS credentials and does not perform live AWS mutation.
 COMPOSE_FILE=${TENET_COMPOSE_FILE:-$ROOT/compose.yaml}
 HOST=${TENET_DOCKER_SMOKE_HOST:-127.0.0.1}
 PORT=${TENET_DOCKER_SMOKE_PORT:-8080}
