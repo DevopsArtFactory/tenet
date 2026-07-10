@@ -750,6 +750,9 @@ var (
 		"GET /v1/status/deployments",
 		"GET /v1/catalog/deployments",
 		"GET /v1/overview/accounts",
+		"GET /v1/applies?status=active",
+		"GET /v1/applies?status=active&claim=stale",
+		"GET /v1/applies?status=queued",
 		"GET /v1/audit-logs",
 	}
 	operatorContextCatalogReadExampleRoutes = []string{

@@ -3117,7 +3117,7 @@ def assert_operator_context_common(payload):
     assert access_verdicts.get("deploymentScopedWrite", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers + project_environment_scope_headers, payload
     assert access_verdicts.get("deploymentScopedWrite", {}).get("acceptedRoleNames") == write_roles, payload
     assert access_verdicts.get("collectionRead", {}).get("filtersCollectionsByDeploymentAccess") is True, payload
-    assert access_verdicts.get("collectionRead", {}).get("exampleRoutes") == ["GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/catalog/deployments", "GET /v1/overview/accounts", "GET /v1/audit-logs"], payload
+    assert access_verdicts.get("collectionRead", {}).get("exampleRoutes") == ["GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/catalog/deployments", "GET /v1/overview/accounts", "GET /v1/applies?status=active", "GET /v1/applies?status=active&claim=stale", "GET /v1/applies?status=queued", "GET /v1/audit-logs"], payload
     assert access_verdicts.get("collectionRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers + project_environment_scope_headers, payload
     assert access_verdicts.get("collectionRead", {}).get("acceptedRoleNames") == read_roles, payload
     assert access_verdicts.get("catalogRead", {}).get("filtersCollectionsByDeploymentAccess") is True, payload
