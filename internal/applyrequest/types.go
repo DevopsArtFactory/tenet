@@ -3,6 +3,7 @@ package applyrequest
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
@@ -30,6 +31,13 @@ const (
 // ListStatusActive is the collection-only filter for non-terminal local-safe
 // apply handoff records. It is not a lifecycle status for persisted records.
 const ListStatusActive Status = "active"
+
+// ListClaim captures collection-only filters over local-safe executor claims.
+type ListClaim string
+
+const (
+	ListClaimStale ListClaim = "stale"
+)
 
 // Valid reports whether the apply-request lifecycle status is supported.
 func (s Status) Valid() bool {
@@ -170,23 +178,42 @@ type TransitionRequest struct {
 // ListQuery captures the narrow read filters supported for apply requests.
 type ListQuery struct {
 	Status Status
+	Claim  ListClaim
 }
 
 // Matches reports whether record belongs in this list query.
-func (q ListQuery) Matches(record Record) bool {
+func (q ListQuery) Matches(record Record, now time.Time) bool {
 	switch q.Status {
 	case "":
-		return true
+		return q.claimMatches(record, now)
 	case ListStatusActive:
-		return record.Status == StatusQueued || record.Status == StatusRunning
+		if record.Status != StatusQueued && record.Status != StatusRunning {
+			return false
+		}
+		return q.claimMatches(record, now)
 	default:
-		return record.Status == q.Status
+		return record.Status == q.Status && q.claimMatches(record, now)
 	}
 }
 
 // NewestFirst reports whether list results should use created-time descending order.
 func (q ListQuery) NewestFirst() bool {
 	return q.Status == ListStatusActive
+}
+
+func (q ListQuery) claimMatches(record Record, now time.Time) bool {
+	switch q.Claim {
+	case "":
+		return true
+	case ListClaimStale:
+		if record.Status != StatusRunning || record.Claim == nil {
+			return false
+		}
+		expired, _, _ := claimExpired(*record.Claim, now)
+		return expired
+	default:
+		return false
+	}
 }
 
 // Store persists immutable apply-request records.

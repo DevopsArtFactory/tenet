@@ -10971,6 +10971,18 @@ const queuedRecords = [
     createdAt: '2026-04-18T08:20:00Z',
     operations: [{ status: 'queued', phase: 'Waiting', target: 'target-pending', summary: 'Wait for worker' }],
   },
+  {
+    id: 'apply_running_legacy_stale',
+    planId: 'plan_ready_legacy_stale',
+    deploymentName: 'legacy-prod',
+    status: 'running',
+    createdAt: '2026-04-18T08:05:00Z',
+    operations: [{ status: 'running', phase: 'Executing', target: 'target-legacy', summary: 'Run legacy stale claim' }],
+    claim: {
+      workerId: 'worker-legacy',
+      claimedAt: '2026-04-18T08:00:00Z',
+    },
+  },
 ];
 const scenarios = [
   {
@@ -11031,6 +11043,46 @@ const scenarios = [
     ],
   },
   {
+    name: 'stale claim collection',
+    search: '?page=applies&appliesView=stale',
+    response: { ok: true, json: () => Promise.resolve([queuedRecords[1]]) },
+    expected: [
+      'Applies monitor',
+      'Current applies monitor read: GET /v1/applies?status=active&claim=stale.',
+      'worker-prod',
+      'Apply status | Running',
+      'Executor worker | worker-stale',
+      'Claim status | Claimed by worker-stale, but attention is needed. Reason: lease expired before the executor heartbeat refreshed it',
+    ],
+    link: { href: '/?page=plan&deployment=worker-prod&applyId=apply_running_stale', text: 'Open plan/apply workspace' },
+  },
+  {
+    name: 'stale claim collection with legacy claim metadata',
+    search: '?page=applies&appliesView=stale',
+    response: { ok: true, json: () => Promise.resolve([queuedRecords[3]]) },
+    expected: [
+      'Applies monitor',
+      'Current applies monitor read: GET /v1/applies?status=active&claim=stale.',
+      'legacy-prod',
+      'Apply status | Running',
+      'Executor worker | worker-legacy',
+      'Claimed at | 2026-04-18T08:00:00Z',
+      'Claim status | Claimed by worker-legacy, but attention is needed. Reason: persisted claim expiry metadata is missing; Tenet inferred this legacy claim is stale from claimedAt, and manual recovery may be required.',
+    ],
+    unexpected: 'Freshness metadata unavailable for this active apply claim.',
+    link: { href: '/?page=plan&deployment=legacy-prod&applyId=apply_running_legacy_stale', text: 'Open plan/apply workspace' },
+  },
+  {
+    name: 'stale empty collection',
+    search: '?page=applies&appliesView=stale',
+    response: { ok: true, json: () => Promise.resolve([]) },
+    expected: [
+      'No stale active apply claims are visible right now.',
+      'GET /v1/applies?status=active&claim=stale returned an empty collection.',
+      'Refresh applies',
+    ],
+  },
+  {
     name: 'denied collection reuses operator read guidance',
     search: '?page=applies',
     response: { ok: false, status: 403, text: () => Promise.resolve('forbidden: authenticated viewer-capable role is required for this operator read route') },
@@ -11058,14 +11110,14 @@ const scenarios = [
     const fetch = (url) => {
       fetchCalls.push(String(url));
       if (url === '/v1/operator/context') return Promise.resolve({ ok: true, json: () => Promise.resolve({ trustedHeaders: { enabled: true }, identity: { authenticated: true }, roles: { canRead: true, canWrite: false }, deploymentAccess: { enforced: true, forwarded: true } }) });
-      if (url === '/v1/applies?status=queued' || url === '/v1/applies?status=active') return Promise.resolve(scenario.response);
+      if (url === '/v1/applies?status=queued' || url === '/v1/applies?status=active' || url === '/v1/applies?status=active&claim=stale') return Promise.resolve(scenario.response);
       throw new Error('unexpected fetch url for ' + scenario.name + ': ' + url);
     };
     new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
     await settle();
     await settle();
     await settle();
-    const expectedRoute = scenario.search.includes('appliesView=active') ? '/v1/applies?status=active' : '/v1/applies?status=queued';
+    const expectedRoute = scenario.search.includes('appliesView=stale') ? '/v1/applies?status=active&claim=stale' : (scenario.search.includes('appliesView=active') ? '/v1/applies?status=active' : '/v1/applies?status=queued');
     if (fetchCalls.join(', ') !== '/v1/operator/context, ' + expectedRoute) throw new Error('unexpected fetch sequence for ' + scenario.name + ': ' + fetchCalls.join(', '));
     if (window.location.search !== scenario.search) throw new Error('expected applies monitor URL to stay bookmarkable for ' + scenario.name + ', got ' + window.location.search);
     const root = document.getElementById('accounts');
@@ -11094,11 +11146,18 @@ const scenarios = [
       const toolbarButtons = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
       const activeButton = toolbarButtons.find((node) => node.textContent === 'Active handoffs');
       if (!activeButton) throw new Error('expected active handoffs view control');
+      const staleButton = toolbarButtons.find((node) => node.textContent === 'Stale claims');
+      if (!staleButton) throw new Error('expected stale claims view control');
       activeButton.dispatch('click');
       await settle();
       await waitForFetchCount(fetchCalls, 4);
       if (window.location.search !== '?page=applies&appliesView=active') throw new Error('expected active view to update bookmarkable URL, got ' + window.location.search);
       if (fetchCalls[3] !== '/v1/applies?status=active') throw new Error('expected active view fetch, got ' + fetchCalls.join(', '));
+      staleButton.dispatch('click');
+      await settle();
+      await waitForFetchCount(fetchCalls, 5);
+      if (window.location.search !== '?page=applies&appliesView=stale') throw new Error('expected stale view to update bookmarkable URL, got ' + window.location.search);
+      if (fetchCalls[4] !== '/v1/applies?status=active&claim=stale') throw new Error('expected stale view fetch, got ' + fetchCalls.join(', '));
     }
   }
 })();

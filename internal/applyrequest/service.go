@@ -151,8 +151,9 @@ func (s Service) List(ctx context.Context, query ListQuery) ([]Record, error) {
 		return nil, err
 	}
 	listed := make([]Record, 0, len(records))
+	now := s.now().UTC()
 	for _, record := range records {
-		if !query.Matches(record) {
+		if !query.Matches(record, now) {
 			continue
 		}
 		listed = append(listed, NormalizeOperationIDs(record))

@@ -881,7 +881,7 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 			"perform live AWS mutation",
 			"read-only `/?page=applies` monitor defaults to",
 			"queued subset read",
-			"queued/active view control",
+			"explicit queued/active/stale view controls",
 			"`?appliesView=active`",
 			"Refresh applies",
 			"fresh/stale/pending",

@@ -12273,6 +12273,33 @@ func TestRouterApplyRequestCollection(t *testing.T) {
 		}
 	})
 
+	t.Run("stale active claim payload passes active status and stale claim filters", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			ApplyRequests: func(_ context.Context, query applyrequest.ListQuery) ([]applyrequest.Record, error) {
+				if query.Status != applyrequest.ListStatusActive || query.Claim != applyrequest.ListClaimStale {
+					t.Fatalf("expected active stale-claim list query, got %+v", query)
+				}
+				return []applyrequest.Record{records[2]}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/applies?status=active&claim=stale", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var got []applyrequest.Record
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode stale active applies payload: %v", err)
+		}
+		if len(got) != 1 || got[0].ID != "apply_running_api" || got[0].Claim == nil {
+			t.Fatalf("unexpected stale active applies payload: %+v", got)
+		}
+	})
+
 	t.Run("unavailable", func(t *testing.T) {
 		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 		req := httptest.NewRequest(http.MethodGet, "/v1/applies?status=queued", nil)
@@ -12301,7 +12328,7 @@ func TestRouterApplyRequestCollection(t *testing.T) {
 		assertInternalServerErrorResponse(t, resp, upstreamErr)
 	})
 
-	for _, path := range []string{"/v1/applies", "/v1/applies?status=failed", "/v1/applies?status=running", "/v1/applies?status=active&deployment=api-prod", "/v1/applies?status=queued&workerId=worker-a"} {
+	for _, path := range []string{"/v1/applies", "/v1/applies?status=failed", "/v1/applies?status=running", "/v1/applies?status=active&deployment=api-prod", "/v1/applies?status=queued&workerId=worker-a", "/v1/applies?status=queued&claim=stale", "/v1/applies?status=active&claim=fresh"} {
 		t.Run("unsupported query "+path, func(t *testing.T) {
 			router := NewRouter(Options{
 				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},

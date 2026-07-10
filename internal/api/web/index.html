@@ -7244,13 +7244,20 @@
         unavailable: 'applications overview unavailable',
         failure: 'applications overview request failed',
       });
-      const normalizeAppliesMonitorView = (view) => String(view || '').toLowerCase() === 'active' ? 'active' : 'queued';
-      const appliesMonitorRoutePath = (view = 'queued') => `/v1/applies?status=${normalizeAppliesMonitorView(view)}`;
+      const appliesMonitorViews = ['queued', 'active', 'stale'];
+      const normalizeAppliesMonitorView = (view) => appliesMonitorViews.includes(String(view || '').toLowerCase()) ? String(view || '').toLowerCase() : 'queued';
+      const appliesMonitorRoutePath = (view = 'queued') => {
+        const normalized = normalizeAppliesMonitorView(view);
+        if (normalized === 'stale') return '/v1/applies?status=active&claim=stale';
+        return `/v1/applies?status=${normalized}`;
+      };
       const appliesMonitorReadRoute = (view = 'queued') => `GET ${appliesMonitorRoutePath(view)}`;
       const queuedAppliesRoutePath = () => appliesMonitorRoutePath('queued');
       const queuedAppliesReadRoute = () => appliesMonitorReadRoute('queued');
       const activeAppliesRoutePath = () => appliesMonitorRoutePath('active');
       const activeAppliesReadRoute = () => appliesMonitorReadRoute('active');
+      const staleAppliesRoutePath = () => appliesMonitorRoutePath('stale');
+      const staleAppliesReadRoute = () => appliesMonitorReadRoute('stale');
       const fetchAppliesMonitor = (view = 'queued') => fetchEmbeddedReadRouteJSON(appliesMonitorRoutePath(view), {
         unavailable: `${normalizeAppliesMonitorView(view)} applies API unavailable`,
         failure: `${normalizeAppliesMonitorView(view)} applies request failed`,
@@ -8813,7 +8820,16 @@
         const date = new Date(raw);
         return Number.isNaN(date.getTime()) ? null : date;
       };
-      const applyClaimFreshnessSummary = (record) => {
+      const legacyApplyClaimExpiryDate = (record) => {
+        if (applyClaimFreshnessValue(record, 'expiresAt') !== '—') return null;
+        const claimedAt = applyClaimTimestampValue(record);
+        if (claimedAt === '—') return null;
+        const date = new Date(claimedAt);
+        if (Number.isNaN(date.getTime())) return null;
+        return new Date(date.getTime() + 5 * 60 * 1000);
+      };
+      const applyClaimFreshnessSummary = (record, options = {}) => {
+        const { inferLegacyStale = false } = options;
         const worker = applyClaimWorkerValue(record);
         const workerPart = worker !== '—' ? ` by ${worker}` : '';
         const heartbeat = applyClaimFreshnessValue(record, 'lastHeartbeatAt');
@@ -8821,6 +8837,7 @@
         const state = applyClaimFreshnessState(record);
         const reason = applyClaimFreshnessReason(record);
         const expiresAt = applyClaimDateValue(record, 'expiresAt');
+        const legacyExpiresAt = inferLegacyStale ? legacyApplyClaimExpiryDate(record) : null;
         const hasClaim = hasApplyClaimCoreMetadata(record);
         const active = isActiveApplyRecord(record);
         if (!hasClaim && active) {
@@ -8829,11 +8846,14 @@
         if (!hasClaim) return 'No executor claim metadata is attached to this apply request.';
         const staleStates = ['stale', 'expired', 'lease_expired', 'lease-expired', 'heartbeat_stale', 'heartbeat-stale'];
         const freshStates = ['fresh', 'healthy', 'active'];
-        if (staleStates.includes(state) || (expiresAt && expiresAt.getTime() <= Date.now())) {
-          const staleReason = reason !== '—' ? ` Reason: ${reason}` : ' The executor heartbeat or lease is stale or expired.';
+        if (staleStates.includes(state) || (expiresAt && expiresAt.getTime() <= Date.now()) || (legacyExpiresAt && legacyExpiresAt.getTime() <= Date.now())) {
+          let staleReason = reason !== '—' ? ` Reason: ${reason}` : ' The executor heartbeat or lease is stale or expired.';
+          if (legacyExpiresAt && !expiresAt && reason === '—') {
+            staleReason = ' Reason: persisted claim expiry metadata is missing; Tenet inferred this legacy claim is stale from claimedAt, and manual recovery may be required.';
+          }
           return `Claimed${workerPart}, but attention is needed.${staleReason}`;
         }
-        if (freshStates.includes(state) || heartbeat !== '—' || (expiresAt && expiresAt.getTime() > Date.now())) {
+        if (freshStates.includes(state) || heartbeat !== '—' || (expiresAt && expiresAt.getTime() > Date.now()) || (legacyExpiresAt && legacyExpiresAt.getTime() > Date.now())) {
           const expiryPart = expires !== '—' ? ` Lease expires at ${expires}.` : '';
           return `Claimed${workerPart}; heartbeat freshness looks current.${expiryPart}`;
         }
@@ -8888,16 +8908,27 @@
         if (Array.isArray(result?.entries)) return result.entries;
         return [];
       };
-      const appliesMonitorViewLabel = (view) => normalizeAppliesMonitorView(view) === 'active' ? 'Active handoffs' : 'Queued applies';
-      const appliesMonitorEmptyText = (view) => normalizeAppliesMonitorView(view) === 'active'
-        ? 'No active apply handoffs are visible right now. GET /v1/applies?status=active returned an empty collection.'
-        : 'No queued apply requests are visible right now. GET /v1/applies?status=queued returned an empty collection.';
+      const appliesMonitorViewLabel = (view) => {
+        const normalized = normalizeAppliesMonitorView(view);
+        return normalized === 'stale' ? 'Stale claims' : (normalized === 'active' ? 'Active handoffs' : 'Queued applies');
+      };
+      const appliesMonitorLoadingLabel = (view) => {
+        const normalized = normalizeAppliesMonitorView(view);
+        return normalized === 'stale' ? 'stale active apply claims' : (normalized === 'active' ? 'active apply handoffs' : 'queued apply requests');
+      };
+      const appliesMonitorEmptyText = (view) => {
+        const normalized = normalizeAppliesMonitorView(view);
+        if (normalized === 'stale') return 'No stale active apply claims are visible right now. GET /v1/applies?status=active&claim=stale returned an empty collection.';
+        return normalized === 'active'
+          ? 'No active apply handoffs are visible right now. GET /v1/applies?status=active returned an empty collection.'
+          : 'No queued apply requests are visible right now. GET /v1/applies?status=queued returned an empty collection.';
+      };
       const createAppliesMonitorRefreshButton = (state) => createRefreshButton('Refresh applies', state?.status === 'loading', () => state?.onRefresh?.().catch(() => {}));
       const createAppliesMonitorViewControl = (state) => {
         const currentView = normalizeAppliesMonitorView(state?.view || currentPageState.appliesView || 'queued');
         const wrap = createElement('div', 'toolbar-chips');
-        ['queued', 'active'].forEach((view) => {
-          const label = view === 'active' ? 'Active handoffs' : 'Queued applies';
+        ['queued', 'active', 'stale'].forEach((view) => {
+          const label = view === 'stale' ? 'Stale claims' : (view === 'active' ? 'Active handoffs' : 'Queued applies');
           const button = createElement('button', view === currentView ? 'toolbar-chip toolbar-chip-clear' : 'toolbar-chip-clear', label);
           button.type = 'button';
           button.disabled = state?.status === 'loading' && view !== currentView;
@@ -8930,10 +8961,14 @@
       const queuedApplyClaimRows = (record) => {
         const rows = [];
         if (isActiveApplyRecord(record) || hasApplyClaimCoreMetadata(record)) {
-          rows.push(['Claim status', applyClaimFreshnessSummary(record), 'summary']);
+          rows.push(['Claim status', applyClaimFreshnessSummary(record, { inferLegacyStale: true }), 'summary']);
         }
         if (applyClaimWorkerValue(record) !== '—') {
           rows.push(['Executor worker', applyClaimWorkerValue(record)]);
+        }
+        const claimedAt = applyClaimTimestampValue(record);
+        if (claimedAt !== '—') {
+          rows.push(['Claimed at', claimedAt]);
         }
         const lastHeartbeat = applyClaimFreshnessValue(record, 'lastHeartbeatAt');
         if (lastHeartbeat !== '—') {
@@ -8983,7 +9018,7 @@
         const route = appliesMonitorRoutePath(view);
         const readRoute = appliesMonitorReadRoute(view);
         if (state?.status === 'loading' && !(state.records || []).length) {
-          renderQueuedAppliesState(`Loading ${view === 'active' ? 'active apply handoffs' : 'queued apply requests'} from ${readRoute}…`, '', [
+          renderQueuedAppliesState(`Loading ${appliesMonitorLoadingLabel(view)} from ${readRoute}…`, '', [
             createAppliesMonitorRefreshButton(state),
           ], state);
           return;
@@ -9049,8 +9084,9 @@
       const syncAppliesMonitorPageState = () => {
         const params = new URLSearchParams(window.location.search);
         params.set('page', 'applies');
-        if (normalizeAppliesMonitorView(currentPageState.appliesView) === 'active') {
-          params.set('appliesView', 'active');
+        const view = normalizeAppliesMonitorView(currentPageState.appliesView);
+        if (view === 'active' || view === 'stale') {
+          params.set('appliesView', view);
         } else {
           params.delete('appliesView');
           params.delete('applyView');
