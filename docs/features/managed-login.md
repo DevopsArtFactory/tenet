@@ -55,3 +55,12 @@ If an operator remains signed in at the IdP or the external front door after `/a
 Trusted front-door identity still wins when trusted headers are present. Enable `TENET_API_TRUST_AUTHENTICATED_HEADERS=true` and the enforcement toggles only on API instances reachable exclusively through a front door that authenticates callers and strips spoofable inbound `X-Tenet-Authenticated-*`, `X-Tenet-Authorized-*`, and trusted-alias `X-User-*` headers before forwarding trusted values.
 
 Managed login authenticates the browser operator; it does not grant Tenet roles or deployment access by itself. Repository-backed RBAC policy diagnostics can explain how users or groups map to Tenet roles and deployment/project/environment scopes, but route enforcement still depends on Tenet's trusted role and deployment/project/environment authorization settings. Treat policy diagnostics as evidence for front-door/RBAC wiring until policy-derived route enforcement is explicitly enabled in a future change.
+
+## Verification
+
+Use focused Go tests for route/session/env wiring and provider helpers:
+
+- `go test ./internal/api ./cmd/tenet-api`
+- `go test ./internal/authprovider ./internal/authidentity ./internal/authstate`
+
+Local and Docker smoke intentionally cover the out-of-box disabled managed-login runtime unless OAuth/OIDC settings are supplied. Local fake-provider router tests and the embedded UI harness cover active GitHub, Google Workspace, and Okta OIDC sign-in/sign-out flows without live GitHub, Google, or Okta credentials. The fake logout path must keep `/auth/logout?returnUrl=...` in the same shell, clear only Tenet's signed `tenet_session` cookie, and avoid claiming provider-token revocation or upstream front-door sign-out.
