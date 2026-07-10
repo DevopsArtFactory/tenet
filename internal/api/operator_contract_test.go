@@ -3,6 +3,7 @@ package api
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -30,8 +31,18 @@ func readRepoFile(t *testing.T, relativePath string) string {
 	return string(body)
 }
 
-func redactedAuthProviderPlaceholder() string {
-	return "TENET_AUTH_PROVIDER=" + strings.Repeat("*", 3)
+var redactedAuthProviderPlaceholderPattern = regexp.MustCompile(`TENET_AUTH_PROVIDER=\*{3,}`)
+
+func redactedAuthProviderPlaceholder(body string) string {
+	return redactedAuthProviderPlaceholderPattern.FindString(body)
+}
+
+func assertNoRedactedAuthProviderPlaceholder(t *testing.T, sourceName, body string) {
+	t.Helper()
+
+	if placeholder := redactedAuthProviderPlaceholder(body); placeholder != "" {
+		t.Fatalf("expected %s to use concrete non-secret auth provider examples instead of placeholder %q", sourceName, placeholder)
+	}
 }
 
 func concreteAuthProviderModeExamples() []string {
@@ -40,6 +51,23 @@ func concreteAuthProviderModeExamples() []string {
 		"`TENET_AUTH_PROVIDER=google_oidc`",
 		"`TENET_AUTH_PROVIDER=okta_oidc`",
 		"`TENET_AUTH_PROVIDER=okta_saml`",
+	}
+}
+
+func TestRedactedAuthProviderDetectionStaysProviderSpecific(t *testing.T) {
+	if placeholder := redactedAuthProviderPlaceholder("TENET_AUTH_PROVIDER=***"); placeholder != "TENET_AUTH_PROVIDER=***" {
+		t.Fatalf("expected redacted auth provider placeholder to be detected; got %q", placeholder)
+	}
+
+	for _, credentialBearingPlaceholder := range []string{
+		"TENET_GITHUB_CLIENT_SECRET=***",
+		"TENET_GOOGLE_OIDC_CLIENT_SECRET=***",
+		"TENET_OKTA_OIDC_CLIENT_SECRET=***",
+		"TENET_AUTH_SESSION_SECRET=***",
+	} {
+		if placeholder := redactedAuthProviderPlaceholder(credentialBearingPlaceholder); placeholder != "" {
+			t.Fatalf("expected credential-bearing placeholder %q to remain allowed; matched %q", credentialBearingPlaceholder, placeholder)
+		}
 	}
 }
 
@@ -238,7 +266,6 @@ func TestLocalRuntimeDocsDescribeComposeRedisStatusStore(t *testing.T) {
 
 func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
-	redactedProviderSetting := redactedAuthProviderPlaceholder()
 	for _, source := range []struct {
 		name     string
 		body     string
@@ -259,9 +286,7 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 			"TENET_AUTH_PROVIDER=okta_saml",
 		}},
 	} {
-		if strings.Contains(source.body, redactedProviderSetting) {
-			t.Fatalf("expected %s to use concrete non-secret auth provider examples instead of placeholder %q", source.name, redactedProviderSetting)
-		}
+		assertNoRedactedAuthProviderPlaceholder(t, source.name, source.body)
 		for _, providerExample := range source.examples {
 			if !strings.Contains(source.body, providerExample) {
 				t.Fatalf("expected %s to include concrete provider example %q", source.name, providerExample)
@@ -386,9 +411,7 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		{name: "scripts/smoke-local.sh", body: readRepoFile(t, "scripts/smoke-local.sh")},
 		{name: "scripts/smoke-docker.sh", body: readRepoFile(t, "scripts/smoke-docker.sh")},
 	} {
-		if strings.Contains(source.body, redactedProviderSetting) {
-			t.Fatalf("expected %s to use concrete non-secret auth provider examples instead of placeholder %q", source.name, redactedProviderSetting)
-		}
+		assertNoRedactedAuthProviderPlaceholder(t, source.name, source.body)
 	}
 }
 
@@ -399,10 +422,7 @@ func TestManagedLoginFeatureGuideDocs(t *testing.T) {
 	}
 
 	doc := readRepoFile(t, "docs/features/managed-login.md")
-	redactedProviderSetting := redactedAuthProviderPlaceholder()
-	if strings.Contains(doc, redactedProviderSetting) {
-		t.Fatalf("expected managed-login guide to use concrete non-secret provider modes instead of placeholder %q", redactedProviderSetting)
-	}
+	assertNoRedactedAuthProviderPlaceholder(t, "docs/features/managed-login.md", doc)
 
 	for _, fragment := range []string{
 		"# Managed Login",
@@ -412,6 +432,7 @@ func TestManagedLoginFeatureGuideDocs(t *testing.T) {
 		"`TENET_AUTH_PROVIDER=google_oidc`",
 		"`TENET_AUTH_PROVIDER=okta_oidc`",
 		"`TENET_AUTH_PROVIDER=okta_saml` is diagnostic-only",
+		"Credential-bearing settings such as client secrets and session secrets may stay redacted in runbooks, logs, and snippets; the provider mode itself must stay concrete.",
 		"`GET /auth/login/github`",
 		"`GET /auth/login/google`",
 		"`GET /auth/login/okta`",
@@ -435,6 +456,18 @@ func TestManagedLoginFeatureGuideDocs(t *testing.T) {
 			t.Fatalf("expected managed-login guide to include %q", fragment)
 		}
 	}
+	for _, malformed := range []string{
+		"`TENET_AUTH_SESSION_COOKIE_SECURE=true when",
+		"`TENET_AUTH_SESSION_COOKIE_SECURE=true and",
+		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=true and",
+		"`X-Forwarded-Proto: https /",
+		"`Forwarded: proto=https evidence",
+	} {
+		if strings.Contains(doc, malformed) {
+			t.Fatalf("expected managed-login guide to close inline code spans around cookie/trusted-header examples before prose fragment %q", malformed)
+		}
+	}
+
 }
 
 func TestOperatorTroubleshootingRunbookDocsContract(t *testing.T) {
