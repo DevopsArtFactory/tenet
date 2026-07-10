@@ -2217,6 +2217,13 @@ func TestDeriveManagedDriftItemsAddsLiveTrafficRoutingEvidence(t *testing.T) {
 				ResourceType: "productionListenerRule",
 				ResourceName: "payments-api-prod-prod-listener",
 			},
+			Source: &domain.ManagedDriftSource{
+				Kind:         "resourceInspection",
+				Label:        "productionListenerRule payments-api-prod-prod-listener",
+				Route:        "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=productionListenerRule&resourceName=payments-api-prod-prod-listener",
+				ResourceType: "productionListenerRule",
+				ResourceName: "payments-api-prod-prod-listener",
+			},
 		}}
 		if !reflect.DeepEqual(clearManagedDriftIDs(got), want) {
 			t.Fatalf("expected live EC2 traffic-routing drift evidence, got %+v", got)
@@ -2245,6 +2252,13 @@ func TestDeriveManagedDriftItemsAddsLiveTrafficRoutingEvidence(t *testing.T) {
 			Actual:   "payments-worker-prod-blue",
 			Severity: domain.ManagedDriftSeverityHigh,
 			ResourceRef: &domain.ManagedDriftResourceRef{
+				ResourceType: "codeDeployDeploymentGroup",
+				ResourceName: "payments-worker-prod-codedeploy-group",
+			},
+			Source: &domain.ManagedDriftSource{
+				Kind:         "resourceInspection",
+				Label:        "codeDeployDeploymentGroup payments-worker-prod-codedeploy-group",
+				Route:        "/v1/overview/deployments/payments-worker-prod/resource-inspection?resourceType=codeDeployDeploymentGroup&resourceName=payments-worker-prod-codedeploy-group",
 				ResourceType: "codeDeployDeploymentGroup",
 				ResourceName: "payments-worker-prod-codedeploy-group",
 			},
@@ -2368,6 +2382,13 @@ func TestDeriveManagedDriftItemsAddsLiveResourceRefs(t *testing.T) {
 			},
 		}
 		resourceRef := &domain.ManagedDriftResourceRef{ResourceType: "ecsService", ResourceName: "payments-worker-prod-service"}
+		source := &domain.ManagedDriftSource{
+			Kind:         "resourceInspection",
+			Label:        "ecsService payments-worker-prod-service",
+			Route:        "/v1/overview/deployments/payments-worker-prod/resource-inspection?resourceType=ecsService&resourceName=payments-worker-prod-service",
+			ResourceType: "ecsService",
+			ResourceName: "payments-worker-prod-service",
+		}
 
 		got := deriveManagedDriftItems(deployment, domain.DeploymentStatus{}, &runtimeLiveCapacityObservation{
 			ResourceType:                  resourceRef.ResourceType,
@@ -2390,6 +2411,9 @@ func TestDeriveManagedDriftItemsAddsLiveResourceRefs(t *testing.T) {
 			if item == nil || !reflect.DeepEqual(item.ResourceRef, resourceRef) {
 				t.Fatalf("expected %s to carry ECS resourceRef %+v, got %+v", field, resourceRef, item)
 			}
+			if item == nil || !reflect.DeepEqual(item.Source, source) {
+				t.Fatalf("expected %s to carry ECS source %+v, got %+v", field, source, item)
+			}
 		}
 	})
 
@@ -2404,6 +2428,13 @@ func TestDeriveManagedDriftItemsAddsLiveResourceRefs(t *testing.T) {
 			},
 		}
 		resourceRef := &domain.ManagedDriftResourceRef{ResourceType: "candidateAutoScalingGroup", ResourceName: "payments-api-prod-candidate"}
+		source := &domain.ManagedDriftSource{
+			Kind:         "resourceInspection",
+			Label:        "candidateAutoScalingGroup payments-api-prod-candidate",
+			Route:        "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate",
+			ResourceType: "candidateAutoScalingGroup",
+			ResourceName: "payments-api-prod-candidate",
+		}
 
 		got := deriveManagedDriftItems(deployment, domain.DeploymentStatus{}, &runtimeLiveCapacityObservation{
 			ResourceType:                  resourceRef.ResourceType,
@@ -2427,6 +2458,9 @@ func TestDeriveManagedDriftItemsAddsLiveResourceRefs(t *testing.T) {
 			item := managedDriftItemByField(got, field)
 			if item == nil || !reflect.DeepEqual(item.ResourceRef, resourceRef) {
 				t.Fatalf("expected %s to carry ASG resourceRef %+v, got %+v", field, resourceRef, item)
+			}
+			if item == nil || !reflect.DeepEqual(item.Source, source) {
+				t.Fatalf("expected %s to carry ASG source %+v, got %+v", field, source, item)
 			}
 		}
 	})

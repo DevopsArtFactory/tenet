@@ -922,6 +922,13 @@ func TestBuildProjectEnvironmentOverviewDetailReturnsNotFound(t *testing.T) {
 }
 
 func TestBuildDeploymentOverviewDetail(t *testing.T) {
+	taskDefinitionImageSource := &domain.ManagedDriftSource{
+		Kind:         "resourceInspection",
+		Label:        "ecsService payments-api-prod-service",
+		Route:        "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service",
+		ResourceType: "ecsService",
+		ResourceName: "payments-api-prod-service",
+	}
 	snapshots := []statusstore.Snapshot{
 		{
 			DeploymentName: "payments-api-prod",
@@ -932,7 +939,7 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 				ManagedDrift: []domain.ManagedDriftItem{
 					{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
 					{Field: "generation", Desired: "8", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
-					{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
+					{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh, Source: taskDefinitionImageSource},
 				},
 				Conditions: []domain.Condition{
 					{Type: "Progressing", Status: true, Reason: "RolloutInFlight", Message: "candidate receiving traffic"},
@@ -951,7 +958,7 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 						ManagedDrift: []domain.ManagedDriftItem{
 							{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
 							{Field: "generation", Desired: "7", Actual: "6", Severity: domain.ManagedDriftSeverityMedium},
-							{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
+							{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh, Source: taskDefinitionImageSource},
 						},
 						ChangeDetails: []string{"Summary changed to Accepted rollout for r7"},
 					},
@@ -968,7 +975,7 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 						ManagedDrift: []domain.ManagedDriftItem{
 							{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
 							{Field: "generation", Desired: "8", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
-							{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
+							{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh, Source: taskDefinitionImageSource},
 						},
 						ChangeDetails: []string{"Sync changed to Reconciling: new artifact", "Current step changed from CreateCandidateCapacity to ShiftTrafficCanary"},
 					},
@@ -1045,8 +1052,14 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if len(detail.ManagedDrift) != 3 || detail.ManagedDrift[0].Field != "artifact" || detail.ManagedDrift[1].Field != "generation" || detail.ManagedDrift[2].Field != "runtimeContext.taskDefinition.image" {
 		t.Fatalf("expected managed drift to be surfaced on deployment detail, got %+v", detail.ManagedDrift)
 	}
+	if detail.ManagedDrift[2].Source == nil || !reflect.DeepEqual(detail.ManagedDrift[2].Source, taskDefinitionImageSource) {
+		t.Fatalf("expected managed drift source to be surfaced on deployment detail, got %+v", detail.ManagedDrift[2])
+	}
 	if detail.RuntimeSummary == nil || len(detail.RuntimeSummary.ManagedDrift) != 3 || detail.RuntimeSummary.ManagedDrift[0].Field != "artifact" || detail.RuntimeSummary.ManagedDrift[1].Field != "generation" || detail.RuntimeSummary.ManagedDrift[2].Field != "runtimeContext.taskDefinition.image" {
 		t.Fatalf("expected managed drift in runtime summary, got %+v", detail.RuntimeSummary)
+	}
+	if detail.RuntimeSummary.ManagedDrift[2].Source == nil || !reflect.DeepEqual(detail.RuntimeSummary.ManagedDrift[2].Source, taskDefinitionImageSource) {
+		t.Fatalf("expected managed drift source in runtime summary, got %+v", detail.RuntimeSummary.ManagedDrift[2])
 	}
 	if len(detail.History) != 2 {
 		t.Fatalf("expected runtime history to be surfaced, got %+v", detail.History)
@@ -1064,8 +1077,10 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	snapshots[0].Status.Rollout.Execution[0].Name = "mutated"
 	snapshots[0].Status.Conditions[0].Reason = "Mutated"
 	snapshots[0].Status.ManagedDrift[0].Actual = "mutated"
+	snapshots[0].Status.ManagedDrift[2].Source.ResourceName = "mutated"
 	snapshots[0].Status.History[0].Summary = "mutated"
 	snapshots[0].Status.History[1].ManagedDrift[0].Actual = "mutated"
+	snapshots[0].Status.History[1].ManagedDrift[2].Source.ResourceName = "mutated"
 	snapshots[0].Status.History[1].ChangeDetails[0] = "mutated"
 	if detail.Rollout.Steps[0].Kind != "CreateCandidateCapacity" {
 		t.Fatalf("expected rollout summary to be cloned defensively, got %+v", detail.Rollout)
@@ -1079,11 +1094,17 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if detail.ManagedDrift[0].Actual != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6" {
 		t.Fatalf("expected managed drift to be cloned defensively, got %+v", detail.ManagedDrift)
 	}
+	if detail.ManagedDrift[2].Source.ResourceName != "payments-api-prod-service" {
+		t.Fatalf("expected managed drift source to be cloned defensively, got %+v", detail.ManagedDrift[2].Source)
+	}
 	if detail.History[0].Summary != "Accepted rollout for r7" {
 		t.Fatalf("expected runtime history to be cloned from stored status, got %+v", detail.History)
 	}
 	if detail.History[1].ManagedDrift[0].Actual != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6" {
 		t.Fatalf("expected history managed drift to be cloned from stored status, got %+v", detail.History[1].ManagedDrift)
+	}
+	if detail.History[1].ManagedDrift[2].Source.ResourceName != "payments-api-prod-service" {
+		t.Fatalf("expected history managed drift source to be cloned from stored status, got %+v", detail.History[1].ManagedDrift)
 	}
 	if detail.History[1].ChangeDetails[0] != "Sync changed to Reconciling: new artifact" {
 		t.Fatalf("expected runtime history changeDetails to be cloned from stored status, got %+v", detail.History[1].ChangeDetails)
@@ -1126,6 +1147,14 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if !ok || !strings.HasPrefix(driftID, "drift_") {
 		t.Fatalf("expected deployment detail managed drift row to include backend-authored driftId, got %#v", driftItem)
 	}
+	sourceDriftItem, ok := managedDrift[2].(map[string]any)
+	if !ok || sourceDriftItem["field"] != "runtimeContext.taskDefinition.image" {
+		t.Fatalf("expected source-backed deployment detail managed drift row, got %#v", managedDrift[2])
+	}
+	source, ok := sourceDriftItem["source"].(map[string]any)
+	if !ok || source["kind"] != "resourceInspection" || source["label"] != "ecsService payments-api-prod-service" || source["route"] != "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service" || source["resourceType"] != "ecsService" || source["resourceName"] != "payments-api-prod-service" {
+		t.Fatalf("expected deployment detail managed drift source metadata, got %#v", sourceDriftItem["source"])
+	}
 	runtimeSummary, ok := decoded["runtimeSummary"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected runtimeSummary object, got %#v", decoded["runtimeSummary"])
@@ -1137,6 +1166,14 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	runtimeDriftItem, ok := runtimeManagedDrift[0].(map[string]any)
 	if !ok || runtimeDriftItem["driftId"] != driftID {
 		t.Fatalf("expected runtimeSummary managed drift to carry matching driftId %q, got %#v", driftID, runtimeManagedDrift[0])
+	}
+	runtimeSourceDriftItem, ok := runtimeManagedDrift[2].(map[string]any)
+	if !ok {
+		t.Fatalf("expected runtimeSummary source-backed managed drift object, got %#v", runtimeManagedDrift[2])
+	}
+	runtimeSource, ok := runtimeSourceDriftItem["source"].(map[string]any)
+	if !ok || runtimeSource["kind"] != "resourceInspection" || runtimeSource["route"] != "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service" {
+		t.Fatalf("expected runtimeSummary managed drift source metadata, got %#v", runtimeSourceDriftItem["source"])
 	}
 	history, ok := decoded["history"].([]any)
 	if !ok || len(history) != 2 {
@@ -1153,6 +1190,14 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	historyDriftItem, ok := historyManagedDrift[0].(map[string]any)
 	if !ok || historyDriftItem["driftId"] != driftID {
 		t.Fatalf("expected history managed drift to carry matching driftId %q, got %#v", driftID, historyManagedDrift[0])
+	}
+	historySourceDriftItem, ok := historyManagedDrift[2].(map[string]any)
+	if !ok {
+		t.Fatalf("expected history source-backed managed drift object, got %#v", historyManagedDrift[2])
+	}
+	historySource, ok := historySourceDriftItem["source"].(map[string]any)
+	if !ok || historySource["kind"] != "resourceInspection" || historySource["route"] != "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service" {
+		t.Fatalf("expected history managed drift source metadata, got %#v", historySourceDriftItem["source"])
 	}
 	if _, exists := decoded["ManagedDrift"]; exists {
 		t.Fatalf("unexpected Go-style managed drift field name in %#v", decoded)

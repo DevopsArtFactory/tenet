@@ -87,6 +87,19 @@ func requireManagedDriftItemByField(t *testing.T, items []any, field string) map
 	return nil
 }
 
+func requireManagedDriftSource(t *testing.T, item map[string]any, kind string, label string, route string, resourceType string, resourceName string) map[string]any {
+	t.Helper()
+
+	source, ok := item["source"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected managedDrift source object in %#v", item)
+	}
+	if source["kind"] != kind || source["label"] != label || source["route"] != route || source["resourceType"] != resourceType || source["resourceName"] != resourceName {
+		t.Fatalf("expected managedDrift source kind=%q label=%q route=%q resourceType=%q resourceName=%q, got %#v", kind, label, route, resourceType, resourceName, source)
+	}
+	return source
+}
+
 func boolPtr(value bool) *bool {
 	return &value
 }
@@ -5196,6 +5209,13 @@ func TestRouterDeploymentStatusByName(t *testing.T) {
 }
 
 func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
+	desiredCapacitySource := &domain.ManagedDriftSource{
+		Kind:         "resourceInspection",
+		Label:        "candidateAutoScalingGroup payments-api-prod-candidate",
+		Route:        "/v1/overview/deployments/api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate",
+		ResourceType: "candidateAutoScalingGroup",
+		ResourceName: "payments-api-prod-candidate",
+	}
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		DeploymentStatus: func(_ context.Context, name string) (statusstore.Snapshot, error) {
@@ -5205,7 +5225,7 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 				Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "all checks passed"},
 				ManagedDrift: []domain.ManagedDriftItem{
 					{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r4", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r3", Severity: domain.ManagedDriftSeverityHigh},
-					{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh, ResourceRef: &domain.ManagedDriftResourceRef{ResourceType: "candidateAutoScalingGroup", ResourceName: "payments-api-prod-candidate"}},
+					{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh, ResourceRef: &domain.ManagedDriftResourceRef{ResourceType: "candidateAutoScalingGroup", ResourceName: "payments-api-prod-candidate"}, Source: desiredCapacitySource},
 					{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
 					{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
 					{Field: "runtimeContext.launchTemplate.imageId", Desired: "ami-1234567890abcdef0", Actual: "ami-fffffffffffffffff", Severity: domain.ManagedDriftSeverityHigh},
@@ -5228,7 +5248,7 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 					Health:    domain.Health{Overall: domain.HealthProgressing, Summary: "warming"},
 					ManagedDrift: []domain.ManagedDriftItem{
 						{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r4", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r3", Severity: domain.ManagedDriftSeverityHigh},
-						{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh, ResourceRef: &domain.ManagedDriftResourceRef{ResourceType: "candidateAutoScalingGroup", ResourceName: "payments-api-prod-candidate"}},
+						{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh, ResourceRef: &domain.ManagedDriftResourceRef{ResourceType: "candidateAutoScalingGroup", ResourceName: "payments-api-prod-candidate"}, Source: desiredCapacitySource},
 						{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
 						{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
 						{Field: "runtimeContext.launchTemplate.imageId", Desired: "ami-1234567890abcdef0", Actual: "ami-fffffffffffffffff", Severity: domain.ManagedDriftSeverityHigh},
@@ -5330,6 +5350,9 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 	if _, exists := driftItem["resourceRef"]; exists {
 		t.Fatalf("expected read-model-only artifact drift to omit resourceRef, got %#v", driftItem)
 	}
+	if _, exists := driftItem["source"]; exists {
+		t.Fatalf("expected drift row without known source to omit source, got %#v", driftItem)
+	}
 	driftID, ok := driftItem["driftId"].(string)
 	if !ok || !strings.HasPrefix(driftID, "drift_") {
 		t.Fatalf("expected raw status managedDrift row to include backend-authored driftId, got %#v", driftItem)
@@ -5341,6 +5364,7 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 		if !ok || ref["resourceType"] != "candidateAutoScalingGroup" || ref["resourceName"] != "payments-api-prod-candidate" {
 			t.Fatalf("expected managedDrift desired-capacity resourceRef, got %#v", desiredCapacityDrift["resourceRef"])
 		}
+		requireManagedDriftSource(t, desiredCapacityDrift, "resourceInspection", "candidateAutoScalingGroup payments-api-prod-candidate", "/v1/overview/deployments/api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate", "candidateAutoScalingGroup", "payments-api-prod-candidate")
 	}
 	if minCapacityDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.capacity.min"); minCapacityDrift["desired"] != "4" || minCapacityDrift["actual"] != "2" || minCapacityDrift["severity"] != string(domain.ManagedDriftSeverityMedium) {
 		t.Fatalf("expected managedDrift min-capacity item fields, got %#v", minCapacityDrift)
@@ -5369,6 +5393,7 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 		if !ok || ref["resourceType"] != "candidateAutoScalingGroup" || ref["resourceName"] != "payments-api-prod-candidate" {
 			t.Fatalf("expected history managedDrift desired-capacity resourceRef, got %#v", historyDesiredCapacityDrift["resourceRef"])
 		}
+		requireManagedDriftSource(t, historyDesiredCapacityDrift, "resourceInspection", "candidateAutoScalingGroup payments-api-prod-candidate", "/v1/overview/deployments/api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate", "candidateAutoScalingGroup", "payments-api-prod-candidate")
 	}
 	if _, exists := status["ManagedDrift"]; exists {
 		t.Fatalf("unexpected Go-style managedDrift field name in %#v", status)
@@ -7069,6 +7094,13 @@ func TestDeploymentOverviewDetailRouteIncludesRolloutStepDetail(t *testing.T) {
 }
 
 func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
+	taskDefinitionImageSource := &domain.ManagedDriftSource{
+		Kind:         "resourceInspection",
+		Label:        "ecsService payments-api-prod-service",
+		Route:        "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service",
+		ResourceType: "ecsService",
+		ResourceName: "payments-api-prod-service",
+	}
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
@@ -7081,7 +7113,7 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 					{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
 					{Field: "runtimeContext.launchTemplate.imageId", Desired: "ami-1234567890abcdef0", Actual: "ami-fffffffffffffffff", Severity: domain.ManagedDriftSeverityHigh},
 					{Field: "runtimeContext.launchTemplate.instanceType", Desired: "t3.medium", Actual: "m6i.large", Severity: domain.ManagedDriftSeverityHigh},
-					{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
+					{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh, Source: taskDefinitionImageSource},
 				},
 				RuntimeSummary: &domain.RuntimeSummary{
 					Timestamp:          "2026-04-16T06:49:00Z",
@@ -7102,7 +7134,7 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 						{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
 						{Field: "runtimeContext.launchTemplate.imageId", Desired: "ami-1234567890abcdef0", Actual: "ami-fffffffffffffffff", Severity: domain.ManagedDriftSeverityHigh},
 						{Field: "runtimeContext.launchTemplate.instanceType", Desired: "t3.medium", Actual: "m6i.large", Severity: domain.ManagedDriftSeverityHigh},
-						{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
+						{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh, Source: taskDefinitionImageSource},
 					},
 					DeployedArtifact: domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1"},
 					Conditions:       []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}},
@@ -7173,8 +7205,13 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 	if driftItem["severity"] != string(domain.ManagedDriftSeverityHigh) || driftItem["desired"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.2" {
 		t.Fatalf("expected managedDrift artifact item fields in overview deployment payload, got %#v", driftItem)
 	}
+	if _, exists := driftItem["source"]; exists {
+		t.Fatalf("expected overview drift row without known source to omit source, got %#v", driftItem)
+	}
 	if taskDefinitionImageDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.taskDefinition.image"); taskDefinitionImageDrift["desired"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.2" || taskDefinitionImageDrift["actual"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.1" || taskDefinitionImageDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
 		t.Fatalf("expected managedDrift task-definition image item fields in overview deployment payload, got %#v", taskDefinitionImageDrift)
+	} else {
+		requireManagedDriftSource(t, taskDefinitionImageDrift, "resourceInspection", "ecsService payments-api-prod-service", "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service", "ecsService", "payments-api-prod-service")
 	}
 	if launchTemplateImageDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.launchTemplate.imageId"); launchTemplateImageDrift["desired"] != "ami-1234567890abcdef0" || launchTemplateImageDrift["actual"] != "ami-fffffffffffffffff" || launchTemplateImageDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
 		t.Fatalf("expected managedDrift launch-template imageId item fields in overview deployment payload, got %#v", launchTemplateImageDrift)
@@ -7203,6 +7240,8 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 	}
 	if taskDefinitionImageDrift := requireManagedDriftItemByField(t, runtimeManagedDrift, "runtimeContext.taskDefinition.image"); taskDefinitionImageDrift["desired"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.2" || taskDefinitionImageDrift["actual"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.1" || taskDefinitionImageDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
 		t.Fatalf("expected runtimeSummary task-definition image drift item fields, got %#v", taskDefinitionImageDrift)
+	} else {
+		requireManagedDriftSource(t, taskDefinitionImageDrift, "resourceInspection", "ecsService payments-api-prod-service", "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service", "ecsService", "payments-api-prod-service")
 	}
 	if _, exists := payload["ManagedDrift"]; exists {
 		t.Fatalf("unexpected Go-style managedDrift field name in %#v", payload)
