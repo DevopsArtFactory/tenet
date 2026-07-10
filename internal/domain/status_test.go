@@ -4,7 +4,7 @@ import "testing"
 
 func TestAssignManagedDriftIDsDerivesStableOpaqueIDs(t *testing.T) {
 	items := []ManagedDriftItem{
-		{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: ManagedDriftSeverityHigh, ResourceRef: &ManagedDriftResourceRef{ResourceType: "ecsService", ResourceName: "payments-api"}},
+		{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: ManagedDriftSeverityHigh, ResourceRef: &ManagedDriftResourceRef{ResourceType: "ecsService", ResourceName: "payments-api"}, Source: &ManagedDriftSource{Kind: "resourceInspection", Label: "ecsService payments-api", Route: "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api", ResourceType: "ecsService", ResourceName: "payments-api"}},
 		{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: ManagedDriftSeverityHigh, ResourceRef: &ManagedDriftResourceRef{ResourceType: "ecsService", ResourceName: "payments-api"}},
 		{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: ManagedDriftSeverityMedium},
 	}
@@ -33,6 +33,10 @@ func TestAssignManagedDriftIDsDerivesStableOpaqueIDs(t *testing.T) {
 	if items[0].ResourceRef.ResourceName != "payments-api" {
 		t.Fatalf("expected resource refs to be cloned defensively, got %#v", items[0].ResourceRef)
 	}
+	first[0].Source.ResourceName = "mutated"
+	if items[0].Source.ResourceName != "payments-api" {
+		t.Fatalf("expected source metadata to be cloned defensively, got %#v", items[0].Source)
+	}
 }
 
 func TestAssignManagedDriftIDsChangesWhenStableInputsChange(t *testing.T) {
@@ -41,6 +45,27 @@ func TestAssignManagedDriftIDsChangesWhenStableInputsChange(t *testing.T) {
 
 	if base[0].DriftID == changed[0].DriftID {
 		t.Fatalf("expected changed stable inputs to change drift id, got %q", base[0].DriftID)
+	}
+}
+
+func TestAssignManagedDriftIDsIgnoresAdditiveSourceMetadata(t *testing.T) {
+	base := AssignManagedDriftIDs([]ManagedDriftItem{{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: ManagedDriftSeverityHigh}})
+	withSource := AssignManagedDriftIDs([]ManagedDriftItem{{
+		Field:    "runtimeContext.capacity.desired",
+		Desired:  "6",
+		Actual:   "4",
+		Severity: ManagedDriftSeverityHigh,
+		Source: &ManagedDriftSource{
+			Kind:         "resourceInspection",
+			Label:        "ecsService payments-api",
+			Route:        "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api",
+			ResourceType: "ecsService",
+			ResourceName: "payments-api",
+		},
+	}})
+
+	if base[0].DriftID != withSource[0].DriftID {
+		t.Fatalf("expected additive source metadata not to change drift id, got %q then %q", base[0].DriftID, withSource[0].DriftID)
 	}
 }
 

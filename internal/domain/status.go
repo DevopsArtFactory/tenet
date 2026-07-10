@@ -114,6 +114,15 @@ type ManagedDriftResourceRef struct {
 	ResourceName string `json:"resourceName"`
 }
 
+// ManagedDriftSource describes the evidence path behind a managed drift item when known.
+type ManagedDriftSource struct {
+	Kind         string `json:"kind"`
+	Label        string `json:"label,omitempty"`
+	Route        string `json:"route,omitempty"`
+	ResourceType string `json:"resourceType,omitempty"`
+	ResourceName string `json:"resourceName,omitempty"`
+}
+
 // ManagedDriftItem captures one controller-authored field-level drift item for Tenet-managed runtime fields.
 type ManagedDriftItem struct {
 	DriftID     string                   `json:"driftId,omitempty"`
@@ -122,6 +131,7 @@ type ManagedDriftItem struct {
 	Actual      string                   `json:"actual,omitempty"`
 	Severity    ManagedDriftSeverity     `json:"severity,omitempty"`
 	ResourceRef *ManagedDriftResourceRef `json:"resourceRef,omitempty"`
+	Source      *ManagedDriftSource      `json:"source,omitempty"`
 }
 
 // AssignManagedDriftIDs returns a defensive copy of items with deterministic
@@ -153,6 +163,10 @@ func cloneManagedDriftItem(item ManagedDriftItem) ManagedDriftItem {
 	if item.ResourceRef != nil {
 		ref := *item.ResourceRef
 		clone.ResourceRef = &ref
+	}
+	if item.Source != nil {
+		source := *item.Source
+		clone.Source = &source
 	}
 	return clone
 }

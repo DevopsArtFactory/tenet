@@ -205,11 +205,9 @@ Primary operator APIs:
   `ec2InstanceStatus` status-check evidence beside sampled/selected EC2 host
   details when AWS `DescribeInstanceStatus` is available)
 
-Resource drill-down Recent logs and Live inspection panels summarize lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract. Live inspection responses keep the resolved deployment/resource identity and accepted selectors (such as `clusterArn` or `instanceId`) in the top-level envelope even when a provider returns sparse evidence. Use
-`docs/features/resource-recent-logs.md` and
-`docs/features/resource-inspection.md` for the exact route selectors, response
-fields, operator labels, and smoke-test expectations; use
-`docs/architecture/tenet-v1-overview-ui.md` for the embedded UI behavior.
+Managed-drift rows remain backward-compatible. When Tenet knows the evidence path for a row, `managedDrift[].source` is an additive object with stable `kind`, optional `label` / `route`, and optional `resourceType` / `resourceName` identity; rows without known source evidence omit `source` rather than emitting placeholders. Existing `resourceRef` metadata remains unchanged.
+
+Resource drill-down Recent logs and Live inspection panels summarize lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract. Live inspection responses keep the resolved deployment/resource identity and accepted selectors (such as `clusterArn` or `instanceId`) in the top-level envelope even when a provider returns sparse evidence. Use `docs/features/resource-recent-logs.md`, `docs/features/resource-inspection.md`, and `docs/architecture/tenet-v1-overview-ui.md` for route selectors, response fields, labels, smoke expectations, and embedded UI behavior.
 Local/no-AWS unavailable payloads and successful empty reads stay distinct:
 operators see friendly next-step copy while scripts keep stable fields such as
 `available`, `unavailableReason`, `emptyReason`, `lookupContext`, and
