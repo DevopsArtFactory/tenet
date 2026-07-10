@@ -21,6 +21,8 @@ From the repository checkout, capture the workflow summary, failed logs, Actions
 scripts/ci-smoke-runner-evidence.sh <run-id>
 ```
 
+Keep `scripts/ci-smoke-runner-evidence.sh` directly executable because operators copy and run the path from this runbook during runner-start incidents.
+
 The helper also prints a compact `Runner-start verdict` section before the raw evidence. Treat a line as a likely pre-runner blocker when `Fast smoke` or `Docker smoke scope` has `runner_id=0` or an empty `runner_name`, and `steps=[]`; that means the lane did not reach repository commands. The same verdict section calls out any billing/spending-limit annotation found on the CI Smoke check-runs so reviewers do not have to infer the account-level blocker from raw JSON alone.
 
 For a pasteable PR or issue comment, use the concise Markdown mode:

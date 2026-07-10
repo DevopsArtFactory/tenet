@@ -267,6 +267,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 		"scripts/ci-smoke-runner-evidence.sh <run-id>",
 		"scripts/ci-smoke-runner-evidence.sh --summary <run-id>",
 		"`--summary` and `--markdown` are aliases",
+		"Keep `scripts/ci-smoke-runner-evidence.sh` directly executable",
 		"Runner-start verdict",
 		"runner_id=0",
 		"steps=[]",
