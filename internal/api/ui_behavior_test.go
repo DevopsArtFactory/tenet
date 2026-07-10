@@ -11147,6 +11147,10 @@ const scenarios = [
       const link = collectNodes(root, (node) => node.tagName === 'A').find((node) => node.href === scenario.link.href && node.textContent === scenario.link.text);
       if (!link || link.target !== '_self' || link.rel) throw new Error('expected _self plan/apply workspace link for ' + scenario.name + ': ' + JSON.stringify(scenario.link));
     }
+    if (scenario.name === 'happy path') {
+      const applicationsLink = collectNodes(root, (node) => node.tagName === 'A').find((node) => node.href === '/?page=applications' && node.textContent === 'Applications overview');
+      if (!applicationsLink || applicationsLink.target !== '_self' || applicationsLink.rel) throw new Error('expected _self applications overview escape link for populated applies monitor');
+    }
     const refreshButton = collectNodes(root, (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh applies')[0];
     if (scenario.name !== 'denied collection reuses operator read guidance') {
       if (!refreshButton) throw new Error('expected refresh applies control for ' + scenario.name);

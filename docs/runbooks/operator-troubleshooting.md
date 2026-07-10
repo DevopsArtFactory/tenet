@@ -42,7 +42,7 @@ perform live AWS mutation. The read-only `/?page=applies` monitor defaults to
 the queued subset read, adds explicit queued/active/stale view controls (`?appliesView=active`
 for the active collection, `?appliesView=stale` for stale active claims), preserves the explicit `Refresh applies` action and
 bookmarkable URL, translates claim heartbeat/lease metadata into fresh/stale/pending
-operator copy, and links operators back to the plan/apply workspace for detail review.
+operator copy, links operators back to the plan/apply workspace for detail review, and keeps an in-shell Applications overview escape link on populated monitor views.
 
 ## Unavailable-State Decoder
 
