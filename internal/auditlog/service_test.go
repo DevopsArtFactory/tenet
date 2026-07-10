@@ -455,3 +455,83 @@ func TestServiceListProjectsManualControllerRefreshAuditRows(t *testing.T) {
 		t.Fatalf("expected controller refresh filtered result scope, got %+v", result.ResultScope)
 	}
 }
+
+func TestServiceListReturnsLatestControllerRefreshAuditRowWhenLimited(t *testing.T) {
+	service := Service{
+		ListPlanPreviews: func() ([]planpreview.Record, error) {
+			return []planpreview.Record{{
+				ID:             "plan-noise",
+				DeploymentName: "payments-api-prod",
+				Status:         planpreview.StatusReady,
+				CreatedAt:      "2026-04-20T10:50:00Z",
+			}}, nil
+		},
+		ListApplyRequests: func() ([]applyrequest.Record, error) {
+			return []applyrequest.Record{{
+				ID:             "apply-noise",
+				PlanID:         "plan-noise",
+				DeploymentName: "payments-api-prod",
+				Status:         applyrequest.StatusFailed,
+				CreatedAt:      "2026-04-20T10:55:00Z",
+			}}, nil
+		},
+		ListControllerRefreshAuditRows: func() ([]controllerrefreshaudit.Record, error) {
+			return []controllerrefreshaudit.Record{
+				{
+					ID:             "api-controller-refresh:manual-refresh-older",
+					Route:          "POST /v1/controller/refresh",
+					Status:         "published",
+					Result:         "published",
+					RequestedAt:    "2026-04-20T10:44:00Z",
+					RequestID:      "api-controller-refresh:manual-refresh-older",
+					DeliveryID:     "manual-refresh-older",
+					Backend:        "redis",
+					Channel:        "tenet:test:controller-refresh",
+					HTTPStatusCode: 202,
+				},
+				{
+					ID:             "api-controller-refresh:manual-refresh-newer",
+					Route:          "POST /v1/controller/refresh",
+					Status:         "published",
+					Result:         "published",
+					RequestedAt:    "2026-04-20T10:46:00Z",
+					RequestID:      "api-controller-refresh:manual-refresh-newer",
+					DeliveryID:     "manual-refresh-newer",
+					Backend:        "redis",
+					Channel:        "tenet:test:controller-refresh",
+					HTTPStatusCode: 202,
+				},
+				{
+					ID:             "api-controller-refresh:manual-refresh-middle",
+					Route:          "POST /v1/controller/refresh",
+					Status:         "noop",
+					Result:         "noop",
+					RequestedAt:    "2026-04-20T10:45:00Z",
+					RequestID:      "api-controller-refresh:manual-refresh-middle",
+					DeliveryID:     "manual-refresh-middle",
+					Backend:        "redis",
+					Channel:        "tenet:test:controller-refresh",
+					HTTPStatusCode: 202,
+				},
+			}, nil
+		},
+	}
+
+	result, err := service.List(context.Background(), Query{Action: ActionControllerRefresh, Limit: 1})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("expected one limited controller refresh audit entry, got %+v", result.Entries)
+	}
+	entry := result.Entries[0]
+	if entry.Timestamp != "2026-04-20T10:46:00Z" || entry.Metadata.RequestID != "api-controller-refresh:manual-refresh-newer" || entry.Metadata.DeliveryID != "manual-refresh-newer" {
+		t.Fatalf("expected newest controller refresh receipt to win limited query, got %+v", entry)
+	}
+	if entry.Action != string(ActionControllerRefresh) || entry.DeploymentName != "" {
+		t.Fatalf("expected global controller-refresh audit row, got %+v", entry)
+	}
+	if result.ResultScope.Action != string(ActionControllerRefresh) || result.ResultScope.ReturnedEntryCount != 1 || result.ResultScope.ReturnedCount != 1 || result.ResultScope.TotalEntryCount != 3 || !result.ResultScope.Limited || result.ResultScope.EffectiveLimit != 1 || result.ResultScope.RequestedLimit == nil || *result.ResultScope.RequestedLimit != 1 || result.ResultScope.TruncationStatus != "truncated" || !result.ResultScope.Truncated {
+		t.Fatalf("expected limited controller refresh result scope over matching rows only, got %+v", result.ResultScope)
+	}
+}

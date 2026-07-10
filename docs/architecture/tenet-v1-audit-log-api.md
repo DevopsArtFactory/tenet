@@ -95,6 +95,7 @@ Important details:
 - `entryId` is a backend-authored opaque stable row identifier derived from the immutable plan/apply source identity; it is unique across `plan.created`, `apply.requested`, and `apply.transitioned` rows and remains stable across filtering, sorting, and `limit` windows so UI anchors can prefer it over client-derived fallbacks
 - `action` is stable and action-oriented (`plan.created`, `apply.requested`, `apply.transitioned`, `controller.refresh.requested`)
 - `controller.refresh.requested` rows are global, not deployment-scoped; their `metadata` includes safe manual-refresh evidence such as `route`, `status`, `result`, `requestId`, `deliveryId`, `backend`, `channel`, `noopReason`, and `httpStatusCode`, but never secrets, repository tokens, Redis connection strings, or webhook signatures
+- `GET /v1/controller/refresh/status` is a read-only shortcut over `GET /v1/audit-logs?action=controller.refresh.requested&limit=1`; it uses the same newest-first `requestedAt`/timestamp ordering and preserves the bounded `resultScope` so operators can see when older refresh receipts exist beyond the latest row
 - the optional query `action` filter only supports those four exact values and rejects anything else with `400 Bad Request`
 - `timestamp` is copied from the persisted immutable record; for `apply.transitioned` rows it is copied from the persisted apply transition entry
 - `deploymentName`, `appRef`, and `environmentRef` help local operators and a future UI group related rows without reopening every record
