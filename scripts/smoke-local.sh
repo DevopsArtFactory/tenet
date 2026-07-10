@@ -14,6 +14,8 @@ SOURCE_REPO_ROOT=${TENET_REPO_ROOT:-$ROOT/examples/local-repo}
 REPO_ROOT=$(mktemp -d)
 FIXTURE_STATUS_PATH=${TENET_STATUS_PATH:-$ROOT/examples/local-status/deployments.json}
 APPLY_ENABLED=${TENET_AWS_ENABLE_APPLY:-false}
+# TENET_AWS_ENABLE_APPLY=true queues local-safe apply handoff metadata only;
+# it requires no live AWS credentials and does not perform live AWS mutation.
 AUTH_TRUSTED_HEADERS=${TENET_API_TRUST_AUTHENTICATED_HEADERS:-false}
 AUTH_ENFORCED=${TENET_API_ENFORCE_AUTHENTICATED_IDENTITY:-false}
 AUTH_ROLE_ENFORCED=${TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION:-false}
