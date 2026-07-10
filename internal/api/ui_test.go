@@ -15,6 +15,14 @@ func TestEmbeddedUIAvoidsInlineEventHandlers(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIMobileAccountHeadersStack(t *testing.T) {
+	body := string(indexHTML)
+	contract := `.hero, .row-top, .account-head, .deployment-group-head { flex-direction: column; align-items: stretch; }`
+	if !strings.Contains(body, contract) {
+		t.Fatalf("expected mobile account/group headers to share stacking contract %q", contract)
+	}
+}
+
 func TestEmbeddedUITopLevelEmptyStatesAreStatusRegions(t *testing.T) {
 	body := string(indexHTML)
 
