@@ -193,6 +193,10 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 	if !strings.Contains(operatorContractsDoc, "reports `authRuntime.tenetManagedLogin.active=true` from `GET /v1/operator/context`") {
 		t.Fatal("expected operator contracts doc auth runtime boundary to state auth-provider runtime settings activate the diagnostic")
 	}
+	authenticatedIdentityWriteRoutes := "requires authenticated identity on `POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, `POST /v1/applies/{applyId}/claim`, `POST /v1/applies/{applyId}/heartbeat`, and `POST /v1/applies/{applyId}/transitions`"
+	if !strings.Contains(operatorContractsDoc, authenticatedIdentityWriteRoutes) {
+		t.Fatal("expected operator contracts doc authenticated-identity write route list to include apply heartbeat")
+	}
 	for _, fragment := range []string{
 		"`GET /auth/login/github`, `GET /auth/login/google`, or `GET /auth/login/okta` creates one-time callback state",
 		"reports `GET /v1/operator/context.authRuntime.tenetManagedLogin.active=true`",
