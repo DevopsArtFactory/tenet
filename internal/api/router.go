@@ -723,6 +723,7 @@ var (
 		"GET /v1/status/deployments",
 		"GET /v1/catalog/deployments",
 		"GET /v1/audit-logs",
+		"GET /v1/controller/refresh/status",
 	}
 	operatorContextOperatorWriteExampleRoutes = []string{
 		"POST /v1/plans/deployments/{deploymentName}",
