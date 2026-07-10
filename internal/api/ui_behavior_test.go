@@ -10965,6 +10965,12 @@ const queuedRecords = [
       lastHeartbeatAt: '2099-04-18T08:01:00Z',
       expiresAt: '2099-04-18T08:06:00Z',
     },
+    executionReadiness: {
+      state: 'ready',
+      summary: 'Preflight checks passed for local-safe executor handoff.',
+      checkedAt: '2026-04-18T08:02:00Z',
+      evidence: ['plan fingerprint matched', 'operator role accepted'],
+    },
   },
   {
     id: 'apply_running_stale',
@@ -11015,6 +11021,10 @@ const scenarios = [
       'Created at | 2026-04-18T08:00:00Z',
       'Operation progress | 1/3 terminal · 1 running · 1 queued',
       'Claim status | Claimed by worker-a; heartbeat freshness looks current. Lease expires at 2099-04-18T08:06:00Z.',
+      'Execution readiness | Preflight ready',
+      'Readiness summary | Preflight checks passed for local-safe executor handoff.',
+      'Readiness checked | 2026-04-18T08:02:00Z',
+      'Readiness evidence | plan fingerprint matched; operator role accepted',
       'Executor worker | worker-a',
       'Last heartbeat | 2099-04-18T08:01:00Z',
       'Claim expires | 2099-04-18T08:06:00Z',
@@ -11022,6 +11032,7 @@ const scenarios = [
       'Claim status | Claimed by worker-stale, but attention is needed. Reason: lease expired before the executor heartbeat refreshed it',
       'reporting-prod',
       'Claim status | Pending executor claim — no local-safe executor has claimed this apply request yet.',
+      'Readiness summary | No backend preflight readiness evidence is attached yet. Use claim/lifecycle metadata and local-safe docs before treating this as ready for live AWS execution.',
     ],
     link: { href: '/?page=plan&deployment=api-prod&applyId=apply_queued_123', text: 'Open plan/apply workspace' },
   },
@@ -11424,6 +11435,10 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Apply request failed')) throw new Error('expected apply failed heading after create');
   if (!text.includes('Immutable apply request apply_failed_123 was created and recorded as failed.')) throw new Error('expected apply failed create message');
   if (!text.includes('Stored apply request')) throw new Error('expected stored apply request section');
+  if (!text.includes('Apply execution readiness')) throw new Error('expected apply execution readiness section');
+  if (!text.includes('Execution readiness | Local-safe disabled')) throw new Error('expected disabled readiness label after create');
+  if (!text.includes('Readiness summary | Live AWS mutation is disabled for this local-safe apply record; this is expected metadata-only evidence, not an AWS readiness failure.')) throw new Error('expected disabled readiness summary after create');
+  if (!text.includes('Execution-readiness copy is sourced from backend readiness evidence when present, or from the immutable apply record fallback state when evidence has not been reported yet.')) throw new Error('expected readiness source explanation after create');
   if (!text.includes('Apply lifecycle summary')) throw new Error('expected apply lifecycle summary after create');
   if (!text.includes('0/1 terminal · 0 running · 1 queued')) throw new Error('expected queued lifecycle progress summary after create');
   if (text.includes('Apply lifecycle metadata')) throw new Error('expected failed/default apply record to omit lifecycle metadata section when lifecycle fields are missing');
@@ -11448,6 +11463,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-preview', 'Stored plan preview'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-actions', 'Apply request actions'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-apply', 'Stored apply request'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-readiness', 'Apply execution readiness'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-details', 'Apply request details'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-operations', 'Apply operations'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-operations', 'Plan operations'],
@@ -12235,7 +12251,7 @@ const fetch = (url) => {
   const currentSectionChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current section: Apply operations');
   if (!currentSectionChip) throw new Error('expected bookmarked plan/apply hash route to render the current-section chip');
   const sectionIDs = collectNodes(accounts, (node) => typeof node.id === 'string' && node.id.startsWith('plan-')).map((node) => node.id).sort();
-  const expectedSectionIDs = ['plan-apply-actions', 'plan-apply-details', 'plan-apply-operations', 'plan-approval-guidance', 'plan-operations', 'plan-preview-actions', 'plan-rollout-execution', 'plan-runtime-signals', 'plan-stored-apply', 'plan-stored-preview'];
+  const expectedSectionIDs = ['plan-apply-actions', 'plan-apply-details', 'plan-apply-operations', 'plan-apply-readiness', 'plan-approval-guidance', 'plan-operations', 'plan-preview-actions', 'plan-rollout-execution', 'plan-runtime-signals', 'plan-stored-apply', 'plan-stored-preview'];
   if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected plan section ids: ' + JSON.stringify(sectionIDs));
   const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#plan-'));
   const expectedLinks = [
@@ -12246,6 +12262,7 @@ const fetch = (url) => {
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-preview', 'Stored plan preview'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-actions', 'Apply request actions'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-apply', 'Stored apply request'],
+    ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-readiness', 'Apply execution readiness'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-details', 'Apply request details'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-operations', 'Plan operations'],
   ];
