@@ -990,7 +990,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if operatorRead["allowed"] != true || operatorRead["requiresAuthenticatedIdentity"] != true || operatorRead["requiresViewerCapableRole"] != true {
 		t.Fatalf("expected allowed read verdict with identity/read-role requirements, got %#v", operatorRead)
 	}
-	if !reflect.DeepEqual(operatorRead["exampleRoutes"], []any{"GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/catalog/deployments", "GET /v1/audit-logs"}) {
+	if !reflect.DeepEqual(operatorRead["exampleRoutes"], []any{"GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/catalog/deployments", "GET /v1/audit-logs", "GET /v1/controller/refresh/status"}) {
 		t.Fatalf("expected operator read route examples, got %#v", operatorRead["exampleRoutes"])
 	}
 	if !reflect.DeepEqual(operatorRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles"}) {

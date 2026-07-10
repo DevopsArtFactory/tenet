@@ -3947,7 +3947,7 @@ def assert_operator_context_common(payload):
     assert (payload.get('deploymentAccess') or {}).get('supportedHeaderNames') == access_headers, payload
     assert access_verdicts.get('operatorRead', {}).get('requiresAuthenticatedIdentity') is True, payload
     assert access_verdicts.get('operatorRead', {}).get('requiresViewerCapableRole') is True, payload
-    assert access_verdicts.get('operatorRead', {}).get('exampleRoutes') == ['GET /v1/overview/applications', 'GET /v1/status/deployments', 'GET /v1/catalog/deployments', 'GET /v1/audit-logs'], payload
+    assert access_verdicts.get('operatorRead', {}).get('exampleRoutes') == ['GET /v1/overview/applications', 'GET /v1/status/deployments', 'GET /v1/catalog/deployments', 'GET /v1/audit-logs', 'GET /v1/controller/refresh/status'], payload
     assert access_verdicts.get('operatorRead', {}).get('requiredTrustedHeaders') == identity_headers + role_headers, payload
     assert access_verdicts.get('operatorRead', {}).get('acceptedRoleNames') == read_roles, payload
     assert access_verdicts.get('operatorWrite', {}).get('requiresOperatorRole') is True, payload
