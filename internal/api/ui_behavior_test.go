@@ -2582,9 +2582,12 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const rowToggles = collectNodes(document.getElementById('accounts'), (node) => node.getAttribute && node.getAttribute('role') === 'button' && node.className === 'row-toggle');
   const detailPanels = collectNodes(document.getElementById('accounts'), (node) => node.className === 'detail-panel');
   if (rowToggles.length !== 2 || detailPanels.length !== 2) throw new Error('expected two account deployment expanders and detail panels');
+  const rowHints = collectNodes(document.getElementById('accounts'), (node) => node.className === 'row-hint');
+  if (rowHints.length !== 2 || rowHints.some((node) => node.textContent !== 'Expand details')) throw new Error('expected collapsed account rows to show expand hints');
   const expectedPanelID = 'account-deployment-detail-210987654321-payments-api-staging';
   if (detailPanels[0].id !== expectedPanelID || detailPanels[0].getAttribute('id') !== expectedPanelID) throw new Error('expected deterministic account detail panel id');
   if (rowToggles[0].getAttribute('aria-controls') !== expectedPanelID) throw new Error('expected account row toggle to control its lazy detail panel');
+  if (rowToggles[0].getAttribute('aria-label') !== 'Expand details for payments-api-staging') throw new Error('expected collapsed account row aria label to advertise expansion');
   const quickNavChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   if (!refreshButton || refreshButton.disabled) throw new Error('expected enabled account refresh button after initial render');
   if (!links.find((node) => node.href === '/v1/overview/accounts/210987654321' && node.textContent === 'Account JSON')) throw new Error('expected account json href');
@@ -2693,10 +2696,14 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   await settle();
   const toggles = collectNodes(document.getElementById('accounts'), (node) => node.getAttribute && node.getAttribute('role') === 'button' && node.className === 'row-toggle');
   const panels = collectNodes(document.getElementById('accounts'), (node) => node.className === 'detail-panel');
+  const hints = collectNodes(document.getElementById('accounts'), (node) => node.className === 'row-hint');
   if (toggles.length !== 2 || panels.length !== 2) throw new Error('expected two duplicate deployment rows for fan-out coverage');
+  if (hints.length !== 2 || hints.some((node) => node.textContent !== 'Expand details')) throw new Error('expected duplicate deployment rows to start with expand hints');
   toggles[0].dispatch('click');
   toggles[1].dispatch('click');
   await settle();
+  if (hints.some((node) => node.textContent !== 'Collapse details')) throw new Error('expected expanded duplicate deployment rows to show collapse hints');
+  if (toggles.some((node) => node.getAttribute('aria-label') !== 'Collapse details for payments-api-staging')) throw new Error('expected expanded duplicate deployment rows to advertise collapse');
   if (fetchCalls.filter((url) => url === '/v1/overview/deployments/payments-api-staging').length !== 1) throw new Error('expected duplicate expands to share one deployment detail fetch, got ' + fetchCalls.join(', '));
   panels.forEach((panel, index) => {
     const text = collectText(panel).join(' | ');
