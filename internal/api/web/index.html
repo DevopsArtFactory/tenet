@@ -9160,6 +9160,7 @@
           createNavLink(route, `${appliesMonitorViewLabel(view)} JSON`),
           createCopyReadRouteButton(readRoute),
           createAppliesMonitorRefreshButton(state),
+          createNavLink(buildPageURL('applications'), 'Applications overview', '_self'),
         );
         head.append(intro, actions);
         const rows = createElement('div', 'rows');

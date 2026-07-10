@@ -537,6 +537,7 @@ func TestEmbeddedUIIncludesQueuedAppliesMonitorContracts(t *testing.T) {
 		"heartbeat freshness looks current",
 		"heartbeat or lease is stale or expired",
 		"const createAppliesMonitorRefreshButton = (state) => createRefreshButton('Refresh applies'",
+		"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')",
 		"const createAppliesMonitorViewControl = (state) => {",
 		"['queued', 'active', 'stale'].forEach((view) => {",
 		"view === 'stale' ? 'Stale claims'",

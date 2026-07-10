@@ -2133,6 +2133,7 @@ assert "Pending executor claim — no local-safe executor has claimed this apply
 assert "heartbeat freshness looks current" in applies_ui, applies_ui
 assert "heartbeat or lease is stale or expired" in applies_ui, applies_ui
 assert "createAppliesMonitorRefreshButton = (state) => createRefreshButton('Refresh applies'" in applies_ui, applies_ui
+assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in applies_ui, applies_ui
 assert "['Last heartbeat', applyClaimFreshnessValue(record, 'lastHeartbeatAt')]" in applies_ui, applies_ui
 assert "['Claim expires', applyClaimFreshnessValue(record, 'expiresAt')]" in applies_ui, applies_ui
 assert "const setEmbeddedBrowserTitle = (...parts) => {" in ui, ui
