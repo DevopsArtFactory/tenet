@@ -1130,6 +1130,8 @@ func TestAccountDetailReadRouteCopyDocsContract(t *testing.T) {
 		"operators can open or copy the exact scoped read route",
 		"Deployment rows with meaningful runtime/event evidence add a guarded `_self` `Open runtime events` link",
 		"omitting timestamp-only rows",
+		"compact retained runtime-events cue from already-loaded `account.deployments[].runtimeSummary.historyCount` and `history[]` fields",
+		"`No recent runtime events` without adding another backend read",
 	} {
 		if !strings.Contains(operatorContractsText, fragment) {
 			t.Fatalf("expected operator contracts docs to include account detail contract %q", fragment)
