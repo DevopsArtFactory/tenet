@@ -32,7 +32,8 @@ Deployment-scoped refresh audit handoff: `/?page=audit&deployment={deploymentNam
 | Apply collections | `/?page=applies` for the queued monitor; `/?page=applies&appliesView=active` for active handoffs; `/?page=applies&appliesView=stale` for stale active claims | `GET /v1/applies?status=active`; `GET /v1/applies?status=active&claim=stale`; `GET /v1/applies?status=queued` | `Request-Id`, returned immutable records, deployment names, `status=queued` or `status=running`, queued/running operations, lifecycle fields, claim `lastHeartbeatAt` / `expiresAt` when present, and related audit `apply.requested` / `apply.transitioned` rows. | Default local/no-AWS runs may return `[]`; with `TENET_AWS_ENABLE_APPLY=true`, queued-on-create records exercise the local-safe executor handoff without live AWS mutation. The active API returns queued plus running records newest-first; the stale active API narrows to running records with stale or expired claim leases; the embedded monitor exposes queued/active/stale view controls, keeps all reads read-only, and links rows back to `/?page=plan&deployment={deploymentName}&applyId={applyId}` for review. | `curl -i "$TENET_API_BASE/v1/applies?status=active&claim=stale"` |
 
 Local-safe apply executor release guard: reviewers should verify the
-active collection (`GET /v1/applies?status=active`), queued exact subset
+active collection (`GET /v1/applies?status=active`), stale active-claim collection
+(`GET /v1/applies?status=active&claim=stale`), queued exact subset
 (`GET /v1/applies?status=queued`), stored apply read (`GET /v1/applies/{applyId}`), claim (`POST /v1/applies/{applyId}/claim`),
 heartbeat (`POST /v1/applies/{applyId}/heartbeat`), and transition
 (`POST /v1/applies/{applyId}/transitions`) routes together. They persist and

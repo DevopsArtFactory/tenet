@@ -869,6 +869,8 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 		for _, fragment := range []string{
 			"Local-safe apply executor release guard",
 			"active collection (`GET /v1/applies?status=active`)",
+			"stale active-claim collection",
+			"(`GET /v1/applies?status=active&claim=stale`)",
 			"queued exact subset",
 			"(`GET /v1/applies?status=queued`)",
 			"stored apply read",
@@ -883,6 +885,7 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 			"queued subset read",
 			"explicit queued/active/stale view controls",
 			"`?appliesView=active`",
+			"`?appliesView=stale`",
 			"Refresh applies",
 			"fresh/stale/pending",
 		} {
