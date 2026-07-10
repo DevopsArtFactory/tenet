@@ -1403,6 +1403,11 @@ func TestApplicationsOverviewPageWithNodeHarness(t *testing.T) {
 					"summary":      "CodeDeploy traffic shift is progressing",
 					"historyCount": 2,
 				},
+				"history": []map[string]any{{
+					"timestamp": "2026-04-16T07:05:00Z",
+					"summary":   "Created CodeDeploy deployment for the staging traffic shift",
+					"source":    "deployment-controller",
+				}},
 			},
 			{
 				"name":           "payments-worker-staging",
@@ -2557,6 +2562,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!backLink) throw new Error('expected account page back link to preserve filters');
   if (!summaryText.includes('Account deployment overview')) throw new Error('expected account page summary title');
   if (!summaryText.includes('staging-core')) throw new Error('expected account page account name');
+  if (!summaryText.includes('Runtime events retained · 2 events across 1 deployment')) throw new Error('expected account summary header runtime event count cue, got ' + summaryText);
+  if (!summaryText.includes('Latest event · payments-api-staging · 2026-04-16T07:10:00Z · CodeDeploy traffic shift is progressing')) throw new Error('expected account summary header latest runtime event cue, got ' + summaryText);
   if (!summaryText.includes('Account detail read refreshed ·')) throw new Error('expected account page to show account-detail read freshness');
   if (summaryText.includes('Account detail read not refreshed yet')) throw new Error('expected account page initial successful read to include freshness timestamp');
   if (!accountsText.includes('Quick navigation')) throw new Error('expected account page quick navigation');
@@ -2569,6 +2576,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('On this page')) throw new Error('expected account page section quick-nav group');
   if (!accountsText.includes('staging-core · Account detail')) throw new Error('expected account page quick-nav current label');
   if (!accountsText.includes('payments · staging-apne2')) throw new Error('expected grouped project/environment heading');
+  if (!accountsText.includes('Group runtime events retained · 2 events across 1 deployment')) throw new Error('expected account group header runtime event count cue, got ' + accountsText);
+  if (!accountsText.includes('Latest event · payments-api-staging · 2026-04-16T07:10:00Z · CodeDeploy traffic shift is progressing')) throw new Error('expected account group header latest runtime event cue, got ' + accountsText);
+  if (!accountsText.includes('Group runtime events retained · No recent runtime events')) throw new Error('expected no-data account group runtime event cue, got ' + accountsText);
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected account page deployment row');
   if (!accountsText.includes('Account JSON')) throw new Error('expected account page account json link');
   if (!accountsText.includes('Copy account read route')) throw new Error('expected account page copyable account read route');
