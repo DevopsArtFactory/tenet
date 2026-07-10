@@ -38,8 +38,8 @@ heartbeat (`POST /v1/applies/{applyId}/heartbeat`), and transition
 (`POST /v1/applies/{applyId}/transitions`) routes together. They persist and
 advance Tenet apply metadata only; this local-safe record lifecycle does not
 perform live AWS mutation. The read-only `/?page=applies` monitor defaults to
-the queued subset read, adds a queued/active view control (`?appliesView=active`
-for the active collection), preserves the explicit `Refresh applies` action and
+the queued subset read, adds explicit queued/active/stale view controls (`?appliesView=active`
+for the active collection, `?appliesView=stale` for stale active claims), preserves the explicit `Refresh applies` action and
 bookmarkable URL, translates claim heartbeat/lease metadata into fresh/stale/pending
 operator copy, and links operators back to the plan/apply workspace for detail review.
 

@@ -356,6 +356,80 @@ func TestServiceListFiltersActiveApplyRequestsNewestFirst(t *testing.T) {
 	}
 }
 
+func TestServiceListFiltersStaleActiveApplyClaimsNewestFirst(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_running_expired_new": {
+				ID:             "apply_running_expired_new",
+				PlanID:         "plan_expired_new",
+				DeploymentName: "api-prod",
+				Status:         StatusRunning,
+				CreatedAt:      "2026-04-18T08:08:00Z",
+				Claim:          &Claim{WorkerID: "worker-expired-new", ClaimedAt: "2026-04-18T08:00:00Z", LastHeartbeatAt: "2026-04-18T08:02:00Z", ExpiresAt: "2026-04-18T08:07:00Z"},
+			},
+			"apply_queued": {
+				ID:             "apply_queued",
+				PlanID:         "plan_queued",
+				DeploymentName: "worker-prod",
+				Status:         StatusQueued,
+				CreatedAt:      "2026-04-18T08:07:30Z",
+			},
+			"apply_running_fresh": {
+				ID:             "apply_running_fresh",
+				PlanID:         "plan_fresh",
+				DeploymentName: "api-prod",
+				Status:         StatusRunning,
+				CreatedAt:      "2026-04-18T08:07:00Z",
+				Claim:          &Claim{WorkerID: "worker-fresh", ClaimedAt: "2026-04-18T08:07:00Z", LastHeartbeatAt: "2026-04-18T08:09:00Z", ExpiresAt: "2026-04-18T08:14:00Z"},
+			},
+			"apply_running_legacy_stale": {
+				ID:             "apply_running_legacy_stale",
+				PlanID:         "plan_legacy_stale",
+				DeploymentName: "legacy-prod",
+				Status:         StatusRunning,
+				CreatedAt:      "2026-04-18T08:06:00Z",
+				Claim:          &Claim{WorkerID: "worker-legacy", ClaimedAt: "2026-04-18T08:00:00Z"},
+				Operations: []Operation{{
+					Status:  OperationStatusRunning,
+					Phase:   "Promoting",
+					Target:  "legacy-prod listener",
+					Summary: "Shift production traffic.",
+				}},
+			},
+			"apply_failed_expired": {
+				ID:             "apply_failed_expired",
+				PlanID:         "plan_failed",
+				DeploymentName: "failed-prod",
+				Status:         StatusFailed,
+				CreatedAt:      "2026-04-18T08:05:00Z",
+				Claim:          &Claim{WorkerID: "worker-failed", ClaimedAt: "2026-04-18T08:00:00Z", ExpiresAt: "2026-04-18T08:05:00Z"},
+			},
+		},
+	}
+	service := Service{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 4, 18, 8, 10, 0, 0, time.UTC) },
+	}
+
+	records, err := service.List(context.Background(), ListQuery{Status: ListStatusActive, Claim: ListClaimStale})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	got := make([]string, 0, len(records))
+	for _, record := range records {
+		got = append(got, record.ID)
+		if record.Status != StatusRunning || record.Claim == nil {
+			t.Fatalf("expected only running records with stale claims, got %+v", records)
+		}
+	}
+	if want := []string{"apply_running_expired_new", "apply_running_legacy_stale"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected stale active apply records: got %+v want %+v", got, want)
+	}
+	if len(records[1].Operations) != 1 || records[1].Operations[0].ID == "" {
+		t.Fatalf("expected stale listed records to normalize additive operation ids, got %+v", records[1].Operations)
+	}
+}
+
 func TestServiceListRequiresStore(t *testing.T) {
 	_, err := (Service{}).List(context.Background(), ListQuery{Status: StatusQueued})
 	if err == nil || !strings.Contains(err.Error(), "apply request store is required") {

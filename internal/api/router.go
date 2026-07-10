@@ -226,21 +226,28 @@ func validDeploymentEventsSource(source string) bool {
 func parseApplyRequestListQuery(w http.ResponseWriter, r *http.Request) (applyrequest.ListQuery, bool) {
 	queryValues := r.URL.Query()
 	for key, values := range queryValues {
-		if key != "status" || len(values) != 1 {
+		if (key != "status" && key != "claim") || len(values) != 1 {
 			http.Error(w, "unsupported apply request filter", http.StatusBadRequest)
 			return applyrequest.ListQuery{}, false
 		}
 	}
 	status := strings.TrimSpace(queryValues.Get("status"))
+	claim := strings.TrimSpace(queryValues.Get("claim"))
 	switch status {
 	case string(applyrequest.StatusQueued):
-		return applyrequest.ListQuery{Status: applyrequest.StatusQueued}, true
+		if claim == "" {
+			return applyrequest.ListQuery{Status: applyrequest.StatusQueued}, true
+		}
 	case string(applyrequest.ListStatusActive):
-		return applyrequest.ListQuery{Status: applyrequest.ListStatusActive}, true
-	default:
-		http.Error(w, "status=queued or status=active is required", http.StatusBadRequest)
-		return applyrequest.ListQuery{}, false
+		if claim == "" {
+			return applyrequest.ListQuery{Status: applyrequest.ListStatusActive}, true
+		}
+		if claim == string(applyrequest.ListClaimStale) {
+			return applyrequest.ListQuery{Status: applyrequest.ListStatusActive, Claim: applyrequest.ListClaimStale}, true
+		}
 	}
+	http.Error(w, "status=queued, status=active, or status=active&claim=stale is required", http.StatusBadRequest)
+	return applyrequest.ListQuery{}, false
 }
 
 func applyAuditLogLimit(result auditlog.Result, query auditlog.Query) auditlog.Result {
@@ -2185,11 +2192,11 @@ func filterAuthorizedStatusSnapshots(snapshots []statusstore.Snapshot, visible m
 	return filtered
 }
 
-func filterApplyRequestRecords(records []applyrequest.Record, status applyrequest.Status, visible map[string]struct{}, enabled bool) []applyrequest.Record {
-	query := applyrequest.ListQuery{Status: status}
+func filterApplyRequestRecords(records []applyrequest.Record, query applyrequest.ListQuery, visible map[string]struct{}, enabled bool) []applyrequest.Record {
+	now := time.Now().UTC()
 	filtered := make([]applyrequest.Record, 0, len(records))
 	for _, record := range records {
-		if !query.Matches(record) {
+		if !query.Matches(record, now) {
 			continue
 		}
 		if enabled {
@@ -3264,7 +3271,7 @@ func NewRouter(options Options) http.Handler {
 		}
 		records = filterApplyRequestRecords(
 			records,
-			query.Status,
+			query,
 			authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())),
 			options.RequireDeploymentReadAuthorization,
 		)
