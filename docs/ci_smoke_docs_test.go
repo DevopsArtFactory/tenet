@@ -914,8 +914,12 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 	for name, fragments := range map[string][]string{
 		"smoke-local": {
 			"active_apply_records=$(curl -fsS \"http://$HOST:$PORT/v1/applies?status=active\")",
+			"stale_active_apply_records=$(curl -fsS \"http://$HOST:$PORT/v1/applies?status=active&claim=stale\")",
+			"STALE_ACTIVE_APPLY_RECORDS_PATH",
 			"assert active_apply_records[0]['claim']['expiresAt'] == claimed_apply_heartbeat['claim']['expiresAt']",
+			"assert stale_active_apply_records[0]['id'] == os.environ['STALE_CLAIM_RECOVERY_APPLY_ID']",
 			"No active apply handoffs are visible right now. GET /v1/applies?status=active returned an empty collection.",
+			"No stale active apply claims are visible right now. GET /v1/applies?status=active&claim=stale returned an empty collection.",
 			"createAppliesMonitorRefreshButton = (state) => createRefreshButton('Refresh applies'",
 		},
 		"smoke-docker": {
