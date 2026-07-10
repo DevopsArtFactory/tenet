@@ -440,6 +440,15 @@ func TestOperatorTroubleshootingRunbookDocsContract(t *testing.T) {
 	}
 
 	runbook := readRepoFile(t, "docs/runbooks/operator-troubleshooting.md")
+	for _, staleFragment := range []string{
+		"raw API for active handoffs",
+		"embedded monitor remains read-only over the queued subset",
+	} {
+		if strings.Contains(runbook, staleFragment) {
+			t.Fatalf("expected operator troubleshooting runbook to drop stale apply-monitor wording %q", staleFragment)
+		}
+	}
+
 	for _, fragment := range []string{
 		"# Operator Troubleshooting",
 		"Compact operator troubleshooting quick-reference",
@@ -455,8 +464,8 @@ func TestOperatorTroubleshootingRunbookDocsContract(t *testing.T) {
 		"| Live inspection | `#resource-live-inspection` | `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}`",
 		"| Audit | `/?page=audit[&deployment={deploymentName}][&action={action}][&limit={n}]` | `GET /v1/audit-logs`",
 		"| Plan/apply | `/?page=plan&deployment={deploymentName}[&planId={planId}][&applyId={applyId}]` | `POST /v1/plans/deployments/{deploymentName}`",
-		"| Apply collections | `/?page=applies` for the queued monitor; raw API for active handoffs | `GET /v1/applies?status=active`; `GET /v1/applies?status=queued`",
-		"The active API returns queued plus running records newest-first; the embedded monitor remains read-only over the queued subset",
+		"| Apply collections | `/?page=applies` for the queued monitor; `/?page=applies&appliesView=active` for active handoffs | `GET /v1/applies?status=active`; `GET /v1/applies?status=queued`",
+		"The active API returns queued plus running records newest-first; the embedded monitor exposes the queued/active view control",
 		"`Request-Id` / `Tenet request ID`",
 		"`lookupContext.region`",
 		"`available=false` / `unavailableReason=aws_unavailable`",
