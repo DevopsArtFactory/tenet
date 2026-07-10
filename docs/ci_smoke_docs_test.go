@@ -1137,6 +1137,43 @@ func TestAccountDetailReadRouteCopyDocsContract(t *testing.T) {
 	}
 }
 
+func TestManagedLoginGuideDocumentsProviderRoutesAndVerificationContract(t *testing.T) {
+	managedLoginText := readTextFile(t, "features/managed-login.md")
+	for _, fragment := range []string{
+		"`TENET_AUTH_PROVIDER=github` activates GitHub OAuth",
+		"`TENET_AUTH_PROVIDER=google_oidc` activates Google Workspace OIDC",
+		"`TENET_AUTH_PROVIDER=okta_oidc` activates Okta OIDC",
+		"`TENET_AUTH_PROVIDER=okta_saml` is diagnostic-only",
+		"Never document `TENET_AUTH_PROVIDER` with a secret-shaped placeholder",
+		"`GET /auth/login/github`",
+		"`GET /auth/login/google`",
+		"`GET /auth/login/okta`",
+		"`GET /auth/callback/okta/oidc`",
+		"`GET /auth/logout` and `POST /auth/logout`",
+		"The legacy `/api/v1/auth/*` family is not the managed-login route contract.",
+		"`TENET_AUTH_SESSION_COOKIE_SECURE=true`",
+		"sessionCookieSecureOverride",
+		"sessionCookieSecureForRequest",
+		"sessionCookieSecureSources",
+		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=true`",
+		"Trusted front-door identity still wins when trusted headers are present",
+		"`go test ./internal/api ./cmd/tenet-api`",
+		"`go test ./internal/authprovider ./internal/authidentity ./internal/authstate`",
+		"Local and Docker smoke intentionally cover the out-of-box disabled managed-login runtime",
+		"active GitHub, Google Workspace, and Okta OIDC sign-in/sign-out flows without live GitHub, Google, or Okta credentials",
+		"`/auth/logout?returnUrl=...` in the same shell",
+		"clear only Tenet's signed `tenet_session` cookie",
+		"avoid claiming provider-token revocation or upstream front-door sign-out",
+	} {
+		if !strings.Contains(managedLoginText, fragment) {
+			t.Fatalf("expected managed-login guide to include %q", fragment)
+		}
+	}
+	if strings.Contains(managedLoginText, "provider=***") || strings.Contains(managedLoginText, "`***") {
+		t.Fatalf("expected managed-login guide to avoid secret-shaped provider-mode placeholders")
+	}
+}
+
 func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{
