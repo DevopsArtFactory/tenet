@@ -900,9 +900,36 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 			"PAYLOAD_DIR=$(mktemp -d)",
 			"write_payload()",
 			"Path(sys.argv[1]).read_text",
+			"Verified active/queued apply collection split and claim freshness",
 		} {
 			if !strings.Contains(text, fragment) {
 				t.Fatalf("expected %s to keep apply release-guard payloads file-backed via %q", name, fragment)
+			}
+		}
+	}
+
+	for name, fragments := range map[string][]string{
+		"smoke-local": {
+			"active_apply_records=$(curl -fsS \"http://$HOST:$PORT/v1/applies?status=active\")",
+			"assert active_apply_records[0]['claim']['expiresAt'] == claimed_apply_heartbeat['claim']['expiresAt']",
+			"No active apply handoffs are visible right now. GET /v1/applies?status=active returned an empty collection.",
+			"createAppliesMonitorRefreshButton = (state) => createRefreshButton('Refresh applies'",
+		},
+		"smoke-docker": {
+			"file_backed_active_apply_records_before_claim=$(curl -fsS \"$API_BASE_URL/v1/applies?status=active\")",
+			"file_backed_queued_apply_records_after_heartbeat=$(curl -fsS \"$API_BASE_URL/v1/applies?status=queued\")",
+			"it can claim or advance seeded queued records between read requests",
+			"assert file_backed_claimed_apply_heartbeat[\"claim\"][\"expiresAt\"]",
+			"assert file_backed_claim_apply_id not in queued_after_heartbeat_ids",
+		},
+	} {
+		text := map[string]string{
+			"smoke-local":  readTextFile(t, "../scripts/smoke-local.sh"),
+			"smoke-docker": readTextFile(t, "../scripts/smoke-docker.sh"),
+		}[name]
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s smoke to lock active/queued applies release guard evidence %q", name, fragment)
 			}
 		}
 	}
