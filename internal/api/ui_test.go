@@ -602,6 +602,8 @@ func TestEmbeddedUILazyLoadsDeploymentDetailsOnExpandOnly(t *testing.T) {
 		"const expanded = toggle.getAttribute('aria-expanded') === 'true';",
 		"const nextExpanded = !expanded;",
 		"toggle.setAttribute('aria-expanded', String(nextExpanded));",
+		"toggle.setAttribute('aria-label', `${nextExpanded ? 'Collapse' : 'Expand'} details for ${deployment.name || 'deployment'}`);",
+		"rowHint.textContent = nextExpanded ? 'Collapse details' : 'Expand details';",
 		"row.classList.toggle('expanded', nextExpanded);",
 		"detailPanel.hidden = !nextExpanded;",
 		"loadDeploymentDetail(deployment.name, detailPanel).catch(() => {});",
