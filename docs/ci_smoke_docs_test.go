@@ -215,6 +215,21 @@ func mktempUnderPayloadDir(args string) bool {
 	return args == "$PAYLOAD_DIR" || strings.HasPrefix(args, "$PAYLOAD_DIR/")
 }
 
+func TestAuditLogDocsDocumentControllerRefreshStatusShortcut(t *testing.T) {
+	auditLogText := readTextFile(t, "architecture/tenet-v1-audit-log-api.md")
+
+	for _, fragment := range []string{
+		"GET /v1/controller/refresh/status",
+		"GET /v1/audit-logs?action=controller.refresh.requested&limit=1",
+		"newest-first `requestedAt`/timestamp ordering",
+		"preserves the bounded `resultScope`",
+	} {
+		if !strings.Contains(auditLogText, fragment) {
+			t.Fatalf("expected audit log docs to preserve controller-refresh status shortcut fragment %q", fragment)
+		}
+	}
+}
+
 func TestOperatorTroubleshootingRunbookDocumentsDailyTriageFlow(t *testing.T) {
 	runbookText := readTextFile(t, "runbooks/operator-troubleshooting.md")
 

@@ -409,37 +409,63 @@ func TestRouterControllerRefreshRequiresPost(t *testing.T) {
 }
 
 func TestRouterControllerRefreshStatusReportsLatestReceipt(t *testing.T) {
+	auditService := auditlog.Service{
+		ListPlanPreviews:  func() ([]planpreview.Record, error) { return nil, nil },
+		ListApplyRequests: func() ([]applyrequest.Record, error) { return nil, nil },
+		ListControllerRefreshAuditRows: func() ([]controllerrefreshaudit.Record, error) {
+			return []controllerrefreshaudit.Record{
+				{
+					ID:             "api-controller-refresh:manual-refresh-older",
+					Route:          "POST /v1/controller/refresh",
+					Status:         "published",
+					Result:         "published",
+					RequestedAt:    "2026-04-20T10:44:00Z",
+					RequestID:      "api-controller-refresh:manual-refresh-older",
+					DeliveryID:     "manual-refresh-older",
+					Backend:        controllerrefresh.BackendRedis,
+					Channel:        "tenet:test:controller-refresh",
+					HTTPStatusCode: http.StatusAccepted,
+				},
+				{
+					ID:             "api-controller-refresh:manual-refresh-123",
+					Route:          "POST /v1/controller/refresh",
+					Status:         "published",
+					Result:         "published",
+					RequestedAt:    "2026-04-20T10:45:00Z",
+					RequestID:      "api-controller-refresh:manual-refresh-123",
+					DeliveryID:     "manual-refresh-123",
+					Backend:        controllerrefresh.BackendRedis,
+					Channel:        "tenet:test:controller-refresh",
+					HTTPStatusCode: http.StatusAccepted,
+					Actor: requestactor.Actor{
+						Available: true,
+						ID:        "operator-123",
+						Name:      "Jane Operator",
+						Email:     "jane@example.com",
+					},
+				},
+				{
+					ID:             "api-controller-refresh:manual-refresh-noop",
+					Route:          "POST /v1/controller/refresh",
+					Status:         "noop",
+					Result:         "noop",
+					RequestedAt:    "2026-04-20T10:43:00Z",
+					RequestID:      "api-controller-refresh:manual-refresh-noop",
+					DeliveryID:     "manual-refresh-noop",
+					Backend:        controllerrefresh.BackendRedis,
+					Channel:        "tenet:test:controller-refresh",
+					HTTPStatusCode: http.StatusAccepted,
+				},
+			}, nil
+		},
+	}
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		AuditLogs: func(ctx context.Context, query auditlog.Query) (auditlog.Result, error) {
 			if query.Limit != 1 || query.DeploymentName != "" || query.Action != auditlog.ActionControllerRefresh {
 				t.Fatalf("expected latest controller-refresh audit query, got %+v", query)
 			}
-			return auditlog.Result{
-				Entries: []auditlog.Entry{{
-					EntryID:   "audit_controller_refresh_testopaque",
-					Timestamp: "2026-04-20T10:45:00Z",
-					Action:    string(auditlog.ActionControllerRefresh),
-					Actor: auditlog.Actor{
-						Available: true,
-						ID:        "operator-123",
-						Name:      "Jane Operator",
-						Email:     "jane@example.com",
-					},
-					Metadata: auditlog.Metadata{
-						Status:         "published",
-						Route:          "POST /v1/controller/refresh",
-						Result:         "published",
-						RequestID:      "api-controller-refresh:manual-refresh-123",
-						DeliveryID:     "manual-refresh-123",
-						Backend:        controllerrefresh.BackendRedis,
-						Channel:        "tenet:test:controller-refresh",
-						HTTPStatusCode: http.StatusAccepted,
-					},
-					Source: auditlog.Source{Kind: "controllerRefreshRequest", Store: "controllerRefreshAuditStore", RecordRoute: "POST /v1/controller/refresh"},
-				}},
-				ResultScope: auditlog.BuildResultScope(query, 3, 1),
-			}, nil
+			return auditService.List(ctx, query)
 		},
 	})
 	req := httptest.NewRequest(http.MethodGet, "/v1/controller/refresh/status", nil)
