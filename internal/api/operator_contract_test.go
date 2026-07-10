@@ -1674,6 +1674,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"switches to a same-shell sign-in handoff only when `/v1/operator/context` reports an active same-origin Tenet-managed login or enterprise SSO route",
 		"`authRuntime.enterpriseSso.provider=okta_oidc`, `active=true`, and `loginRoute=/auth/login/okta` produces `Sign in with Okta SSO` while preserving the current bookmarkable URL as `returnUrl`; configured-but-inactive Okta diagnostics remain non-clickable",
 		"Inspect the `accessVerdicts` chips and their bounded route examples",
+		"apply monitor collections (`GET /v1/applies?status=active`, `GET /v1/applies?status=active&claim=stale`, and `GET /v1/applies?status=queued`)",
 		"Collection-read chips show `Collection scope: filtered to visible deployments`",
 		"add `Collection result: likely empty` when those grants are expected to produce an empty collection",
 		"deployment-scoped read/write chips show `Scope grants: exact deployments or matching project/environment scopes`",
