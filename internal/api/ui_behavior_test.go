@@ -10860,6 +10860,19 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 		t.Fatalf("marshal failed plan preview: %v", err)
 	}
 
+	applyPreflightBlockedJSON, err := json.Marshal(map[string]any{
+		"state":     "blocked",
+		"summary":   "Standalone preflight confirms live AWS mutation remains blocked for this immutable apply request.",
+		"checkedAt": "2026-04-18T08:03:00Z",
+		"evidence": []string{
+			"reused immutable applyId apply_failed_123",
+			"did not contact AWS",
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal blocked apply preflight: %v", err)
+	}
+
 	applyRecordFailedJSON, err := json.Marshal(map[string]any{
 		"id":             "apply_failed_123",
 		"planId":         "plan_ready_123",
@@ -11204,6 +11217,7 @@ const scriptContent = ` + string(scriptJSON) + `;
 const detailBody = ` + string(detailJSON) + `;
 const planPreview = ` + string(planPreviewReadyJSON) + `;
 const applyRecord = ` + string(applyRecordFailedJSON) + `;
+const applyPreflight = ` + string(applyPreflightBlockedJSON) + `;
 ` + domHarness + `
 const document = new Document();
 document.byID.set('toolbar', document.createElement('section'));
@@ -11234,6 +11248,9 @@ const fetch = (url, options = {}) => {
   }
   if (url === '/v1/applies/apply_failed_123') {
     return Promise.resolve({ ok: true, json: () => Promise.resolve(applyRecord) });
+  }
+  if (url === '/v1/applies/apply_failed_123/preflight') {
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(applyPreflight) });
   }
   throw new Error('unexpected fetch url: ' + url);
 };
@@ -11439,7 +11456,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Apply execution readiness')) throw new Error('expected apply execution readiness section');
   if (!text.includes('Execution readiness | Local-safe disabled')) throw new Error('expected disabled readiness label after create');
   if (!text.includes('Readiness summary | Live AWS mutation is disabled for this local-safe apply record; this is expected metadata-only evidence, not an AWS readiness failure.')) throw new Error('expected disabled readiness summary after create');
-  if (!text.includes('Execution-readiness copy is sourced from backend readiness evidence when present, or from the immutable apply record fallback state when evidence has not been reported yet.')) throw new Error('expected readiness source explanation after create');
+  if (!text.includes('Execution-readiness copy prefers the standalone non-mutating preflight read route when it is loaded, then falls back to immutable apply-record evidence.')) throw new Error('expected readiness source explanation after create');
+  if (!text.includes('Apply preflight not loaded')) throw new Error('expected preflight idle state after create');
+  if (!text.includes('Use Refresh apply preflight to read GET /v1/applies/apply_failed_123/preflight.')) throw new Error('expected preflight read-route prompt after create');
+  if (!text.includes('Apply preflight JSON')) throw new Error('expected apply preflight JSON handoff after create');
+  if (!text.includes('Copy apply preflight read route')) throw new Error('expected copy preflight read route handoff after create');
   if (!text.includes('Apply lifecycle summary')) throw new Error('expected apply lifecycle summary after create');
   if (!text.includes('0/1 terminal · 0 running · 1 queued')) throw new Error('expected queued lifecycle progress summary after create');
   if (text.includes('Apply lifecycle metadata')) throw new Error('expected failed/default apply record to omit lifecycle metadata section when lifecycle fields are missing');
@@ -11492,9 +11513,29 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
   toolbarButtons = collectNodes(toolbarRoot, (node) => node.tagName === 'BUTTON');
   refreshWorkspace = toolbarButtons.find((node) => node.textContent === 'Refresh plan workspace');
-  if (!refreshPlan || !refreshApply || !refreshWorkspace) throw new Error('expected refresh buttons after apply create');
-  if (refreshPlan.disabled || refreshApply.disabled || refreshWorkspace.disabled) throw new Error('expected refresh buttons enabled after apply create');
+  let refreshPreflight = buttons.find((node) => node.textContent === 'Refresh apply preflight');
+  if (!refreshPlan || !refreshApply || !refreshPreflight || !refreshWorkspace) throw new Error('expected refresh buttons after apply create');
+  if (refreshPlan.disabled || refreshApply.disabled || refreshPreflight.disabled || refreshWorkspace.disabled) throw new Error('expected refresh buttons enabled after apply create');
   const bookmarkedPlanApplySearch = window.location.search;
+  refreshPreflight.dispatch('click');
+  text = collectText(root).join(' | ');
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshPreflight = buttons.find((node) => node.textContent === 'Refresh apply preflight');
+  if (!refreshPreflight || !refreshPreflight.disabled) throw new Error('expected preflight refresh disabled while the route reloads');
+  if (!text.includes('Loading apply preflight')) throw new Error('expected preflight loading heading');
+  if (!text.includes('Loading non-mutating execution preflight from GET /v1/applies/apply_failed_123/preflight.')) throw new Error('expected preflight loading route copy');
+  await waitForFetchCount(fetchCalls, 5);
+  await settle();
+  if (fetchCalls[4] !== '/v1/applies/apply_failed_123/preflight') throw new Error('expected apply preflight fetch after manual refresh, got ' + fetchCalls.join(', '));
+  if (window.location.search !== bookmarkedPlanApplySearch) throw new Error('expected apply-preflight refresh to preserve plan/apply query, got ' + window.location.search);
+  text = collectText(root).join(' | ');
+  if (!text.includes('Apply preflight loaded')) throw new Error('expected preflight loaded heading');
+  if (!text.includes('Standalone execution preflight is loaded from GET /v1/applies/apply_failed_123/preflight.')) throw new Error('expected preflight loaded route copy');
+  if (!text.includes('Execution readiness | Execution blocked')) throw new Error('expected standalone preflight readiness to override apply-record fallback');
+  if (!text.includes('Readiness summary | Standalone preflight confirms live AWS mutation remains blocked for this immutable apply request.')) throw new Error('expected standalone preflight summary');
+  if (!text.includes('Readiness checked | 2026-04-18T08:03:00Z')) throw new Error('expected standalone preflight checked timestamp');
+  if (!text.includes('Readiness evidence | reused immutable applyId apply_failed_123; did not contact AWS')) throw new Error('expected standalone preflight evidence');
+  document.scrolledTo = '';
   refreshApply.dispatch('click');
   await settle();
   await settle();
