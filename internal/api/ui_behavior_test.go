@@ -2563,6 +2563,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('Account deployment overview')) throw new Error('expected account page summary title');
   if (!summaryText.includes('staging-core')) throw new Error('expected account page account name');
   if (!summaryText.includes('Runtime events retained · 2 events across 1 deployment')) throw new Error('expected account summary header runtime event count cue, got ' + summaryText);
+  if (!summaryText.includes('Account Runtime trend active')) throw new Error('expected account summary runtime trend cue, got ' + summaryText);
+  if (!summaryText.includes('2 retained events · 1 synced · 1 progressing · 0 paused · 0 error')) throw new Error('expected account summary runtime trend counts, got ' + summaryText);
   if (!summaryText.includes('Latest event · payments-api-staging · 2026-04-16T07:10:00Z · CodeDeploy traffic shift is progressing')) throw new Error('expected account summary header latest runtime event cue, got ' + summaryText);
   if (!summaryText.includes('Account detail read refreshed ·')) throw new Error('expected account page to show account-detail read freshness');
   if (summaryText.includes('Account detail read not refreshed yet')) throw new Error('expected account page initial successful read to include freshness timestamp');
@@ -2576,6 +2578,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('On this page')) throw new Error('expected account page section quick-nav group');
   if (!accountsText.includes('staging-core · Account detail')) throw new Error('expected account page quick-nav current label');
   if (!accountsText.includes('payments · staging-apne2')) throw new Error('expected grouped project/environment heading');
+  if (!accountsText.includes('Account Runtime trend active')) throw new Error('expected account overview header runtime trend cue, got ' + accountsText);
+  if (!accountsText.includes('Group Runtime trend active')) throw new Error('expected active group runtime trend cue, got ' + accountsText);
+  if (!accountsText.includes('Group Runtime trend quiet')) throw new Error('expected quiet group runtime trend cue, got ' + accountsText);
+  if (!accountsText.includes('No retained runtime history yet')) throw new Error('expected quiet group runtime trend fallback copy, got ' + accountsText);
   if (!accountsText.includes('Group runtime events retained · 2 events across 1 deployment')) throw new Error('expected account group header runtime event count cue, got ' + accountsText);
   if (!accountsText.includes('Latest event · payments-api-staging · 2026-04-16T07:10:00Z · CodeDeploy traffic shift is progressing')) throw new Error('expected account group header latest runtime event cue, got ' + accountsText);
   if (!accountsText.includes('Group runtime events retained · No recent runtime events')) throw new Error('expected no-data account group runtime event cue, got ' + accountsText);
@@ -2592,6 +2598,15 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const refreshButton = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Refresh account detail');
   const rowToggles = collectNodes(document.getElementById('accounts'), (node) => node.getAttribute && node.getAttribute('role') === 'button' && node.className === 'row-toggle');
   const detailPanels = collectNodes(document.getElementById('accounts'), (node) => node.className === 'detail-panel');
+  const accountHeads = collectNodes(document.getElementById('accounts'), (node) => node.className === 'account-head');
+  const groupHeads = collectNodes(document.getElementById('accounts'), (node) => node.className === 'deployment-group-head');
+  const activeGroupHead = groupHeads.find((node) => collectText(node).join(' | ').includes('ap-northeast-2'));
+  const quietGroupHead = groupHeads.find((node) => collectText(node).join(' | ').includes('us-west-2'));
+  if (!accountHeads.find((node) => collectText(node).join(' | ').includes('Account Runtime trend active'))) throw new Error('expected runtime trend cue on account header only, got ' + accountHeads.map((node) => collectText(node).join(' | ')).join(' || '));
+  if (!activeGroupHead || !collectText(activeGroupHead).join(' | ').includes('Group Runtime trend active')) throw new Error('expected active runtime trend cue on ap-northeast-2 group header');
+  if (!quietGroupHead || !collectText(quietGroupHead).join(' | ').includes('Group Runtime trend quiet')) throw new Error('expected quiet runtime trend cue on us-west-2 group header');
+  if (collectNodes(activeGroupHead, (node) => String(node.className || '').includes('runtime-trend-dot')).length !== 1) throw new Error('expected active group trend strip to show one state dot');
+  if (collectNodes(quietGroupHead, (node) => String(node.className || '').includes('runtime-trend-dot quiet')).length !== 3) throw new Error('expected quiet group trend strip to show quiet fallback dots');
   if (rowToggles.length !== 2 || detailPanels.length !== 2) throw new Error('expected two account deployment expanders and detail panels');
   const rowHints = collectNodes(document.getElementById('accounts'), (node) => node.className === 'row-hint');
   if (rowHints.length !== 2 || rowHints.some((node) => node.textContent !== 'Expand details')) throw new Error('expected collapsed account rows to show expand hints');
@@ -10897,11 +10912,11 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 		"summary":   "Preflight checks passed for local-safe executor handoff.",
 		"checkedAt": "2026-04-18T08:04:00Z",
 		"operations": []map[string]any{{
-			"operationId":  "operation-shift-canary",
-			"phase":        "Promoting",
-			"target":       "api-prod-codedeploy-group (codeDeployDeploymentGroup)",
-			"ready":        true,
-			"summary":      "Operation has the local-safe handoff metadata it needs.",
+			"operationId": "operation-shift-canary",
+			"phase":       "Promoting",
+			"target":      "api-prod-codedeploy-group (codeDeployDeploymentGroup)",
+			"ready":       true,
+			"summary":     "Operation has the local-safe handoff metadata it needs.",
 			"handoffs": map[string]any{
 				"planApplyWorkspaceRoute": "/?applyId=apply_failed_123&deployment=api-prod&page=plan&planId=plan_ready_123",
 			},
