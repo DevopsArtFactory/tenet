@@ -6403,6 +6403,7 @@ async function renderScenario(hash, fetchImpl) {
   if (!recentLogsRun.document.activeElement || recentLogsRun.document.activeElement.id !== 'resource-recent-logs') throw new Error('expected recent logs hash to refocus the matching section after lazy panel load, got ' + (recentLogsRun.document.activeElement?.id || 'none'));
   const recentLogsText = collectText(recentLogsRoot).join(' | ');
   if (!recentLogsText.includes('Log entry cap · All available entries')) throw new Error('expected recent logs panel to render the default active cap copy');
+  if (!recentLogsText.includes('No rows matched the current Recent logs window. Increase the Log limit, refresh after deployment activity, or use the lookup context above before escalating.')) throw new Error('expected actionable recent-log empty-state guidance, got ' + recentLogsText);
   ['Recent logs request | GET ' + logsURL, 'Requested cap | All available entries', 'Effective cap | 100 entries', 'Returned entries | 0 entries', 'Newest entry | —', 'Oldest entry | —', 'Scope status | Below cap; no router truncation', 'Resource description | Primary ECS service log stream', 'Selected cluster | ' + clusterArn, 'Selected container | worker'].forEach((fragment) => {
     if (!recentLogsText.includes(fragment)) throw new Error('expected recent logs result-scope evidence ' + fragment + ', got ' + recentLogsText);
   });

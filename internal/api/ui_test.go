@@ -136,6 +136,7 @@ func TestEmbeddedUIResourceUnavailableAndEmptyStateReleaseGuard(t *testing.T) {
 				"Tenet reached the recent-log provider, but no events were found in the selected bounded window.",
 				"case 'no_formatted_entries':",
 				"Tenet found provider records, but none could be formatted into operator-visible recent-log rows.",
+				"No rows matched the current Recent logs window. Increase the Log limit, refresh after deployment activity, or use the lookup context above before escalating.",
 			},
 			forbiddenRawFragment: "createElement('div', 'detail-condition-meta', result?.emptyReason)",
 		},
@@ -2647,6 +2648,7 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"return 'Tenet reached the recent-log provider, but no events were found in the selected bounded window.';",
 		"case 'no_formatted_entries':",
 		"return 'Tenet found provider records, but none could be formatted into operator-visible recent-log rows.';",
+		"No rows matched the current Recent logs window. Increase the Log limit, refresh after deployment activity, or use the lookup context above before escalating.",
 		"const lookupContextText = (value) => value == null || value === '' ? '—' : String(value);",
 		"const lookupContextBoolText = (value) => typeof value === 'boolean' ? boolLabel(value) : '—';",
 		"const lookupContextReturned = (lookupContext) => lookupContext && typeof lookupContext === 'object' && !Array.isArray(lookupContext);",
@@ -3779,6 +3781,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert 'recent-log-lookup-context-card' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains recent-log lookup context card")
+	}
+	if !strings.Contains(text, "No rows matched the current Recent logs window. Increase the Log limit, refresh after deployment activity, or use the lookup context above before escalating.") {
+		t.Fatalf("expected smoke-local.sh to assert actionable recent-log empty-state guidance")
 	}
 	for _, fragment := range []string{
 		"assert \"const resourceLogsLimitOptions = [\" in ui, ui",

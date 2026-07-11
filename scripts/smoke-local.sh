@@ -3003,6 +3003,7 @@ assert 'This resource is a valid drill-down target, but Tenet has no independent
 assert "const resourceLogsEmptyReasonText = (reason) => {" in ui, ui
 assert 'Tenet reached the recent-log provider, but no events were found in the selected bounded window.' in ui, ui
 assert 'Tenet found provider records, but none could be formatted into operator-visible recent-log rows.' in ui, ui
+assert 'No rows matched the current Recent logs window. Increase the Log limit, refresh after deployment activity, or use the lookup context above before escalating.' in ui, ui
 assert 'Plan preview actions' in ui, ui
 assert 'Apply request actions' in ui, ui
 assert 'Plan preview approval guidance' in ui, ui
