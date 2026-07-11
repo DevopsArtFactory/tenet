@@ -5538,7 +5538,9 @@
           case 'no_formatted_entries':
             return 'Tenet found provider records, but none could be formatted into operator-visible recent-log rows.';
           default:
-            return reason ? 'Tenet returned an empty recent-log state. Use the lookup context above to continue provider troubleshooting.' : '';
+            return reason
+              ? 'Tenet returned an empty recent-log state. Use the lookup context above to continue provider troubleshooting.'
+              : 'No rows matched the current Recent logs window. Increase the Log limit, refresh after deployment activity, or use the lookup context above before escalating.';
         }
       };
       const lookupContextText = (value) => value == null || value === '' ? '—' : String(value);
