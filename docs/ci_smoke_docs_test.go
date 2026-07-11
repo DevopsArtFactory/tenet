@@ -647,6 +647,9 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 		"`resultScope`",
 		"Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating",
 		"`Tenet request ID` metadata in the Live inspection card",
+		"Unavailable reason operator actions",
+		"Use the unavailable reason as a routing cue rather than treating every",
+		"`aws_unavailable` | Capture `Request-Id` plus `lookupContext`, then verify credentials, region/account placement, IAM permissions, and AWS API reachability.",
 		"`cross_account_not_configured` means the target deployment needs observer-role wiring before Tenet can inspect the selected resource",
 		"`resource_not_found` means the selected AWS resource, task, instance, or rollout target was not found in the resolved lookup path",
 		"`aws_unavailable` means Tenet could not complete the provider lookup because credentials, permissions, region/account placement, or the AWS API were unavailable",
@@ -751,6 +754,7 @@ func TestResourceUnavailableSmokeMatrixDocsAndScripts(t *testing.T) {
 	for _, fragment := range []string{
 		"compact no-AWS resource-evidence matrix for ECS service/task, ASG/bootstrap, traffic-routing no-log-source, selector validation, successful-empty, and guarded-auth paths",
 		"Local/no-AWS release-guard matrix",
+		"the resource-inspection guide maps each unavailable reason to a",
 	} {
 		if !strings.Contains(readmeText+inspectionText+recentLogsText, fragment) {
 			t.Fatalf("expected resource unavailable docs matrix to include %q", fragment)

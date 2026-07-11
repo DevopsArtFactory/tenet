@@ -94,6 +94,20 @@ Known unavailable reasons include:
 
 For operator triage, `cross_account_not_configured` means the target deployment needs observer-role wiring before Tenet can inspect the selected resource. `resource_not_found` means the selected AWS resource, task, instance, or rollout target was not found in the resolved lookup path. `aws_unavailable` means Tenet could not complete the provider lookup because credentials, permissions, region/account placement, or the AWS API were unavailable. `overview deployment resource inspection unavailable` means the API route is active but this process was launched without the resource-inspection provider wired. `unsupported_resource_type` means the route is stable but Tenet has not implemented live inspection for that resource family yet. `no_log_source` means the resource is valid, but inspection can only use summary or sibling evidence rather than a dedicated live provider read.
 
+### Unavailable reason operator actions
+
+Use the unavailable reason as a routing cue rather than treating every
+`available=false` response as the same failure:
+
+| Reason | Next operator action |
+| --- | --- |
+| `cross_account_not_configured` | Confirm the deployment's target account has an observer role and that the control-plane account can assume it. |
+| `resource_not_found` | Re-check the selected resource name, cluster/instance selector, and rollout execution context before escalating to AWS access. |
+| `aws_unavailable` | Capture `Request-Id` plus `lookupContext`, then verify credentials, region/account placement, IAM permissions, and AWS API reachability. |
+| `overview deployment resource inspection unavailable` | Restart or reconfigure `tenet-api` with the resource-inspection provider wired before retrying the same bookmark. |
+| `unsupported_resource_type` | Keep the bookmark as stable evidence, but use deployment detail, Recent logs, or sibling resource reads until Tenet adds a live inspector. |
+| `no_log_source` | Treat the resource as route-stable and inspect summary or sibling evidence; there is no dedicated live provider read for that resource yet. |
+
 ### Local/no-AWS release-guard matrix
 
 `make smoke-local` and `make smoke-docker` keep a representative no-AWS matrix for ECS service/task, ASG and bootstrap-source, traffic-routing, selector-validation, and guarded-auth paths. The matrix checks machine fields (`available`, `unavailableReason`, `lookupContext`, `resultScope`, `clusterArn`, `instanceId`) together with the embedded UI's friendly Live inspection copy so local operators get useful evidence even without AWS credentials.
