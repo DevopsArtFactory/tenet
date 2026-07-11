@@ -1325,6 +1325,7 @@ func TestOverviewDashboardDocumentsRuntimeRetentionAndLatestRuntimeCueGuard(t *t
 func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditChips(t *testing.T) {
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
 	readmeText := readTextFile(t, "../README.md")
+	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
 	section := markdownSection(t, overviewText, "### Deployment-scoped audit workspace")
 	for _, fragment := range []string{
 		"clearable toolbar chips",
@@ -1348,6 +1349,14 @@ func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditC
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README audit workspace docs to include unsplit refresh/control contract %q", fragment)
+		}
+	}
+	for _, fragment := range []string{
+		"`GET /v1/audit-logs?action={action}` narrows the same local audit timeline to exactly `plan.created`, `apply.requested`, `apply.transitioned`, or `controller.refresh.requested`",
+		"visible-entry summary for total rows, `plan.created`, `apply.requested`, `apply.transitioned`, `controller.refresh.requested`, recorded actors, and unavailable/unknown actors",
+	} {
+		if !strings.Contains(overviewUIText, fragment) {
+			t.Fatalf("expected overview UI audit workspace docs to include complete audit action contract %q", fragment)
 		}
 	}
 }
