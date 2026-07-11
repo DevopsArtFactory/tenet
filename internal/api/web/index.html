@@ -87,6 +87,16 @@
       .deployment-group-meta, .account-topology { color: var(--muted); font-size: 13px; margin-top: 6px; }
       .runtime-event-cue { display:grid; gap: 2px; color: #c7d7f3; }
       .runtime-event-latest { color: var(--muted); }
+      .runtime-trend-cue { display:flex; flex-wrap:wrap; align-items:center; gap: 8px; margin-top: 6px; color: #c7d7f3; font-size: 13px; }
+      .runtime-trend-strip { display:inline-flex; gap: 3px; align-items:center; }
+      .runtime-trend-dot { width: 8px; height: 8px; border-radius: 999px; background: rgba(148,168,199,.55); box-shadow: 0 0 0 1px rgba(255,255,255,.08); }
+      .runtime-trend-dot.synced { background: var(--green); }
+      .runtime-trend-dot.progress { background: var(--yellow); }
+      .runtime-trend-dot.paused { background: var(--muted); }
+      .runtime-trend-dot.error { background: var(--red); }
+      .runtime-trend-dot.quiet { background: rgba(148,168,199,.38); }
+      .runtime-trend-label { color: var(--text); font-weight: 700; }
+      .runtime-trend-summary { color: var(--muted); }
       .resource-filter-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
       .group-pill { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid rgba(103,183,255,.24); color: var(--blue); background: rgba(103,183,255,.08); }
       .group-rows { display:grid; gap: 12px; }
@@ -509,6 +519,108 @@
           const latestText = `Latest event · ${cue.deploymentName}${cue.timestamp ? ` · ${cue.timestamp}` : ''}${cue.summary ? ` · ${cue.summary}` : ''}`;
           node.append(createElement('span', 'runtime-event-latest', latestText));
         }
+        return node;
+      };
+      const runtimeTrendSeverity = (state) => {
+        switch (state) {
+          case 'Synced':
+            return 0;
+          case 'Reconciling':
+          case 'OutOfSync':
+          case 'Drifted':
+            return 2;
+          case 'Paused':
+            return 3;
+          case 'Error':
+            return 4;
+          default:
+            return null;
+        }
+      };
+      const runtimeTrendTone = (state) => {
+        switch (state) {
+          case 'Synced':
+            return 'synced';
+          case 'Reconciling':
+          case 'OutOfSync':
+          case 'Drifted':
+            return 'progress';
+          case 'Paused':
+            return 'paused';
+          case 'Error':
+            return 'error';
+          default:
+            return 'quiet';
+        }
+      };
+      const runtimeTrendPointsForDeployment = (deployment) => {
+        const points = [];
+        (Array.isArray(deployment?.history) ? deployment.history : []).forEach((event, index) => {
+          const state = event?.sync?.state || event?.state || '';
+          if (runtimeTrendSeverity(state) == null) return;
+          points.push({ state, severity: runtimeTrendSeverity(state), timestamp: event?.timestamp || '', order: index });
+        });
+        const summaryState = deployment?.runtimeSummary?.sync?.state || '';
+        if (runtimeTrendSeverity(summaryState) != null) {
+          points.push({ state: summaryState, severity: runtimeTrendSeverity(summaryState), timestamp: deployment?.runtimeSummary?.timestamp || '', order: points.length });
+        }
+        const currentState = deployment?.sync?.state || '';
+        if (runtimeTrendSeverity(currentState) != null) {
+          points.push({ state: currentState, severity: runtimeTrendSeverity(currentState), timestamp: deployment?.runtimeSummary?.timestamp || '', order: points.length + 1, current: true });
+        }
+        return points.sort((left, right) => {
+          const leftTimestamp = String(left.timestamp || '');
+          const rightTimestamp = String(right.timestamp || '');
+          if (leftTimestamp !== rightTimestamp) return leftTimestamp.localeCompare(rightTimestamp);
+          return left.order - right.order;
+        });
+      };
+      const runtimeTrendCueFromDeployments = (deployments = []) => {
+        const rows = (deployments || []).map((deployment) => ({
+          deployment,
+          retainedEventCount: deploymentRuntimeEventCount(deployment),
+          points: runtimeTrendPointsForDeployment(deployment),
+        }));
+        const retainedEventCount = rows.reduce((count, row) => count + row.retainedEventCount, 0);
+        if (retainedEventCount <= 0) {
+          return { label: 'Runtime trend quiet', summary: 'No retained runtime history yet', dots: ['quiet', 'quiet', 'quiet'], aria: 'Runtime trend quiet: no retained runtime history yet' };
+        }
+        let improving = 0;
+        let worsening = 0;
+        const latestStates = [];
+        rows.forEach((row) => {
+          if (!row.points.length) return;
+          const first = row.points[0];
+          const latest = row.points[row.points.length - 1];
+          latestStates.push(latest.state);
+          if (latest.severity < first.severity) improving += 1;
+          if (latest.severity > first.severity) worsening += 1;
+        });
+        const counts = latestStates.reduce((memo, state) => {
+          memo[runtimeTrendTone(state)] = (memo[runtimeTrendTone(state)] || 0) + 1;
+          return memo;
+        }, {});
+        const dots = latestStates.length ? latestStates.slice(0, 6).map(runtimeTrendTone) : ['quiet'];
+        const activeCount = (counts.progress || 0) + (counts.error || 0) + (counts.paused || 0);
+        let label = 'Runtime trend steady';
+        if (worsening > improving) label = 'Runtime trend worsening';
+        else if (improving > worsening) label = 'Runtime trend improving';
+        else if (activeCount > 0) label = 'Runtime trend active';
+        const summary = `${retainedEventCount} retained event${retainedEventCount === 1 ? '' : 's'} · ${counts.synced || 0} synced · ${counts.progress || 0} progressing · ${counts.paused || 0} paused · ${counts.error || 0} error`;
+        return { label, summary, dots, aria: `${label}: ${summary}` };
+      };
+      const createRuntimeTrendCue = (deployments = [], scopeLabel = 'Account') => {
+        const cue = runtimeTrendCueFromDeployments(deployments);
+        const node = createElement('div', 'account-topology runtime-trend-cue');
+        node.setAttribute('aria-label', `${scopeLabel} ${cue.aria}`);
+        const strip = createElement('span', 'runtime-trend-strip');
+        strip.setAttribute('aria-hidden', 'true');
+        cue.dots.forEach((tone) => strip.append(createElement('span', `runtime-trend-dot ${tone}`)));
+        node.append(
+          strip,
+          createElement('span', 'runtime-trend-label', `${scopeLabel} ${cue.label}`),
+          createElement('span', 'runtime-trend-summary', cue.summary),
+        );
         return node;
       };
       const createLatestRuntimeChangeCue = (deployment) => {
@@ -10728,6 +10840,7 @@
             createElement('h2', 'account-name', account.name || 'Unknown account'),
             createElement('div', 'account-meta', `AWS account ${metricValue(account.awsAccountId)} · Regions: ${(account.allowedRegions || []).join(', ') || '—'}`),
             createElement('div', 'account-topology', `${topology.projectCount} projects · ${topology.environmentCount} environments`),
+            createRuntimeTrendCue(account.deployments || [], 'Account'),
             createElement('div', 'account-topology account-detail-read-route', `Current account read: ${accountDetailReadRoute(account.awsAccountId)}`),
           );
           const accountLinks = createElement('div', 'row-links');
@@ -10772,6 +10885,7 @@
               createElement('div', 'deployment-group-meta', `Project ${metricValue(group.appRef)} · Environment ${metricValue(group.environmentRef)} · Region ${metricValue(group.region)}`),
             );
             const groupRuntimeEventCue = createRuntimeEventCue(group.deployments || [], 'Group');
+            groupTitleWrap.append(createRuntimeTrendCue(group.deployments || [], 'Group'));
             if (groupRuntimeEventCue) groupTitleWrap.append(groupRuntimeEventCue);
             const groupLinks = createElement('div', 'row-links');
             groupLinks.classList.add('group-links');
@@ -10923,6 +11037,7 @@
           createElement('h2', 'account-name', account.name || currentPageState.accountId || 'Account'),
           createElement('div', 'account-meta', `AWS account ${metricValue(account.awsAccountId)} · Regions: ${(account.allowedRegions || []).join(', ') || '—'}`),
           createElement('div', 'account-topology', `${account.projectCount ?? deriveProjectEnvironmentGroups(account).projectCount} projects · ${account.environmentCount ?? deriveProjectEnvironmentGroups(account).environmentCount} environments`),
+          createRuntimeTrendCue(account.deployments || [], 'Account'),
           ...(accountRuntimeEventCue ? [accountRuntimeEventCue] : []),
           createAccountDetailFreshnessMeta(accountState, account),
         );

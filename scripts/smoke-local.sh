@@ -2621,6 +2621,14 @@ assert "const createRuntimeEventCue = (deployments = [], scopeLabel = 'Account')
 assert 'Runtime events retained' in account_ui, account_ui
 assert 'No recent runtime events' in account_ui, account_ui
 assert 'runtime-event-cue-empty' in account_ui, account_ui
+assert 'runtime-trend-cue' in account_ui, account_ui
+assert 'runtime-trend-strip' in account_ui, account_ui
+assert "const runtimeTrendCueFromDeployments = (deployments = []) => {" in account_ui, account_ui
+assert "const createRuntimeTrendCue = (deployments = [], scopeLabel = 'Account') => {" in account_ui, account_ui
+assert 'Runtime trend quiet' in account_ui, account_ui
+assert 'No retained runtime history yet' in account_ui, account_ui
+assert "createRuntimeTrendCue(account.deployments || [], 'Account')" in account_ui, account_ui
+assert "createRuntimeTrendCue(group.deployments || [], 'Group')" in account_ui, account_ui
 assert "`Latest event · ${cue.deploymentName}" in account_ui, account_ui
 assert "createRuntimeEventCue(account.deployments || [], 'Account')" in account_ui, account_ui
 assert "createRuntimeEventCue(group.deployments || [], 'Group')" in account_ui, account_ui
