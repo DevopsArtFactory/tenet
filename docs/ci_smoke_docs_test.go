@@ -2,10 +2,58 @@ package docs
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 )
+
+func TestMarkdownRelativeLinksResolve(t *testing.T) {
+	linkRE := regexp.MustCompile(`!?\[[^\]]*\]\(([^)]+)\)`)
+	var files []string
+	for _, root := range []string{".", "../README.md"} {
+		info, err := os.Stat(root)
+		if err != nil {
+			t.Fatalf("stat %s: %v", root, err)
+		}
+		if !info.IsDir() {
+			files = append(files, root)
+			continue
+		}
+		err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() || !strings.HasSuffix(path, ".md") {
+				return nil
+			}
+			files = append(files, path)
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk markdown docs under %s: %v", root, err)
+		}
+	}
+
+	for _, file := range files {
+		body := readTextFile(t, file)
+		for _, match := range linkRE.FindAllStringSubmatch(body, -1) {
+			link := strings.TrimSpace(match[1])
+			if link == "" || strings.HasPrefix(link, "#") || strings.HasPrefix(link, "/") || strings.Contains(link, "://") || strings.HasPrefix(link, "mailto:") {
+				continue
+			}
+			link = strings.SplitN(link, "#", 2)[0]
+			link = strings.SplitN(link, "?", 2)[0]
+			if link == "" {
+				continue
+			}
+			target := filepath.Clean(filepath.Join(filepath.Dir(file), link))
+			if _, err := os.Stat(target); err != nil {
+				t.Fatalf("expected local markdown link %q in %s to resolve to %s: %v", match[1], file, target, err)
+			}
+		}
+	}
+}
 
 func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
