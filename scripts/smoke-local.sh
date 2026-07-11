@@ -2162,8 +2162,11 @@ assert "renderQueuedAppliesState(`Loading ${appliesMonitorLoadingLabel(view)} fr
 assert "renderQueuedAppliesState(`${appliesMonitorViewLabel(view)} are temporarily unavailable.${detail}`, 'error', createAppliesMonitorRecoveryActions(state), state);" in applies_ui, applies_ui
 assert "...createAppliesMonitorRecoveryActions(state)," in applies_ui, applies_ui
 assert "No queued apply requests are visible right now. GET /v1/applies?status=queued returned an empty collection." in applies_ui, applies_ui
+assert "Create or reopen a plan/apply workspace from an application when operators expect a local-safe handoff" in applies_ui, applies_ui
 assert "No active apply handoffs are visible right now. GET /v1/applies?status=active returned an empty collection." in applies_ui, applies_ui
+assert "Active work may already be terminal, or queued records may still be waiting for an executor claim" in applies_ui, applies_ui
 assert "No stale active apply claims are visible right now. GET /v1/applies?status=active&claim=stale returned an empty collection." in applies_ui, applies_ui
+assert "This is the healthy state for the recovery queue" in applies_ui, applies_ui
 assert "view === 'stale' ? 'Stale claims'" in applies_ui, applies_ui
 assert "${appliesMonitorViewLabel(view)} are temporarily unavailable." in applies_ui, applies_ui
 assert "Failed to load ${view} applies:" in applies_ui, applies_ui

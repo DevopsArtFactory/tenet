@@ -1041,6 +1041,7 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 			"fresh/stale/pending",
 			"plan/apply workspace for detail review",
 			"JSON handoff, `Copy read route`, refresh, and Applications overview recovery actions visible on populated, empty, loading, unavailable, and generic fetch-error monitor states",
+			"Empty monitor states are actionable: queued empty points operators back to plan/apply workspaces, active empty explains that work may be terminal or still unclaimed, and stale empty is called out as the healthy recovery-queue state",
 		} {
 			if !strings.Contains(text, fragment) {
 				t.Fatalf("expected %s docs to include local-safe apply release guard fragment %q", name, fragment)

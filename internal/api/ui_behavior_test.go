@@ -11121,6 +11121,8 @@ const scenarios = [
     expected: [
       'No queued apply requests are visible right now.',
       'GET /v1/applies?status=queued returned an empty collection.',
+      'Create or reopen a plan/apply workspace from an application when operators expect a local-safe handoff',
+      'switch to Active handoffs for already claimed work',
       'Refresh applies',
     ],
   },
@@ -11146,6 +11148,8 @@ const scenarios = [
     expected: [
       'No active apply handoffs are visible right now.',
       'GET /v1/applies?status=active returned an empty collection.',
+      'queued records may still be waiting for an executor claim',
+      'switch to Queued applies or open the plan/apply workspace when a handoff is expected',
       'Refresh applies',
     ],
   },
@@ -11188,6 +11192,8 @@ const scenarios = [
     expected: [
       'No stale active apply claims are visible right now.',
       'GET /v1/applies?status=active&claim=stale returned an empty collection.',
+      'This is the healthy state for the recovery queue',
+      'switch to Active handoffs to verify current executor work or Queued applies to watch new handoffs',
       'Refresh applies',
     ],
   },

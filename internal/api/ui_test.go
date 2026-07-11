@@ -562,6 +562,9 @@ func TestEmbeddedUIIncludesQueuedAppliesMonitorContracts(t *testing.T) {
 		"Monitor view: ${appliesMonitorViewLabel(state.view || currentPageState.appliesView || 'queued')}",
 		"setAppliesMonitorView(view);",
 		"syncAppliesMonitorPageState();",
+		"Create or reopen a plan/apply workspace from an application when operators expect a local-safe handoff",
+		"Active work may already be terminal, or queued records may still be waiting for an executor claim",
+		"This is the healthy state for the recovery queue",
 		"['Last heartbeat', applyClaimFreshnessValue(record, 'lastHeartbeatAt')]",
 		"['Claim expires', applyClaimFreshnessValue(record, 'expiresAt')]",
 	} {
