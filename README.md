@@ -213,7 +213,9 @@ Resource drill-down Recent logs and Live inspection panels summarize lookup cont
 Local/no-AWS unavailable payloads and successful empty reads stay distinct:
 operators see friendly next-step copy while scripts keep stable fields such as
 `available`, `unavailableReason`, `emptyReason`, `lookupContext`, and
-`resultScope`. Successful-empty Recent logs panels also tell operators to adjust
+`resultScope`; the resource-inspection guide maps each unavailable reason to a
+next operator action so `available=false` evidence is not treated as a generic
+backend failure. Successful-empty Recent logs panels also tell operators to adjust
 the Log limit, refresh after activity, and review lookup context before
 escalating. The local and Docker smoke scripts keep a compact no-AWS resource-evidence matrix for ECS service/task, ASG/bootstrap, traffic-routing no-log-source, selector validation, successful-empty, and guarded-auth paths.
 The embedded UI release guard keeps lazy Recent logs and Live inspection panels
