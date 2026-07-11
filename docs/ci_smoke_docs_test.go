@@ -1021,6 +1021,7 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 			"(`GET /v1/applies?status=active&claim=stale`)",
 			"queued exact subset",
 			"(`GET /v1/applies?status=queued`)",
+			"terminal exact subsets such as `GET /v1/applies?status=failed`",
 			"stored apply read",
 			"(`GET /v1/applies/{applyId}`)",
 			"non-mutating preflight read",
@@ -1067,6 +1068,7 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 		"smoke-local": {
 			"active_apply_records=$(curl -fsS \"http://$HOST:$PORT/v1/applies?status=active\")",
 			"stale_active_apply_records=$(curl -fsS \"http://$HOST:$PORT/v1/applies?status=active&claim=stale\")",
+			"failed_apply_records=$(curl -fsS \"http://$HOST:$PORT/v1/applies?status=failed\")",
 			"STALE_ACTIVE_APPLY_RECORDS_PATH",
 			"assert active_apply_records[0]['claim']['expiresAt'] == claimed_apply_heartbeat['claim']['expiresAt']",
 			"assert stale_active_apply_records[0]['id'] == os.environ['STALE_CLAIM_RECOVERY_APPLY_ID']",
