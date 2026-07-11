@@ -3008,6 +3008,8 @@ assert 'Refresh plan preview' in ui, ui
 assert 'Refresh apply request' in ui, ui
 assert 'Refresh apply preflight' in ui, ui
 assert 'Apply preflight operation handoffs' in ui, ui
+assert 'Apply preflight next action' in ui, ui
+assert 'Local-safe handoff ready' in ui, ui
 assert 'Standalone apply preflight rows include read-only troubleshooting handoffs' in ui, ui
 assert 'Refresh plan workspace' in ui, ui
 assert 'Create Plan reviews the current deployment detail immediately; Apply Plan and record refresh controls activate only after a persisted ready preview or apply request is loaded.' in ui, ui
