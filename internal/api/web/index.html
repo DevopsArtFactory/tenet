@@ -8576,6 +8576,18 @@
             throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
           });
         });
+      const buildApplyPreflightRoute = (applyId) => `/v1/applies/${encodeURIComponent(applyId)}/preflight`;
+      const operatorApplyPreflightReadRoute = (applyId) => `GET /v1/applies/${applyId || 'applyId'}/preflight`;
+      const fetchApplyPreflight = (applyId) => fetch(buildApplyPreflightRoute(applyId))
+        .then((response) => {
+          if (response.ok) return response.json();
+          const fallback = response.status === 503
+            ? `apply preflight route unavailable (${response.status})`
+            : `apply preflight fetch failed (${response.status})`;
+          return responseErrorMessage(response, fallback).then((message) => {
+            throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
+          });
+        });
       const cloneJSONValue = (value) => {
         if (Array.isArray(value)) return value.map((entry) => cloneJSONValue(entry));
         if (!value || typeof value !== 'object') return value;
@@ -8994,15 +9006,16 @@
         if (Array.isArray(result?.entries)) return result.entries;
         return [];
       };
-      const applyExecutionReadinessSource = (record) => {
+      const applyExecutionReadinessSource = (record, readinessOverride = null) => {
         const candidates = [
+          readinessOverride,
           record?.executionReadiness,
           record?.applyExecutionReadiness,
         ];
         return candidates.find((candidate) => candidate && typeof candidate === 'object') || null;
       };
-      const applyExecutionReadinessState = (record) => {
-        const readiness = applyExecutionReadinessSource(record);
+      const applyExecutionReadinessState = (record, readinessOverride = null) => {
+        const readiness = applyExecutionReadinessSource(record, readinessOverride);
         const raw = String(readiness?.state || readiness?.status || readiness?.result || '').toLowerCase();
         if (['ready', 'passed', 'pass', 'ok', 'healthy', 'preflight_ready', 'preflight-ready'].includes(raw)) return 'ready';
         if (['blocked', 'failed', 'failure', 'error', 'unavailable', 'not_ready', 'not-ready'].includes(raw)) return 'blocked';
@@ -9013,8 +9026,8 @@
         if (['queued', 'running', 'pending', 'in_progress', 'in-progress'].includes(status)) return 'missing';
         return 'not-reported';
       };
-      const applyExecutionReadinessLabel = (record) => {
-        switch (applyExecutionReadinessState(record)) {
+      const applyExecutionReadinessLabel = (record, readinessOverride = null) => {
+        switch (applyExecutionReadinessState(record, readinessOverride)) {
           case 'ready':
             return 'Preflight ready';
           case 'blocked':
@@ -9038,11 +9051,11 @@
           return '';
         }).filter(Boolean).join('; ') || '—';
       };
-      const applyExecutionReadinessSummary = (record) => {
-        const readiness = applyExecutionReadinessSource(record);
+      const applyExecutionReadinessSummary = (record, readinessOverride = null) => {
+        const readiness = applyExecutionReadinessSource(record, readinessOverride);
         const summary = readiness?.summary || readiness?.message || readiness?.reason;
         if (typeof summary === 'string' && summary.trim()) return summary.trim();
-        switch (applyExecutionReadinessState(record)) {
+        switch (applyExecutionReadinessState(record, readinessOverride)) {
           case 'disabled':
             return 'Live AWS mutation is disabled for this local-safe apply record; this is expected metadata-only evidence, not an AWS readiness failure.';
           case 'missing':
@@ -9055,18 +9068,18 @@
             return 'No execution-readiness evidence is attached to this apply record.';
         }
       };
-      const applyExecutionReadinessCheckedAt = (record) => {
-        const readiness = applyExecutionReadinessSource(record);
+      const applyExecutionReadinessCheckedAt = (record, readinessOverride = null) => {
+        const readiness = applyExecutionReadinessSource(record, readinessOverride);
         const value = readiness?.checkedAt || readiness?.timestamp || readiness?.updatedAt;
         return typeof value === 'string' && value.trim() ? value.trim() : '—';
       };
-      const applyExecutionReadinessRows = (record) => {
-        const readiness = applyExecutionReadinessSource(record);
+      const applyExecutionReadinessRows = (record, readinessOverride = null) => {
+        const readiness = applyExecutionReadinessSource(record, readinessOverride);
         const rows = [
-          ['Execution readiness', applyExecutionReadinessLabel(record), 'summary'],
-          ['Readiness summary', applyExecutionReadinessSummary(record), 'summary'],
+          ['Execution readiness', applyExecutionReadinessLabel(record, readinessOverride), 'summary'],
+          ['Readiness summary', applyExecutionReadinessSummary(record, readinessOverride), 'summary'],
         ];
-        const checkedAt = applyExecutionReadinessCheckedAt(record);
+        const checkedAt = applyExecutionReadinessCheckedAt(record, readinessOverride);
         if (checkedAt !== '—') rows.push(['Readiness checked', checkedAt]);
         const evidence = applyExecutionReadinessEvidenceText(readiness);
         if (evidence !== '—') rows.push(['Readiness evidence', evidence, 'summary']);
@@ -9611,6 +9624,51 @@
             return 'No stored apply request yet';
         }
       };
+      const activeApplyPreflightReadiness = (applyState) => applyState?.preflight?.status === 'ready' && applyState.preflight.record
+        ? applyState.preflight.record
+        : null;
+      const applyPreflightStatusHeading = (applyState) => {
+        const preflight = applyState?.preflight || {};
+        switch (preflight.status) {
+          case 'loading':
+            return 'Loading apply preflight';
+          case 'ready':
+            return 'Apply preflight loaded';
+          case 'unavailable':
+            return 'Apply preflight unavailable';
+          case 'fetch-error':
+            if (operatorReadStateHeading({ request: 'load', status: 'fetch-error', error: preflight.error })) {
+              return operatorReadStateHeading({ request: 'load', status: 'fetch-error', error: preflight.error });
+            }
+            return Number(preflight.error?.status) === 404 ? 'Apply preflight missing' : 'Apply preflight fetch error';
+          default:
+            return 'Apply preflight not loaded';
+        }
+      };
+      const applyPreflightStateMessage = (applyState) => {
+        const preflight = applyState?.preflight || {};
+        const applyId = preflight.applyId || applyState?.record?.id || applyState?.applyId || '';
+        const route = operatorApplyPreflightReadRoute(applyId);
+        switch (preflight.status) {
+          case 'loading':
+            return `Loading non-mutating execution preflight from ${route}. The immutable apply-record fallback evidence remains visible while Tenet checks the standalone readiness route.`;
+          case 'ready':
+            return `Standalone execution preflight is loaded from ${route}. Refreshing this route re-reads readiness evidence without changing the bookmarked workspace URL.`;
+          case 'unavailable':
+            return `${route} is temporarily unavailable. Keep using the immutable apply-record fallback evidence below; Tenet is not assuming execution readiness from missing preflight data.`;
+          case 'fetch-error':
+            if (operatorReadStateHeading({ request: 'load', status: 'fetch-error', error: preflight.error })) {
+              return `${operatorReadFailureMessage(route, preflight.error)} The immutable apply-record fallback evidence remains visible below.`;
+            }
+            if (Number(preflight.error?.status) === 404) {
+              return `${route} did not return preflight evidence for this apply request. The immutable apply-record fallback evidence remains visible below.`;
+            }
+            return `Failed to load ${route}: ${preflight.error?.message || 'unknown error'}. The immutable apply-record fallback evidence remains visible below.`;
+          default:
+            return `Use Refresh apply preflight to read ${route}. Until that route is loaded, the workspace keeps the immutable apply-record fallback evidence visible and does not invent UI-only readiness.`;
+        }
+      };
+      const applyPreflightStateClassName = (applyState) => ['unavailable', 'fetch-error'].includes(applyState?.preflight?.status) ? 'error' : '';
       const renderDeploymentDetail = (container, detail) => {
         const detailGrid = createElement('div', 'detail-grid');
         [
@@ -10177,6 +10235,7 @@
           const activeApplyRecord = applyState?.record && ['queued', 'running', 'succeeded', 'cancelled', 'failed'].includes(applyState.status)
             ? applyState.record
             : null;
+          const activeApplyReadiness = activeApplyPreflightReadiness(applyState);
           const canApplyPlan = planPreviewCanApply(planState);
           const planRisk = activePlanRecord?.risk || derivePlanRisk(detail);
           const approvalSummary = activePlanRecord?.approval?.summary || planRisk.guidance;
@@ -10251,7 +10310,16 @@
               applyState.onReloadApply(refreshApplyID);
             });
           }
-          actionBar.append(createPlanButton, applyPlanButton, refreshPlanButton, refreshApplyButton);
+          const refreshPreflightButton = createElement('button', 'toolbar-button', 'Refresh apply preflight');
+          refreshPreflightButton.type = 'button';
+          refreshPreflightButton.disabled = planState?.status === 'loading' || applyState?.status === 'loading' || applyState?.preflight?.status === 'loading' || !refreshApplyID;
+          if (typeof applyState?.onReloadPreflight === 'function') {
+            refreshPreflightButton.addEventListener('click', () => {
+              if (refreshPreflightButton.disabled) return;
+              applyState.onReloadPreflight(refreshApplyID);
+            });
+          }
+          actionBar.append(createPlanButton, applyPlanButton, refreshPlanButton, refreshApplyButton, refreshPreflightButton);
           const planActionHint = createElement(
             'div',
             'detail-condition-meta',
@@ -10363,7 +10431,7 @@
             ].forEach(([label, value, className]) => {
               lifecycleSummaryGrid.append(createMetric(label, value, className || ''));
             });
-            applyExecutionReadinessRows(activeApplyRecord).forEach(([label, value, className]) => {
+            applyExecutionReadinessRows(activeApplyRecord, activeApplyReadiness).forEach(([label, value, className]) => {
               readinessGrid.append(createMetric(label, value, className || ''));
             });
             if (hasApplyLifecycleMetadata(activeApplyRecord)) {
@@ -10399,6 +10467,8 @@
             recordLinks.append(
               createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activeApplyRecord.planId || activePlanRecord?.id || currentPageState.planId, applyId: activeApplyRecord.id }), 'Open bookmarked apply', '_self'),
               createNavLink(buildApplyRequestRoute(activeApplyRecord.id), 'Apply JSON'),
+              createNavLink(buildApplyPreflightRoute(activeApplyRecord.id), 'Apply preflight JSON'),
+              createCopyReadRouteButton(operatorApplyPreflightReadRoute(activeApplyRecord.id), 'Copy apply preflight read route'),
             );
             recordSection.append(recordGrid, readinessGrid, lifecycleSummaryGrid);
             if (lifecycleMetadataGrid.children.length) {
@@ -10411,12 +10481,30 @@
             pushPlanSection(recordSection, 'plan-stored-apply', 'Stored apply request');
 
             const readinessSection = createDetailSection('Apply execution readiness');
-            const readinessIntro = createElement('div', 'detail-state', 'Execution-readiness copy is sourced from backend readiness evidence when present, or from the immutable apply record fallback state when evidence has not been reported yet. This keeps local-safe handoffs clear without implying live AWS mutation.');
+            const preflightActions = createElement('div', 'row-links');
+            preflightActions.append(
+              createNavLink(buildApplyPreflightRoute(activeApplyRecord.id), 'Apply preflight JSON'),
+              createCopyReadRouteButton(operatorApplyPreflightReadRoute(activeApplyRecord.id), 'Copy apply preflight read route'),
+            );
+            const readinessRefreshButton = createRefreshButton(
+              'Refresh apply preflight',
+              applyState?.preflight?.status === 'loading' || !activeApplyRecord.id,
+              () => applyState?.onReloadPreflight?.(activeApplyRecord.id)?.catch(() => {}),
+            );
+            preflightActions.append(readinessRefreshButton);
+            const readinessIntro = createElement('div', 'detail-state', 'Execution-readiness copy prefers the standalone non-mutating preflight read route when it is loaded, then falls back to immutable apply-record evidence. This keeps local-safe handoffs clear without implying live AWS mutation.');
+            const preflightState = createElement('div', applyPreflightStateClassName(applyState) ? 'detail-state error' : 'detail-state', applyPreflightStateMessage(applyState));
             const readinessDetailsGrid = createElement('div', 'detail-grid');
-            applyExecutionReadinessRows(activeApplyRecord).forEach(([label, value, className]) => {
+            applyExecutionReadinessRows(activeApplyRecord, activeApplyReadiness).forEach(([label, value, className]) => {
               readinessDetailsGrid.append(createMetric(label, value, className || ''));
             });
-            readinessSection.append(readinessIntro, readinessDetailsGrid);
+            readinessSection.append(
+              createElement('div', 'workspace-callout-label', applyPreflightStatusHeading(applyState)),
+              preflightActions,
+              readinessIntro,
+              preflightState,
+              readinessDetailsGrid,
+            );
             pushPlanSection(readinessSection, 'plan-apply-readiness', 'Apply execution readiness');
           }
 
@@ -11054,6 +11142,13 @@
                   applyId: currentPageState.applyId,
                   record: null,
                   error: null,
+                  preflight: {
+                    status: 'idle',
+                    request: 'idle',
+                    applyId: currentPageState.applyId,
+                    record: null,
+                    error: null,
+                  },
                 };
                 const syncPlanPageURL = (planId, applyId = '') => {
                   currentPageState = { ...currentPageState, planId: planId || '', applyId: applyId || '' };
@@ -11098,6 +11193,50 @@
                         status: error.kind === 'unavailable' ? 'unavailable' : 'fetch-error',
                         request: 'load',
                         error,
+                      };
+                      renderPlanWorkspace();
+                      throw error;
+                    });
+                };
+                const loadApplyPreflightRecord = (applyId) => {
+                  if (!applyId) return Promise.resolve(null);
+                  applyState = {
+                    ...applyState,
+                    preflight: {
+                      ...(applyState.preflight || {}),
+                      status: 'loading',
+                      request: 'load',
+                      applyId,
+                      error: null,
+                    },
+                  };
+                  renderPlanWorkspace();
+                  return fetchApplyPreflight(applyId)
+                    .then((record) => {
+                      applyState = {
+                        ...applyState,
+                        preflight: {
+                          ...(applyState.preflight || {}),
+                          status: 'ready',
+                          request: 'load',
+                          applyId,
+                          record,
+                          error: null,
+                        },
+                      };
+                      renderPlanWorkspace();
+                      return record;
+                    })
+                    .catch((error) => {
+                      applyState = {
+                        ...applyState,
+                        preflight: {
+                          ...(applyState.preflight || {}),
+                          status: error.kind === 'unavailable' ? 'unavailable' : 'fetch-error',
+                          request: 'load',
+                          applyId,
+                          error,
+                        },
                       };
                       renderPlanWorkspace();
                       throw error;
@@ -11164,6 +11303,7 @@
                         applyId: '',
                         record: null,
                         error: null,
+                        preflight: { status: 'idle', request: 'idle', applyId: '', record: null, error: null },
                       };
                       renderPlanWorkspace();
                       const ifMatch = workspaceDetail.sourceFingerprint || await derivePlanSourceFingerprint(workspaceDetail).catch(() => '') || fallbackIfMatch;
@@ -11193,6 +11333,7 @@
                   }, {
                     ...applyState,
                     onReloadApply: (applyId) => loadApplyRequestRecord(applyId),
+                    onReloadPreflight: (applyId) => loadApplyPreflightRecord(applyId),
                     onApplyPlan: async () => {
                       const planID = planState.record?.id || planState.planId || '';
                       if (!planID || !planPreviewCanApply(planState)) return;
@@ -11203,6 +11344,7 @@
                         applyId: '',
                         record: null,
                         error: null,
+                        preflight: { status: 'idle', request: 'idle', applyId: '', record: null, error: null },
                       };
                       renderPlanWorkspace();
                       createApplyRequest(planID)
