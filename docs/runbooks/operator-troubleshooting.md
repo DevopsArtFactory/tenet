@@ -46,7 +46,7 @@ bookmarkable URL, translates claim heartbeat/lease metadata into fresh/stale/pen
 operator copy, renders backend `executionReadiness` summary/evidence and one `Next safe action` cue when present,
 keeps the explicit no-backend-preflight fallback copy when readiness evidence is
 missing, links operators back to the plan/apply workspace for detail review, and
-keeps JSON handoff, `Copy read route`, refresh, and Applications overview recovery actions visible on populated, empty, loading, unavailable, and generic fetch-error monitor states. Its summary strip
+keeps JSON handoff, `Copy read route`, refresh, and Applications overview recovery actions visible on populated, empty, loading, unavailable, and generic fetch-error monitor states. Empty monitor states are actionable: queued empty points operators back to plan/apply workspaces, active empty explains that work may be terminal or still unclaimed, and stale empty is called out as the healthy recovery-queue state. Its summary strip
 uses the labels `Queued applies`, `Lifecycle signals`, `Operation signals`, and
 `Claim signals` so operators can distinguish backlog size, lifecycle spread,
 operation spread, and claim-health cues before opening individual records.

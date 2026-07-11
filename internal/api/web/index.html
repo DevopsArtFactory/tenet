@@ -9212,10 +9212,10 @@
       };
       const appliesMonitorEmptyText = (view) => {
         const normalized = normalizeAppliesMonitorView(view);
-        if (normalized === 'stale') return 'No stale active apply claims are visible right now. GET /v1/applies?status=active&claim=stale returned an empty collection.';
+        if (normalized === 'stale') return 'No stale active apply claims are visible right now. GET /v1/applies?status=active&claim=stale returned an empty collection. This is the healthy state for the recovery queue; switch to Active handoffs to verify current executor work or Queued applies to watch new handoffs.';
         return normalized === 'active'
-          ? 'No active apply handoffs are visible right now. GET /v1/applies?status=active returned an empty collection.'
-          : 'No queued apply requests are visible right now. GET /v1/applies?status=queued returned an empty collection.';
+          ? 'No active apply handoffs are visible right now. GET /v1/applies?status=active returned an empty collection. Active work may already be terminal, or queued records may still be waiting for an executor claim; switch to Queued applies or open the plan/apply workspace when a handoff is expected.'
+          : 'No queued apply requests are visible right now. GET /v1/applies?status=queued returned an empty collection. Create or reopen a plan/apply workspace from an application when operators expect a local-safe handoff, or switch to Active handoffs for already claimed work.';
       };
       const createAppliesMonitorRefreshButton = (state) => createRefreshButton('Refresh applies', state?.status === 'loading', () => state?.onRefresh?.().catch(() => {}));
       const createAppliesMonitorRecoveryActions = (state = {}) => {
