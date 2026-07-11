@@ -10868,6 +10868,25 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 			"reused immutable applyId apply_failed_123",
 			"did not contact AWS",
 		},
+		"operations": []map[string]any{{
+			"operationId":        "operation-shift-canary",
+			"phase":              "Promoting",
+			"target":             "api-prod-codedeploy-group (codeDeployDeploymentGroup)",
+			"resourceType":       "codeDeployDeploymentGroup",
+			"resourceName":       "api-prod-codedeploy-group",
+			"requiredCapability": "codedeploy:CreateDeployment",
+			"requiredRole":       "future AWS mutation role for deployment api-prod",
+			"inputsSufficient":   true,
+			"ready":              false,
+			"unavailableReason":  "live_aws_mutation_not_implemented",
+			"summary":            "Operation has reviewed apply intent, but live AWS mutation is not implemented for this local-safe executor boundary.",
+			"handoffs": map[string]any{
+				"deploymentDetailRoute":   "/v1/overview/deployments/api-prod",
+				"planApplyWorkspaceRoute": "/?applyId=apply_failed_123&deployment=api-prod&page=plan&planId=plan_ready_123",
+				"resourceInspectionRoute": "/v1/overview/deployments/api-prod/resource-inspection?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup",
+				"resourceLogsRoute":       "/v1/overview/deployments/api-prod/resource-logs?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup",
+			},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("marshal blocked apply preflight: %v", err)
@@ -11535,6 +11554,13 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Readiness summary | Standalone preflight confirms live AWS mutation remains blocked for this immutable apply request.')) throw new Error('expected standalone preflight summary');
   if (!text.includes('Readiness checked | 2026-04-18T08:03:00Z')) throw new Error('expected standalone preflight checked timestamp');
   if (!text.includes('Readiness evidence | reused immutable applyId apply_failed_123; did not contact AWS')) throw new Error('expected standalone preflight evidence');
+  if (!text.includes('Apply preflight operation handoffs')) throw new Error('expected preflight operation handoffs section');
+  if (!text.includes('Capability · codedeploy:CreateDeployment')) throw new Error('expected preflight capability handoff copy');
+  if (!text.includes('Reason · Live AWS mutation is not implemented for this local-safe executor boundary.')) throw new Error('expected preflight unavailable reason copy');
+  const preflightLinks = collectNodes(root, (node) => node.tagName === 'A');
+  if (!preflightLinks.find((node) => node.textContent === 'Live inspection' && node.href === '/v1/overview/deployments/api-prod/resource-inspection?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup')) throw new Error('expected live-inspection preflight handoff link');
+  if (!preflightLinks.find((node) => node.textContent === 'Recent logs' && node.href === '/v1/overview/deployments/api-prod/resource-logs?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup')) throw new Error('expected recent-logs preflight handoff link');
+  if (!preflightLinks.find((node) => node.textContent === 'Plan/apply workspace' && node.href === '/?applyId=apply_failed_123&deployment=api-prod&page=plan&planId=plan_ready_123' && node.target === '_self')) throw new Error('expected preflight workspace self-link');
   document.scrolledTo = '';
   refreshApply.dispatch('click');
   await settle();

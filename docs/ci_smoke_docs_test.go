@@ -986,6 +986,8 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 		"execution-readiness summary/evidence when `executionReadiness` is present",
 		"Backend `executionReadiness` evidence is readiness/preflight context, not live AWS execution success",
 		"explicit no-backend-preflight fallback copy",
+		"per-operation preflight `handoffs`",
+		"Preflight handoffs are read-only next-step routes",
 	} {
 		if !strings.Contains(runbook, fragment) {
 			t.Fatalf("expected operator runbook to lock apply readiness evidence fragment %q", fragment)
@@ -997,6 +999,8 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 		"execution-readiness label/summary/evidence when backend `executionReadiness` is present",
 		"records without backend preflight data show explicit missing-preflight fallback copy",
 		"do not mistake local-safe handoff metadata for live AWS readiness",
+		"Apply preflight operation handoffs",
+		"deploymentDetailRoute`, `planApplyWorkspaceRoute`, `resourceInspectionRoute`, and `resourceLogsRoute",
 	} {
 		if !strings.Contains(overviewDashboard, fragment) {
 			t.Fatalf("expected overview dashboard docs to lock applies monitor readiness fragment %q", fragment)

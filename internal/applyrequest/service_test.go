@@ -152,6 +152,9 @@ func TestServiceCreatePersistsImmutableFailedApplyRequestWhenExecutionIsDisabled
 	if len(first.Record.ExecutionReadiness.Operations) != 2 || first.Record.ExecutionReadiness.Operations[0].RequiredCapability != "codedeploy:CreateDeployment" || first.Record.ExecutionReadiness.Operations[0].Ready {
 		t.Fatalf("expected non-mutating per-operation preflight rows, got %+v", first.Record.ExecutionReadiness.Operations)
 	}
+	if handoffs := first.Record.ExecutionReadiness.Operations[0].Handoffs; handoffs == nil || handoffs.DeploymentDetailRoute != "/v1/overview/deployments/api-prod" || handoffs.PlanApplyWorkspaceRoute != "/?applyId="+first.Record.ID+"&deployment=api-prod&page=plan&planId="+plan.ID || handoffs.ResourceInspectionRoute != "/v1/overview/deployments/api-prod/resource-inspection?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup" || handoffs.ResourceLogsRoute != "/v1/overview/deployments/api-prod/resource-logs?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup" {
+		t.Fatalf("expected operation troubleshooting handoffs, got %+v", handoffs)
+	}
 	if first.Record.Lifecycle.UpdatedAt != "2026-04-18T08:00:00Z" || first.Record.Lifecycle.FinishedAt != "2026-04-18T08:00:00Z" || first.Record.Lifecycle.TotalSteps != 2 {
 		t.Fatalf("expected additive lifecycle metadata on create, got %+v", first.Record.Lifecycle)
 	}
@@ -274,6 +277,12 @@ func TestServicePreflightReturnsBackendAuthoredReadinessEvidence(t *testing.T) {
 	}
 	if operation.RequiredCapability != "codedeploy:CreateDeployment" || operation.RequiredRole == "" || !operation.InputsSufficient || operation.Ready || operation.UnavailableReason != "live_aws_mutation_not_implemented" {
 		t.Fatalf("expected explicit blocked AWS capability preflight row, got %+v", operation)
+	}
+	if operation.Handoffs == nil || operation.Handoffs.DeploymentDetailRoute != "/v1/overview/deployments/api-prod" || operation.Handoffs.PlanApplyWorkspaceRoute != "/?applyId=apply_1234abcd&deployment=api-prod&page=plan&planId=plan_1234abcd" {
+		t.Fatalf("expected deployment and workspace handoffs, got %+v", operation.Handoffs)
+	}
+	if operation.Handoffs.ResourceInspectionRoute != "/v1/overview/deployments/api-prod/resource-inspection?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup" || operation.Handoffs.ResourceLogsRoute != "/v1/overview/deployments/api-prod/resource-logs?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup" {
+		t.Fatalf("expected resource troubleshooting handoffs, got %+v", operation.Handoffs)
 	}
 }
 

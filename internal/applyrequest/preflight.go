@@ -3,6 +3,7 @@ package applyrequest
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -22,19 +23,28 @@ type ExecutionReadiness struct {
 	Operations []OperationExecutionPreflight `json:"operations,omitempty"`
 }
 
+// OperationExecutionPreflightHandoffs captures read-only troubleshooting routes for one preflight row.
+type OperationExecutionPreflightHandoffs struct {
+	DeploymentDetailRoute   string `json:"deploymentDetailRoute,omitempty"`
+	PlanApplyWorkspaceRoute string `json:"planApplyWorkspaceRoute,omitempty"`
+	ResourceInspectionRoute string `json:"resourceInspectionRoute,omitempty"`
+	ResourceLogsRoute       string `json:"resourceLogsRoute,omitempty"`
+}
+
 // OperationExecutionPreflight captures one non-mutating readiness row for an apply operation.
 type OperationExecutionPreflight struct {
-	OperationID        string `json:"operationId,omitempty"`
-	Phase              string `json:"phase,omitempty"`
-	Target             string `json:"target"`
-	ResourceType       string `json:"resourceType,omitempty"`
-	ResourceName       string `json:"resourceName,omitempty"`
-	RequiredCapability string `json:"requiredCapability"`
-	RequiredRole       string `json:"requiredRole"`
-	InputsSufficient   bool   `json:"inputsSufficient"`
-	Ready              bool   `json:"ready"`
-	UnavailableReason  string `json:"unavailableReason,omitempty"`
-	Summary            string `json:"summary"`
+	OperationID        string                               `json:"operationId,omitempty"`
+	Phase              string                               `json:"phase,omitempty"`
+	Target             string                               `json:"target"`
+	ResourceType       string                               `json:"resourceType,omitempty"`
+	ResourceName       string                               `json:"resourceName,omitempty"`
+	RequiredCapability string                               `json:"requiredCapability"`
+	RequiredRole       string                               `json:"requiredRole"`
+	InputsSufficient   bool                                 `json:"inputsSufficient"`
+	Ready              bool                                 `json:"ready"`
+	UnavailableReason  string                               `json:"unavailableReason,omitempty"`
+	Summary            string                               `json:"summary"`
+	Handoffs           *OperationExecutionPreflightHandoffs `json:"handoffs,omitempty"`
 }
 
 // Preflight returns backend-authored execution readiness evidence for one apply request.
@@ -131,9 +141,45 @@ func deriveOperationExecutionPreflight(record Record) []OperationExecutionPrefli
 			Ready:              false,
 			UnavailableReason:  reason,
 			Summary:            summary,
+			Handoffs:           operationExecutionHandoffs(record, resourceType, resourceName),
 		})
 	}
 	return rows
+}
+
+func operationExecutionHandoffs(record Record, resourceType, resourceName string) *OperationExecutionPreflightHandoffs {
+	deploymentName := strings.TrimSpace(record.DeploymentName)
+	if deploymentName == "" {
+		return nil
+	}
+	deploymentPath := "/v1/overview/deployments/" + url.PathEscape(deploymentName)
+	handoffs := &OperationExecutionPreflightHandoffs{
+		DeploymentDetailRoute:   deploymentPath,
+		PlanApplyWorkspaceRoute: buildPlanApplyWorkspaceRoute(deploymentName, record.PlanID, record.ID),
+	}
+	resourceType = strings.TrimSpace(resourceType)
+	resourceName = strings.TrimSpace(resourceName)
+	if resourceType != "" && resourceName != "" {
+		query := url.Values{}
+		query.Set("resourceType", resourceType)
+		query.Set("resourceName", resourceName)
+		handoffs.ResourceInspectionRoute = deploymentPath + "/resource-inspection?" + query.Encode()
+		handoffs.ResourceLogsRoute = deploymentPath + "/resource-logs?" + query.Encode()
+	}
+	return handoffs
+}
+
+func buildPlanApplyWorkspaceRoute(deploymentName, planID, applyID string) string {
+	query := url.Values{}
+	query.Set("page", "plan")
+	query.Set("deployment", deploymentName)
+	if strings.TrimSpace(planID) != "" {
+		query.Set("planId", strings.TrimSpace(planID))
+	}
+	if strings.TrimSpace(applyID) != "" {
+		query.Set("applyId", strings.TrimSpace(applyID))
+	}
+	return "/?" + query.Encode()
 }
 
 func parseOperationTarget(target string) (string, string) {

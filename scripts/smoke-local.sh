@@ -1190,6 +1190,13 @@ assert 'did not contact AWS' in ' '.join(apply_preflight['evidence']), apply_pre
 assert len(apply_preflight.get('operations', [])) == len(apply_record['operations']), apply_preflight
 assert all(row.get('ready') is False for row in apply_preflight['operations']), apply_preflight
 assert all(row.get('requiredCapability') for row in apply_preflight['operations']), apply_preflight
+assert all(row.get('handoffs', {}).get('deploymentDetailRoute', '').startswith('/v1/overview/deployments/') for row in apply_preflight['operations']), apply_preflight
+assert all(row.get('handoffs', {}).get('planApplyWorkspaceRoute', '').startswith('/?') for row in apply_preflight['operations']), apply_preflight
+for row in apply_preflight['operations']:
+    handoffs = row.get('handoffs', {})
+    if row.get('resourceType') and row.get('resourceName'):
+        assert handoffs.get('resourceInspectionRoute'), row
+        assert handoffs.get('resourceLogsRoute'), row
 assert [operation.get('id') for operation in apply_record['operations']] == plan_operation_ids, (apply_record, plan_preview)
 assert [operation['status'] for operation in apply_record['operations']] == [('queued' if apply_enabled else 'pending')] * len(apply_record['operations']), apply_record
 assert [operation['phase'] for operation in apply_record['operations']] == [operation['phase'] for operation in plan_preview['operations']], (apply_record, plan_preview)
@@ -3000,6 +3007,8 @@ assert "if (operatorReadStateForbidden(state) || operatorWriteForbiddenState(sta
 assert 'Refresh plan preview' in ui, ui
 assert 'Refresh apply request' in ui, ui
 assert 'Refresh apply preflight' in ui, ui
+assert 'Apply preflight operation handoffs' in ui, ui
+assert 'Standalone apply preflight rows include read-only troubleshooting handoffs' in ui, ui
 assert 'Refresh plan workspace' in ui, ui
 assert 'Create Plan reviews the current deployment detail immediately; Apply Plan and record refresh controls activate only after a persisted ready preview or apply request is loaded.' in ui, ui
 assert "const workspaceLabel = mode === 'plan' ? 'plan workspace' : 'drift workspace';" in ui, ui

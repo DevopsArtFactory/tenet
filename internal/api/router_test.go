@@ -11655,7 +11655,7 @@ func TestRouterGetApplyExecutionPreflight(t *testing.T) {
 				CheckedAt: "2026-04-18T08:00:00Z",
 				Evidence:  []string{"Preflight reused immutable applyId apply_1234abcd and did not contact AWS."},
 				Operations: []applyrequest.OperationExecutionPreflight{
-					{OperationID: "op_plan_create-1", Phase: "Provisioning", Target: "api-prod-codedeploy-group (codeDeployDeploymentGroup)", ResourceType: "codeDeployDeploymentGroup", ResourceName: "api-prod-codedeploy-group", RequiredCapability: "codedeploy:CreateDeployment", RequiredRole: "future AWS mutation role for deployment api-prod", InputsSufficient: true, Ready: false, UnavailableReason: "live_aws_mutation_not_implemented", Summary: "Operation has reviewed apply intent, but live AWS mutation is not implemented for this local-safe executor boundary."},
+					{OperationID: "op_plan_create-1", Phase: "Provisioning", Target: "api-prod-codedeploy-group (codeDeployDeploymentGroup)", ResourceType: "codeDeployDeploymentGroup", ResourceName: "api-prod-codedeploy-group", RequiredCapability: "codedeploy:CreateDeployment", RequiredRole: "future AWS mutation role for deployment api-prod", InputsSufficient: true, Ready: false, UnavailableReason: "live_aws_mutation_not_implemented", Summary: "Operation has reviewed apply intent, but live AWS mutation is not implemented for this local-safe executor boundary.", Handoffs: &applyrequest.OperationExecutionPreflightHandoffs{DeploymentDetailRoute: "/v1/overview/deployments/api-prod", PlanApplyWorkspaceRoute: "/?applyId=apply_1234abcd&deployment=api-prod&page=plan&planId=plan_1234abcd", ResourceInspectionRoute: "/v1/overview/deployments/api-prod/resource-inspection?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup", ResourceLogsRoute: "/v1/overview/deployments/api-prod/resource-logs?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup"}},
 				},
 			}, nil
 		},
@@ -11679,8 +11679,11 @@ func TestRouterGetApplyExecutionPreflight(t *testing.T) {
 	if len(readiness.Operations) != 1 || readiness.Operations[0].RequiredCapability != "codedeploy:CreateDeployment" || readiness.Operations[0].Ready {
 		t.Fatalf("expected blocked per-operation preflight row, got %+v", readiness.Operations)
 	}
-	if strings.Contains(resp.Body.String(), `"executionReadiness"`) || !strings.Contains(resp.Body.String(), `"requiredCapability":"codedeploy:CreateDeployment"`) {
-		t.Fatalf("expected direct readiness JSON without an apply-record wrapper, got %s", resp.Body.String())
+	if readiness.Operations[0].Handoffs == nil || readiness.Operations[0].Handoffs.ResourceInspectionRoute == "" || readiness.Operations[0].Handoffs.ResourceLogsRoute == "" {
+		t.Fatalf("expected preflight operation troubleshooting handoffs, got %+v", readiness.Operations[0].Handoffs)
+	}
+	if strings.Contains(resp.Body.String(), `"executionReadiness"`) || !strings.Contains(resp.Body.String(), `"requiredCapability":"codedeploy:CreateDeployment"`) || !strings.Contains(resp.Body.String(), `"resourceInspectionRoute"`) || !strings.Contains(resp.Body.String(), `"resourceLogsRoute"`) {
+		t.Fatalf("expected direct readiness JSON with operation handoffs and without an apply-record wrapper, got %s", resp.Body.String())
 	}
 
 	missing := httptest.NewRecorder()
