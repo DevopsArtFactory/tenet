@@ -1,15 +1,62 @@
 package docs
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 )
 
 func TestMarkdownRelativeLinksResolve(t *testing.T) {
 	linkRE := regexp.MustCompile(`!?\[[^\]]*\]\(([^)]+)\)`)
+	files := markdownDocs(t)
+	anchorsByFile := markdownAnchorsByFile(t, files)
+
+	for _, file := range files {
+		body := readTextFile(t, file)
+		for _, match := range linkRE.FindAllStringSubmatch(body, -1) {
+			link := strings.TrimSpace(match[1])
+			if link == "" || strings.HasPrefix(link, "/") || strings.Contains(link, "://") || strings.HasPrefix(link, "mailto:") {
+				continue
+			}
+			linkTarget, fragment, _ := strings.Cut(link, "#")
+			linkTarget = strings.SplitN(linkTarget, "?", 2)[0]
+			if linkTarget == "" && fragment == "" {
+				continue
+			}
+
+			target := file
+			if linkTarget != "" {
+				target = filepath.Clean(filepath.Join(filepath.Dir(file), linkTarget))
+				if _, err := os.Stat(target); err != nil {
+					t.Fatalf("expected local markdown link %q in %s to resolve to %s: %v", match[1], file, target, err)
+				}
+			}
+
+			if fragment == "" {
+				continue
+			}
+			decodedFragment, err := url.PathUnescape(fragment)
+			if err != nil {
+				t.Fatalf("expected markdown anchor %q in %s to be URL-decodable: %v", fragment, file, err)
+			}
+			anchors, ok := anchorsByFile[target]
+			if !ok {
+				continue
+			}
+			if !anchors[strings.ToLower(decodedFragment)] {
+				t.Fatalf("expected local markdown anchor %q in %s to resolve inside %s", match[1], file, target)
+			}
+		}
+	}
+}
+
+func markdownDocs(t *testing.T) []string {
+	t.Helper()
 	var files []string
 	for _, root := range []string{".", "../README.md"} {
 		info, err := os.Stat(root)
@@ -34,25 +81,59 @@ func TestMarkdownRelativeLinksResolve(t *testing.T) {
 			t.Fatalf("walk markdown docs under %s: %v", root, err)
 		}
 	}
+	return files
+}
 
+func markdownAnchorsByFile(t *testing.T, files []string) map[string]map[string]bool {
+	t.Helper()
+	headingRE := regexp.MustCompile(`^#{1,6}\s+(.+?)\s*#*\s*$`)
+	explicitIDRE := regexp.MustCompile(`(?i)<[^>]+\bid=["']([^"']+)["']`)
+	anchorsByFile := make(map[string]map[string]bool, len(files))
 	for _, file := range files {
-		body := readTextFile(t, file)
-		for _, match := range linkRE.FindAllStringSubmatch(body, -1) {
-			link := strings.TrimSpace(match[1])
-			if link == "" || strings.HasPrefix(link, "#") || strings.HasPrefix(link, "/") || strings.Contains(link, "://") || strings.HasPrefix(link, "mailto:") {
-				continue
+		anchors := map[string]bool{"top": true}
+		seen := map[string]int{}
+		for _, line := range strings.Split(readTextFile(t, file), "\n") {
+			if match := headingRE.FindStringSubmatch(line); match != nil {
+				anchor := markdownHeadingAnchor(match[1])
+				if anchor != "" {
+					count := seen[anchor]
+					seen[anchor] = count + 1
+					if count > 0 {
+						anchor = anchor + "-" + strconv.Itoa(count)
+					}
+					anchors[anchor] = true
+				}
 			}
-			link = strings.SplitN(link, "#", 2)[0]
-			link = strings.SplitN(link, "?", 2)[0]
-			if link == "" {
-				continue
+			for _, match := range explicitIDRE.FindAllStringSubmatch(line, -1) {
+				anchors[strings.ToLower(match[1])] = true
 			}
-			target := filepath.Clean(filepath.Join(filepath.Dir(file), link))
-			if _, err := os.Stat(target); err != nil {
-				t.Fatalf("expected local markdown link %q in %s to resolve to %s: %v", match[1], file, target, err)
+		}
+		anchorsByFile[file] = anchors
+	}
+	return anchorsByFile
+}
+
+func markdownHeadingAnchor(heading string) string {
+	var b strings.Builder
+	lastDash := false
+	for _, r := range strings.ToLower(stripInlineHTML(heading)) {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+			lastDash = false
+		case unicode.IsSpace(r) || r == '-':
+			if b.Len() > 0 && !lastDash {
+				b.WriteByte('-')
+				lastDash = true
 			}
 		}
 	}
+	return strings.Trim(b.String(), "-")
+}
+
+func stripInlineHTML(value string) string {
+	tagRE := regexp.MustCompile(`<[^>]*>`)
+	return tagRE.ReplaceAllString(value, "")
 }
 
 func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
@@ -79,6 +160,7 @@ func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
 		"CI Smoke mirrors those checks in the hosted fast lane",
 		"Hosted fast-lane order is `go test ./...`, smoke helper syntax checks, then `make smoke-local`",
 		"operator smoke helpers",
+		"local Markdown file links and same-file/cross-file heading anchors",
 		"The Docker smoke lane remains separate",
 		"In hosted PRs it is path-scoped",
 		"docs-only changes normally stay on the fast lane",
