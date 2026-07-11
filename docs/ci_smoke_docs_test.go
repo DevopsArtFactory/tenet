@@ -981,6 +981,18 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 		}
 	}
 
+	operatorContract := docs["operator contract"]
+	for _, fragment := range []string{
+		"`GET /v1/applies/{applyId}/preflight` is a non-mutating readiness read and does not contact AWS",
+		"executionReadiness and preflight evidence are readiness context, not proof that live AWS mutation ran or succeeded",
+		"queued/running apply records are local-safe executor handoffs until a future live executor exists",
+		"disabled/default apply records are expected local-safe evidence, not a product failure",
+	} {
+		if !strings.Contains(operatorContract, fragment) {
+			t.Fatalf("expected operator contract docs to lock preflight/readiness boundary fragment %q", fragment)
+		}
+	}
+
 	runbook := docs["operator runbook"]
 	for _, fragment := range []string{
 		"execution-readiness summary/evidence when `executionReadiness` is present",
@@ -1001,6 +1013,7 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 		"do not mistake local-safe handoff metadata for live AWS readiness",
 		"Apply preflight operation handoffs",
 		"deploymentDetailRoute`, `planApplyWorkspaceRoute`, `resourceInspectionRoute`, and `resourceLogsRoute",
+		"does not contact AWS, and does not imply live AWS mutation readiness or success",
 	} {
 		if !strings.Contains(overviewDashboard, fragment) {
 			t.Fatalf("expected overview dashboard docs to lock applies monitor readiness fragment %q", fragment)
