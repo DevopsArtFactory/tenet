@@ -989,6 +989,7 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 		"README":             docs["README"],
 		"local runtime":      docs["local runtime"],
 		"overview dashboard": docs["overview dashboard"],
+		"operator runbook":   docs["operator runbook"],
 	} {
 		for _, fragment := range []string{
 			"Queued applies",
