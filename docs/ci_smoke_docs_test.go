@@ -1110,6 +1110,7 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 			"`TENET_AWS_ENABLE_APPLY=true` queues local-safe apply handoff metadata only",
 			"requires no live AWS credentials",
 			"does not perform live AWS mutation",
+			"disabled/default apply records are expected local-safe evidence, not a product failure",
 		} {
 			if !strings.Contains(text, fragment) {
 				t.Fatalf("expected %s to lock local-safe apply boundary fragment %q", name, fragment)
