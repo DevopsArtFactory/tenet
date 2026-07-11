@@ -304,6 +304,105 @@ func TestServicePreflightReportsTerminalApplyRequestsAsBlocked(t *testing.T) {
 	}
 }
 
+func TestServicePreflightIncludesConfiguredDeployerRoleProbeEvidence(t *testing.T) {
+	store := &memoryStore{records: map[string]Record{
+		"apply_queued": {
+			ID:             "apply_queued",
+			PlanID:         "plan_1234",
+			DeploymentName: "api-prod",
+			Status:         StatusQueued,
+			CreatedAt:      "2026-04-18T08:05:00Z",
+			Operations: []Operation{{
+				ID:      "op-codedeploy",
+				Phase:   "Promoting",
+				Target:  "api-prod-codedeploy-group (codeDeployDeploymentGroup)",
+				Summary: "Create CodeDeploy deployment.",
+			}},
+		},
+	}}
+	var gotTarget DeployerRoleTarget
+	service := Service{
+		Store: store,
+		DeployerRoleReadiness: func(ctx context.Context, target DeployerRoleTarget) (DeployerRoleReadiness, error) {
+			gotTarget = target
+			return DeployerRoleReadiness{
+				AWSAccountID:      "123456789012",
+				Region:            "ap-northeast-2",
+				RoleARN:           "arn:aws:iam::123456789012:role/TenetDeployerRole",
+				Configured:        true,
+				Ready:             true,
+				Summary:           "Configured deployer role was assumed with a read-only identity probe.",
+				Evidence:          []string{"STS GetCallerIdentity succeeded after assuming the configured deployer role."},
+				CheckedWithAWS:    true,
+				UnavailableReason: "",
+			}, nil
+		},
+	}
+
+	readiness, err := service.Preflight(context.Background(), "apply_queued")
+	if err != nil {
+		t.Fatalf("Preflight returned error: %v", err)
+	}
+	if gotTarget.DeploymentName != "api-prod" {
+		t.Fatalf("expected deployment target api-prod, got %+v", gotTarget)
+	}
+	if readiness.DeployerRole == nil || !readiness.DeployerRole.Configured || !readiness.DeployerRole.Ready || !readiness.DeployerRole.CheckedWithAWS {
+		t.Fatalf("expected configured deployer-role readiness evidence, got %+v", readiness.DeployerRole)
+	}
+	if readiness.DeployerRole.RoleARN != "arn:aws:iam::123456789012:role/TenetDeployerRole" || readiness.DeployerRole.AWSAccountID != "123456789012" || readiness.DeployerRole.Region != "ap-northeast-2" {
+		t.Fatalf("expected target account/region/role metadata, got %+v", readiness.DeployerRole)
+	}
+	if len(readiness.Operations) != 1 || readiness.Operations[0].RequiredRole != "arn:aws:iam::123456789012:role/TenetDeployerRole" || readiness.Operations[0].UnavailableReason != "live_aws_mutation_not_implemented" || readiness.Operations[0].Ready {
+		t.Fatalf("expected operation to keep local-safe mutation blocker while naming deployer role, got %+v", readiness.Operations)
+	}
+}
+
+func TestServicePreflightReportsMissingDeployerRole(t *testing.T) {
+	store := &memoryStore{records: map[string]Record{
+		"apply_queued": {ID: "apply_queued", PlanID: "plan_1234", DeploymentName: "api-prod", Status: StatusQueued, CreatedAt: "2026-04-18T08:05:00Z", Operations: []Operation{{Target: "api-prod-service (ecsService)"}}},
+	}}
+	service := Service{
+		Store: store,
+		DeployerRoleReadiness: func(ctx context.Context, target DeployerRoleTarget) (DeployerRoleReadiness, error) {
+			return DeployerRoleReadiness{AWSAccountID: "123456789012", Region: "ap-northeast-2", Configured: false, Ready: false, UnavailableReason: "missing_deployer_role", Summary: "No deployer role is configured for this target account and region."}, nil
+		},
+	}
+
+	readiness, err := service.Preflight(context.Background(), "apply_queued")
+	if err != nil {
+		t.Fatalf("Preflight returned error: %v", err)
+	}
+	if readiness.DeployerRole == nil || readiness.DeployerRole.Configured || readiness.DeployerRole.UnavailableReason != "missing_deployer_role" {
+		t.Fatalf("expected missing deployer-role evidence, got %+v", readiness.DeployerRole)
+	}
+	if len(readiness.Operations) != 1 || readiness.Operations[0].UnavailableReason != "missing_deployer_role" || readiness.Operations[0].InputsSufficient || readiness.Operations[0].Ready {
+		t.Fatalf("expected missing deployer role to block operation inputs, got %+v", readiness.Operations)
+	}
+}
+
+func TestServicePreflightReportsAWSUnavailableForConfiguredDeployerRole(t *testing.T) {
+	store := &memoryStore{records: map[string]Record{
+		"apply_queued": {ID: "apply_queued", PlanID: "plan_1234", DeploymentName: "api-prod", Status: StatusQueued, CreatedAt: "2026-04-18T08:05:00Z", Operations: []Operation{{Target: "api-prod-service (ecsService)"}}},
+	}}
+	service := Service{
+		Store: store,
+		DeployerRoleReadiness: func(ctx context.Context, target DeployerRoleTarget) (DeployerRoleReadiness, error) {
+			return DeployerRoleReadiness{AWSAccountID: "123456789012", Region: "ap-northeast-2", RoleARN: "arn:aws:iam::123456789012:role/TenetDeployerRole", Configured: true, Ready: false, CheckedWithAWS: true, UnavailableReason: "aws_unavailable", Summary: "AWS credentials or provider access are unavailable in this local-safe environment."}, nil
+		},
+	}
+
+	readiness, err := service.Preflight(context.Background(), "apply_queued")
+	if err != nil {
+		t.Fatalf("Preflight returned error: %v", err)
+	}
+	if readiness.DeployerRole == nil || readiness.DeployerRole.UnavailableReason != "aws_unavailable" || readiness.DeployerRole.Ready {
+		t.Fatalf("expected AWS-unavailable deployer-role evidence, got %+v", readiness.DeployerRole)
+	}
+	if len(readiness.Operations) != 1 || readiness.Operations[0].RequiredRole != "arn:aws:iam::123456789012:role/TenetDeployerRole" || readiness.Operations[0].UnavailableReason != "aws_unavailable" || readiness.Operations[0].Ready {
+		t.Fatalf("expected AWS-unavailable role probe to block operation readiness, got %+v", readiness.Operations)
+	}
+}
+
 func TestServiceListFiltersQueuedApplyRequests(t *testing.T) {
 	store := &memoryStore{
 		records: map[string]Record{

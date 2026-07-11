@@ -289,6 +289,61 @@ func TestAuthSessionCookieSecureEnabled(t *testing.T) {
 	})
 }
 
+func TestApplyRequestDeployerRoleReadinessProviderReportsConfiguredRole(t *testing.T) {
+	source := newFilesystemCatalogSource(writeRepositoryFixture(t))
+	var gotRegion, gotRoleARN string
+	provider := newApplyRequestDeployerRoleReadinessProvider(source, func(ctx context.Context, region, roleARN string) error {
+		gotRegion = region
+		gotRoleARN = roleARN
+		return nil
+	})
+
+	readiness, err := provider(context.Background(), applyrequest.DeployerRoleTarget{DeploymentName: "api-prod"})
+	if err != nil {
+		t.Fatalf("provider returned error: %v", err)
+	}
+	if gotRegion != "ap-northeast-2" || gotRoleARN != "arn:aws:iam::123456789012:role/TenetDeployerRole" {
+		t.Fatalf("expected read-only probe to receive resolved region and deployer role, got region=%q role=%q", gotRegion, gotRoleARN)
+	}
+	if !readiness.Configured || !readiness.Ready || !readiness.CheckedWithAWS || readiness.AWSAccountID != "123456789012" || readiness.Region != "ap-northeast-2" || readiness.RoleARN != "arn:aws:iam::123456789012:role/TenetDeployerRole" {
+		t.Fatalf("expected configured deployer-role readiness, got %+v", readiness)
+	}
+}
+
+func TestApplyRequestDeployerRoleReadinessProviderReportsMissingRole(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","image":"payments-api:v2","target":{"type":"ecs"},"environmentRef":"prod-apne2"}`)
+	provider := newApplyRequestDeployerRoleReadinessProvider(newFilesystemCatalogSource(root), func(ctx context.Context, region, roleARN string) error {
+		t.Fatalf("probe should not run when deployer role is missing")
+		return nil
+	})
+
+	readiness, err := provider(context.Background(), applyrequest.DeployerRoleTarget{DeploymentName: "api-prod"})
+	if err != nil {
+		t.Fatalf("provider returned error: %v", err)
+	}
+	if readiness.Configured || readiness.Ready || readiness.UnavailableReason != "missing_deployer_role" || readiness.AWSAccountID != "123456789012" || readiness.Region != "ap-northeast-2" {
+		t.Fatalf("expected missing deployer-role readiness, got %+v", readiness)
+	}
+}
+
+func TestApplyRequestDeployerRoleReadinessProviderReportsAWSUnavailable(t *testing.T) {
+	source := newFilesystemCatalogSource(writeRepositoryFixture(t))
+	provider := newApplyRequestDeployerRoleReadinessProvider(source, func(ctx context.Context, region, roleARN string) error {
+		return errors.New("get identity: failed to refresh cached credentials")
+	})
+
+	readiness, err := provider(context.Background(), applyrequest.DeployerRoleTarget{DeploymentName: "api-prod"})
+	if err != nil {
+		t.Fatalf("provider returned error: %v", err)
+	}
+	if !readiness.Configured || readiness.Ready || !readiness.CheckedWithAWS || readiness.UnavailableReason != "aws_unavailable" || readiness.RoleARN != "arn:aws:iam::123456789012:role/TenetDeployerRole" {
+		t.Fatalf("expected AWS-unavailable deployer-role readiness, got %+v", readiness)
+	}
+}
+
 func TestNewAPIOptionsIncludesGitHubWebhookSecretFromEnv(t *testing.T) {
 	t.Setenv("TENET_GITHUB_WEBHOOK_SECRET", "top-secret")
 

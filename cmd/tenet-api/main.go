@@ -27,9 +27,14 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/rbacpolicy"
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
+	"github.com/DevopsArtFactory/tenet/internal/resourceaws"
 	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -324,10 +329,11 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 			Store:      planpreview.NewFileStore(planStorePath),
 		}
 		applyService := applyrequest.Service{
-			LoadPlan:           planService.Get,
-			CurrentFingerprint: newApplyRequestFingerprintProvider(options.OverviewDeployment),
-			Store:              applyrequest.NewFileStore(applyStorePath),
-			EnableAWSApply:     awsApplyEnabled(),
+			LoadPlan:              planService.Get,
+			CurrentFingerprint:    newApplyRequestFingerprintProvider(options.OverviewDeployment),
+			Store:                 applyrequest.NewFileStore(applyStorePath),
+			EnableAWSApply:        awsApplyEnabled(),
+			DeployerRoleReadiness: newApplyRequestDeployerRoleReadinessProvider(source, probeDeployerRoleIdentity),
 		}
 		options.CreateDeploymentPlanPreview = planService.Create
 		options.PlanPreview = planService.Get
@@ -372,6 +378,90 @@ func defaultApplyRequestStorePath() string {
 
 func defaultControllerRefreshAuditStorePath() string {
 	return filepath.Join(os.TempDir(), "tenet", "controller-refresh-requests.json")
+}
+
+type deployerRoleIdentityProbe func(context.Context, string, string) error
+
+func newApplyRequestDeployerRoleReadinessProvider(source apiCatalogSource, probe deployerRoleIdentityProbe) applyrequest.DeployerRoleReadinessProvider {
+	if probe == nil {
+		probe = probeDeployerRoleIdentity
+	}
+	return func(ctx context.Context, target applyrequest.DeployerRoleTarget) (applyrequest.DeployerRoleReadiness, error) {
+		deploymentName := strings.TrimSpace(target.DeploymentName)
+		readiness := applyrequest.DeployerRoleReadiness{
+			Configured:        false,
+			Ready:             false,
+			UnavailableReason: "missing_deployer_role",
+			Summary:           "No deployer role is configured for this target account and region.",
+		}
+		if deploymentName == "" || source.loadSpec == nil {
+			return readiness, nil
+		}
+		catalogSpec, err := source.loadSpec(ctx)
+		if err != nil {
+			return applyrequest.DeployerRoleReadiness{}, err
+		}
+		var environmentRef string
+		for _, deployment := range catalogSpec.Deployments {
+			if strings.TrimSpace(deployment.Name) == deploymentName {
+				environmentRef = deployment.NormalizedEnvironmentRef()
+				break
+			}
+		}
+		if environmentRef == "" {
+			readiness.Summary = "No desired-state deployment placement was found for this apply request."
+			return readiness, nil
+		}
+		var accountRef, region string
+		for _, environment := range catalogSpec.Environments {
+			if strings.TrimSpace(environment.Name) == environmentRef {
+				accountRef = strings.TrimSpace(environment.AccountRef)
+				region = strings.TrimSpace(environment.Region)
+				break
+			}
+		}
+		readiness.Region = region
+		for _, account := range catalogSpec.Accounts {
+			if strings.TrimSpace(account.Name) != accountRef {
+				continue
+			}
+			readiness.AWSAccountID = strings.TrimSpace(account.AWSAccountID)
+			readiness.RoleARN = strings.TrimSpace(account.RoleARN)
+			break
+		}
+		if readiness.RoleARN == "" {
+			readiness.Evidence = []string{"Desired-state account placement was resolved, but no roleArn is configured for apply execution readiness."}
+			return readiness, nil
+		}
+		readiness.Configured = true
+		readiness.CheckedWithAWS = true
+		if err := probe(ctx, region, readiness.RoleARN); err != nil {
+			readiness.UnavailableReason = "aws_unavailable"
+			if reason, ok := resourceaws.UnavailableReasonForError(err); ok && strings.TrimSpace(reason) != "" {
+				readiness.UnavailableReason = reason
+			}
+			readiness.Summary = "AWS credentials or provider access are unavailable in this local-safe environment."
+			readiness.Evidence = []string{"Configured deployer role was present, but the read-only identity probe did not complete successfully."}
+			return readiness, nil
+		}
+		readiness.Ready = true
+		readiness.UnavailableReason = ""
+		readiness.Summary = "Configured deployer role was assumed with a read-only identity probe."
+		readiness.Evidence = []string{"STS GetCallerIdentity succeeded after assuming the configured deployer role."}
+		return readiness, nil
+	}
+}
+
+func probeDeployerRoleIdentity(ctx context.Context, region, roleARN string) error {
+	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(strings.TrimSpace(region)))
+	if err != nil {
+		return err
+	}
+	cfg.Credentials = aws.NewCredentialsCache(stscreds.NewAssumeRoleProvider(sts.NewFromConfig(cfg), strings.TrimSpace(roleARN), func(options *stscreds.AssumeRoleOptions) {
+		options.RoleSessionName = "tenet-apply-preflight"
+	}))
+	_, err = sts.NewFromConfig(cfg).GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	return err
 }
 
 func awsApplyEnabled() bool {

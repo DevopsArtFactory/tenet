@@ -30,13 +30,18 @@ type PlanProvider func(context.Context, string) (planpreview.Record, error)
 // CurrentFingerprintProvider loads the current deployment-detail fingerprint for one deployment.
 type CurrentFingerprintProvider func(context.Context, string) (string, error)
 
+// DeployerRoleReadinessProvider loads non-mutating deployer-role readiness
+// evidence for the deployment targeted by one immutable apply request.
+type DeployerRoleReadinessProvider func(context.Context, DeployerRoleTarget) (DeployerRoleReadiness, error)
+
 // Service derives and persists immutable apply requests from ready plan previews.
 type Service struct {
-	LoadPlan           PlanProvider
-	CurrentFingerprint CurrentFingerprintProvider
-	Store              Store
-	Now                func() time.Time
-	EnableAWSApply     bool
+	LoadPlan              PlanProvider
+	CurrentFingerprint    CurrentFingerprintProvider
+	DeployerRoleReadiness DeployerRoleReadinessProvider
+	Store                 Store
+	Now                   func() time.Time
+	EnableAWSApply        bool
 }
 
 // CreateResult captures the stored apply request plus whether it was newly created.

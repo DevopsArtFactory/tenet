@@ -11654,8 +11654,18 @@ func TestRouterGetApplyExecutionPreflight(t *testing.T) {
 				Summary:   "Local-safe executor handoff metadata is present, but live AWS mutation remains blocked.",
 				CheckedAt: "2026-04-18T08:00:00Z",
 				Evidence:  []string{"Preflight reused immutable applyId apply_1234abcd and did not contact AWS."},
+				DeployerRole: &applyrequest.DeployerRoleReadiness{
+					AWSAccountID:   "123456789012",
+					Region:         "ap-northeast-2",
+					RoleARN:        "arn:aws:iam::123456789012:role/TenetDeployerRole",
+					Configured:     true,
+					CheckedWithAWS: true,
+					Ready:          true,
+					Summary:        "Configured deployer role was assumed with a read-only identity probe.",
+					Evidence:       []string{"STS GetCallerIdentity succeeded after assuming the configured deployer role."},
+				},
 				Operations: []applyrequest.OperationExecutionPreflight{
-					{OperationID: "op_plan_create-1", Phase: "Provisioning", Target: "api-prod-codedeploy-group (codeDeployDeploymentGroup)", ResourceType: "codeDeployDeploymentGroup", ResourceName: "api-prod-codedeploy-group", RequiredCapability: "codedeploy:CreateDeployment", RequiredRole: "future AWS mutation role for deployment api-prod", InputsSufficient: true, Ready: false, UnavailableReason: "live_aws_mutation_not_implemented", Summary: "Operation has reviewed apply intent, but live AWS mutation is not implemented for this local-safe executor boundary.", Handoffs: &applyrequest.OperationExecutionPreflightHandoffs{DeploymentDetailRoute: "/v1/overview/deployments/api-prod", PlanApplyWorkspaceRoute: "/?applyId=apply_1234abcd&deployment=api-prod&page=plan&planId=plan_1234abcd", ResourceInspectionRoute: "/v1/overview/deployments/api-prod/resource-inspection?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup", ResourceLogsRoute: "/v1/overview/deployments/api-prod/resource-logs?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup"}},
+					{OperationID: "op_plan_create-1", Phase: "Provisioning", Target: "api-prod-codedeploy-group (codeDeployDeploymentGroup)", ResourceType: "codeDeployDeploymentGroup", ResourceName: "api-prod-codedeploy-group", RequiredCapability: "codedeploy:CreateDeployment", RequiredRole: "arn:aws:iam::123456789012:role/TenetDeployerRole", InputsSufficient: true, Ready: false, UnavailableReason: "live_aws_mutation_not_implemented", Summary: "Operation has reviewed apply intent, but live AWS mutation is not implemented for this local-safe executor boundary.", Handoffs: &applyrequest.OperationExecutionPreflightHandoffs{DeploymentDetailRoute: "/v1/overview/deployments/api-prod", PlanApplyWorkspaceRoute: "/?applyId=apply_1234abcd&deployment=api-prod&page=plan&planId=plan_1234abcd", ResourceInspectionRoute: "/v1/overview/deployments/api-prod/resource-inspection?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup", ResourceLogsRoute: "/v1/overview/deployments/api-prod/resource-logs?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup"}},
 				},
 			}, nil
 		},
@@ -11682,7 +11692,11 @@ func TestRouterGetApplyExecutionPreflight(t *testing.T) {
 	if readiness.Operations[0].Handoffs == nil || readiness.Operations[0].Handoffs.ResourceInspectionRoute == "" || readiness.Operations[0].Handoffs.ResourceLogsRoute == "" {
 		t.Fatalf("expected preflight operation troubleshooting handoffs, got %+v", readiness.Operations[0].Handoffs)
 	}
-	if strings.Contains(resp.Body.String(), `"executionReadiness"`) || !strings.Contains(resp.Body.String(), `"requiredCapability":"codedeploy:CreateDeployment"`) || !strings.Contains(resp.Body.String(), `"resourceInspectionRoute"`) || !strings.Contains(resp.Body.String(), `"resourceLogsRoute"`) {
+	if readiness.DeployerRole == nil || readiness.DeployerRole.RoleARN != "arn:aws:iam::123456789012:role/TenetDeployerRole" || !readiness.DeployerRole.Ready || !readiness.DeployerRole.CheckedWithAWS {
+		t.Fatalf("expected deployer-role readiness evidence, got %+v", readiness.DeployerRole)
+	}
+	body := resp.Body.String()
+	if strings.Contains(body, `"executionReadiness"`) || !strings.Contains(body, `"deployerRole"`) || !strings.Contains(body, `"checkedWithAws":true`) || !strings.Contains(body, `"requiredRole":"arn:aws:iam::123456789012:role/TenetDeployerRole"`) || !strings.Contains(body, `"requiredCapability":"codedeploy:CreateDeployment"`) || !strings.Contains(body, `"resourceInspectionRoute"`) || !strings.Contains(body, `"resourceLogsRoute"`) {
 		t.Fatalf("expected direct readiness JSON with operation handoffs and without an apply-record wrapper, got %s", resp.Body.String())
 	}
 

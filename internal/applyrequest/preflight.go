@@ -16,11 +16,32 @@ const (
 // It describes whether the stored operation inventory has enough local metadata to be considered by a
 // future AWS executor, while explicitly avoiding any live AWS mutation claim.
 type ExecutionReadiness struct {
-	State      string                        `json:"state"`
-	Summary    string                        `json:"summary"`
-	CheckedAt  string                        `json:"checkedAt,omitempty"`
-	Evidence   []string                      `json:"evidence,omitempty"`
-	Operations []OperationExecutionPreflight `json:"operations,omitempty"`
+	State        string                        `json:"state"`
+	Summary      string                        `json:"summary"`
+	CheckedAt    string                        `json:"checkedAt,omitempty"`
+	Evidence     []string                      `json:"evidence,omitempty"`
+	DeployerRole *DeployerRoleReadiness        `json:"deployerRole,omitempty"`
+	Operations   []OperationExecutionPreflight `json:"operations,omitempty"`
+}
+
+// DeployerRoleTarget identifies the deployment placement whose deployer role is checked.
+type DeployerRoleTarget struct {
+	DeploymentName string
+}
+
+// DeployerRoleReadiness captures non-mutating identity readiness for the
+// configured target-account deployer role. It is troubleshooting evidence only,
+// not proof that rollout mutation ran or succeeded.
+type DeployerRoleReadiness struct {
+	AWSAccountID      string   `json:"awsAccountId,omitempty"`
+	Region            string   `json:"region,omitempty"`
+	RoleARN           string   `json:"roleArn,omitempty"`
+	Configured        bool     `json:"configured"`
+	CheckedWithAWS    bool     `json:"checkedWithAws"`
+	Ready             bool     `json:"ready"`
+	UnavailableReason string   `json:"unavailableReason,omitempty"`
+	Summary           string   `json:"summary"`
+	Evidence          []string `json:"evidence,omitempty"`
 }
 
 // OperationExecutionPreflightHandoffs captures read-only troubleshooting routes for one preflight row.
@@ -48,16 +69,30 @@ type OperationExecutionPreflight struct {
 }
 
 // Preflight returns backend-authored execution readiness evidence for one apply request.
-// The same immutable applyId is used; this method only reads persisted state and never calls AWS.
+// The same immutable applyId is used; this method never mutates AWS. A configured
+// DeployerRoleReadiness provider may add non-mutating identity-readiness evidence.
 func (s Service) Preflight(ctx context.Context, id string) (ExecutionReadiness, error) {
 	record, err := s.Get(ctx, id)
 	if err != nil {
 		return ExecutionReadiness{}, err
 	}
-	if record.ExecutionReadiness == nil {
-		return deriveExecutionReadiness(record), nil
+	readiness := deriveExecutionReadiness(record)
+	if record.ExecutionReadiness != nil {
+		readiness = *record.ExecutionReadiness
+		if len(readiness.Operations) == 0 && len(record.Operations) > 0 {
+			readiness.Operations = deriveOperationExecutionPreflight(record, nil)
+		}
 	}
-	return *record.ExecutionReadiness, nil
+	if s.DeployerRoleReadiness == nil {
+		return readiness, nil
+	}
+	role, err := s.DeployerRoleReadiness(ctx, DeployerRoleTarget{DeploymentName: record.DeploymentName})
+	if err != nil {
+		return ExecutionReadiness{}, err
+	}
+	readiness.DeployerRole = &role
+	readiness.Operations = deriveOperationExecutionPreflight(record, &role)
+	return readiness, nil
 }
 
 func normalizeExecutionReadiness(record Record) Record {
@@ -103,11 +138,11 @@ func deriveExecutionReadiness(record Record) ExecutionReadiness {
 		Summary:    summary,
 		CheckedAt:  checkedAt,
 		Evidence:   evidence,
-		Operations: deriveOperationExecutionPreflight(record),
+		Operations: deriveOperationExecutionPreflight(record, nil),
 	}
 }
 
-func deriveOperationExecutionPreflight(record Record) []OperationExecutionPreflight {
+func deriveOperationExecutionPreflight(record Record, role *DeployerRoleReadiness) []OperationExecutionPreflight {
 	if len(record.Operations) == 0 {
 		return nil
 	}
@@ -118,7 +153,24 @@ func deriveOperationExecutionPreflight(record Record) []OperationExecutionPrefli
 		inputsSufficient := strings.TrimSpace(operation.Target) != ""
 		reason := "live_aws_mutation_not_implemented"
 		summary := "Operation has reviewed apply intent, but live AWS mutation is not implemented for this local-safe executor boundary."
-		if !inputsSufficient {
+		requiredRole := "future AWS mutation role for deployment " + record.DeploymentName
+		if role != nil {
+			if strings.TrimSpace(role.RoleARN) != "" {
+				requiredRole = strings.TrimSpace(role.RoleARN)
+			}
+			if !role.Ready {
+				inputsSufficient = false
+				reason = strings.TrimSpace(role.UnavailableReason)
+				if reason == "" {
+					reason = "deployer_role_unavailable"
+				}
+				summary = strings.TrimSpace(role.Summary)
+				if summary == "" {
+					summary = "Configured deployer role readiness could not be proven for this local-safe apply preflight."
+				}
+			}
+		}
+		if !inputsSufficient && strings.TrimSpace(operation.Target) == "" {
 			reason = "missing_operation_target"
 			summary = "Operation is missing a concrete target from the reviewed plan preview."
 		}
@@ -136,7 +188,7 @@ func deriveOperationExecutionPreflight(record Record) []OperationExecutionPrefli
 			ResourceType:       resourceType,
 			ResourceName:       resourceName,
 			RequiredCapability: capability,
-			RequiredRole:       "future AWS mutation role for deployment " + record.DeploymentName,
+			RequiredRole:       requiredRole,
 			InputsSufficient:   inputsSufficient,
 			Ready:              false,
 			UnavailableReason:  reason,
