@@ -34,7 +34,7 @@ Deployment-scoped refresh audit handoff: `/?page=audit&deployment={deploymentNam
 Local-safe apply executor release guard: reviewers should verify the
 active collection (`GET /v1/applies?status=active`), stale active-claim collection
 (`GET /v1/applies?status=active&claim=stale`), queued exact subset
-(`GET /v1/applies?status=queued`), terminal exact subsets such as `GET /v1/applies?status=failed`, stored apply read (`GET /v1/applies/{applyId}`),
+(`GET /v1/applies?status=queued`), terminal exact subsets (`GET /v1/applies?status=failed`, `GET /v1/applies?status=succeeded`, and `GET /v1/applies?status=cancelled`), stored apply read (`GET /v1/applies/{applyId}`),
 non-mutating preflight read (`GET /v1/applies/{applyId}/preflight`), claim (`POST /v1/applies/{applyId}/claim`),
 heartbeat (`POST /v1/applies/{applyId}/heartbeat`), and transition
 (`POST /v1/applies/{applyId}/transitions`) routes together. They persist and
