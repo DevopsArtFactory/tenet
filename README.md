@@ -285,7 +285,7 @@ General repository checks:
 go test ./...
 ```
 
-CI Smoke mirrors those checks in the hosted fast lane and also syntax-checks the operator smoke helpers before running local smoke. Hosted fast-lane order is `go test ./...`, smoke helper syntax checks, then `make smoke-local`. Smoke helper scripts must keep their executable bits because Makefile targets and runner-start docs invoke them directly by path. They should also remove every mktemp-backed helper file or directory during cleanup so repeated smoke runs do not leave stale request/response payloads in `/tmp`. For smoke-script or runner-start evidence changes, run:
+CI Smoke mirrors those checks in the hosted fast lane and also syntax-checks the operator smoke helpers before running local smoke. Hosted fast-lane order is `go test ./...`, smoke helper syntax checks, then `make smoke-local`. The repository-wide docs test also validates local Markdown file links and same-file/cross-file heading anchors so runbook handoffs do not drift after headings move. Smoke helper scripts must keep their executable bits because Makefile targets and runner-start docs invoke them directly by path. They should also remove every mktemp-backed helper file or directory during cleanup so repeated smoke runs do not leave stale request/response payloads in `/tmp`. For smoke-script or runner-start evidence changes, run:
 
 ```bash
 bash -n scripts/smoke-local.sh
