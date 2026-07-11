@@ -1023,7 +1023,8 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 		"Apply preflight next action",
 		"local-safe handoff is ready to be claimed without implying live AWS mutation succeeded",
 		"deploymentDetailRoute`, `planApplyWorkspaceRoute`, `resourceInspectionRoute`, and `resourceLogsRoute",
-		"does not contact AWS, and does not imply live AWS mutation readiness or success",
+		"never performs CodeDeploy/ECS/ALB/ASG mutation",
+		"may add only read-only deployer-role STS identity evidence when a target-account role is configured",
 	} {
 		if !strings.Contains(overviewDashboard, fragment) {
 			t.Fatalf("expected overview dashboard docs to lock applies monitor readiness fragment %q", fragment)
