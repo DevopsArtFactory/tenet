@@ -985,6 +985,23 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 		}
 	}
 
+	for name, text := range map[string]string{
+		"README":             docs["README"],
+		"local runtime":      docs["local runtime"],
+		"overview dashboard": docs["overview dashboard"],
+	} {
+		for _, fragment := range []string{
+			"Queued applies",
+			"Lifecycle signals",
+			"Operation signals",
+			"Claim signals",
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s docs to name applies monitor summary metric %q", name, fragment)
+			}
+		}
+	}
+
 	operatorContract := docs["operator contract"]
 	for _, fragment := range []string{
 		"`GET /v1/applies/{applyId}/preflight` is a non-mutating readiness read",
