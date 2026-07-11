@@ -9333,6 +9333,17 @@
             return 'Live AWS mutation is not implemented for this local-safe executor boundary.';
           case 'apply_record_missing_operations':
             return 'The stored apply record does not include operation-level execution intent yet.';
+          case 'aws_unavailable':
+            return 'AWS credentials or provider access are unavailable in this local-safe environment.';
+          case 'missing_deployer_role':
+          case 'deployer_role_missing':
+          case 'deployer_role_not_configured':
+          case 'missing_role_arn':
+            return 'No deployer role is configured for this target account and region.';
+          case 'deployer_role_unavailable':
+          case 'deployer_role_not_assumable':
+          case 'assume_role_failed':
+            return 'Tenet could not prove the configured deployer role is assumable from this environment.';
           default:
             return textOrDash(reason);
         }
