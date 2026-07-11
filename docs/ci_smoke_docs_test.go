@@ -892,6 +892,8 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 			"(`GET /v1/applies?status=queued`)",
 			"stored apply read",
 			"(`GET /v1/applies/{applyId}`)",
+			"non-mutating preflight read",
+			"(`GET /v1/applies/{applyId}/preflight`)",
 			"claim (`POST /v1/applies/{applyId}/claim`)",
 			"heartbeat (`POST /v1/applies/{applyId}/heartbeat`)",
 			"transition",
