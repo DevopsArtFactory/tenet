@@ -13,7 +13,7 @@ Use concrete provider modes in runbooks and diagnostics:
 - `TENET_AUTH_PROVIDER=okta_oidc` activates Okta OIDC through the same managed-session runtime shape as Google OIDC.
 - `TENET_AUTH_PROVIDER=okta_saml` is diagnostic-only. It can report configured/missing/invalid SAML preflight evidence and same-origin route wiring, but it does not activate the managed-login runtime.
 
-Never document `TENET_AUTH_PROVIDER` with a secret-shaped placeholder. The provider value is non-secret; use the exact mode being diagnosed.
+Never document `TENET_AUTH_PROVIDER` with a secret-shaped placeholder. The provider value is non-secret; use the exact mode being diagnosed. Copy these mode values exactly in operator runbooks and issue evidence; redaction should stop at credential-bearing settings.
 Credential-bearing settings such as client secrets and session secrets may stay redacted in runbooks, logs, and snippets; the provider mode itself must stay concrete.
 
 ## Routes

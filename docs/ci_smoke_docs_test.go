@@ -1385,6 +1385,7 @@ func TestManagedLoginGuideDocumentsProviderRoutesAndVerificationContract(t *test
 		"`TENET_AUTH_PROVIDER=okta_oidc` activates Okta OIDC",
 		"`TENET_AUTH_PROVIDER=okta_saml` is diagnostic-only",
 		"Never document `TENET_AUTH_PROVIDER` with a secret-shaped placeholder",
+		"Copy these mode values exactly in operator runbooks and issue evidence; redaction should stop at credential-bearing settings.",
 		"`GET /auth/login/github`",
 		"`GET /auth/login/google`",
 		"`GET /auth/login/okta`",
@@ -1411,6 +1412,34 @@ func TestManagedLoginGuideDocumentsProviderRoutesAndVerificationContract(t *test
 	}
 	if strings.Contains(managedLoginText, "provider=***") || strings.Contains(managedLoginText, "`***") {
 		t.Fatalf("expected managed-login guide to avoid secret-shaped provider-mode placeholders")
+	}
+}
+
+func TestManagedLoginDocsKeepNonSecretProviderExamplesConcrete(t *testing.T) {
+	redacted := strings.Repeat("*", 3)
+	for _, source := range []struct {
+		path     string
+		examples []string
+	}{
+		{path: "../README.md", examples: []string{"TENET_AUTH_PROVIDER=github", "TENET_AUTH_PROVIDER=google_oidc", "TENET_AUTH_PROVIDER=okta_oidc", "TENET_AUTH_PROVIDER=okta_saml", "TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true"}},
+		{path: "architecture/tenet-v1-enterprise-sso.md", examples: []string{"TENET_AUTH_PROVIDER=github", "TENET_AUTH_PROVIDER=google_oidc", "TENET_AUTH_PROVIDER=okta_oidc", "TENET_AUTH_PROVIDER=okta_saml", "TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true"}},
+		{path: "architecture/tenet-v1-operator-contracts.md", examples: []string{"TENET_AUTH_PROVIDER=github", "TENET_AUTH_PROVIDER=google_oidc", "TENET_AUTH_PROVIDER=okta_oidc", "TENET_AUTH_PROVIDER=okta_saml", "TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true"}},
+		{path: "features/managed-login.md", examples: []string{"TENET_AUTH_PROVIDER=github", "TENET_AUTH_PROVIDER=google_oidc", "TENET_AUTH_PROVIDER=okta_oidc", "TENET_AUTH_PROVIDER=okta_saml"}},
+	} {
+		body := readTextFile(t, source.path)
+		for _, placeholder := range []string{
+			"TENET_AUTH_PROVIDER=" + redacted,
+			"TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=" + redacted,
+		} {
+			if strings.Contains(body, placeholder) {
+				t.Fatalf("expected %s to avoid redacted non-secret provider/RBAC examples; found %q", source.path, placeholder)
+			}
+		}
+		for _, example := range source.examples {
+			if !strings.Contains(body, example) {
+				t.Fatalf("expected %s to include concrete non-secret example %q", source.path, example)
+			}
+		}
 	}
 }
 
