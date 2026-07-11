@@ -10875,11 +10875,11 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 			"resourceType":       "codeDeployDeploymentGroup",
 			"resourceName":       "api-prod-codedeploy-group",
 			"requiredCapability": "codedeploy:CreateDeployment",
-			"requiredRole":       "future AWS mutation role for deployment api-prod",
+			"requiredRole":       "arn:aws:iam::123456789012:role/tenet-deployer",
 			"inputsSufficient":   true,
 			"ready":              false,
-			"unavailableReason":  "live_aws_mutation_not_implemented",
-			"summary":            "Operation has reviewed apply intent, but live AWS mutation is not implemented for this local-safe executor boundary.",
+			"unavailableReason":  "missing_deployer_role",
+			"summary":            "Operation has reviewed apply intent, but the target account is missing deployer-role readiness evidence.",
 			"handoffs": map[string]any{
 				"deploymentDetailRoute":   "/v1/overview/deployments/api-prod",
 				"planApplyWorkspaceRoute": "/?applyId=apply_failed_123&deployment=api-prod&page=plan&planId=plan_ready_123",
@@ -11578,9 +11578,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Apply preflight operation handoffs')) throw new Error('expected preflight operation handoffs section');
   if (!text.includes('Apply preflight next action')) throw new Error('expected blocked preflight next-action summary');
   if (!text.includes('Blocked by | operation-shift-canary')) throw new Error('expected next-action summary to name highest-priority blocked operation');
-  if (!text.includes('Operator note | Operation has reviewed apply intent, but live AWS mutation is not implemented for this local-safe executor boundary.')) throw new Error('expected blocked next-action operator note');
+  if (!text.includes('Operator note | Operation has reviewed apply intent, but the target account is missing deployer-role readiness evidence.')) throw new Error('expected blocked next-action operator note');
   if (!text.includes('Capability · codedeploy:CreateDeployment')) throw new Error('expected preflight capability handoff copy');
-  if (!text.includes('Reason · Live AWS mutation is not implemented for this local-safe executor boundary.')) throw new Error('expected preflight unavailable reason copy');
+  if (!text.includes('Role · arn:aws:iam::123456789012:role/tenet-deployer')) throw new Error('expected preflight role handoff copy');
+  if (!text.includes('Reason · No deployer role is configured for this target account and region.')) throw new Error('expected preflight deployer-role unavailable reason copy');
+  if (text.includes('Reason · missing_deployer_role')) throw new Error('expected friendly preflight reason instead of raw missing_deployer_role code');
   const preflightLinks = collectNodes(root, (node) => node.tagName === 'A');
   if (!preflightLinks.find((node) => node.textContent === 'Live inspection' && node.href === '/v1/overview/deployments/api-prod/resource-inspection?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup')) throw new Error('expected live-inspection preflight handoff link');
   if (!preflightLinks.find((node) => node.textContent === 'Recent logs' && node.href === '/v1/overview/deployments/api-prod/resource-logs?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup')) throw new Error('expected recent-logs preflight handoff link');
