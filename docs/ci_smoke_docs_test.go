@@ -981,6 +981,17 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 		}
 	}
 
+	runbook := docs["operator runbook"]
+	for _, fragment := range []string{
+		"execution-readiness summary/evidence when `executionReadiness` is present",
+		"Backend `executionReadiness` evidence is readiness/preflight context, not live AWS execution success",
+		"explicit no-backend-preflight fallback copy",
+	} {
+		if !strings.Contains(runbook, fragment) {
+			t.Fatalf("expected operator runbook to lock apply readiness evidence fragment %q", fragment)
+		}
+	}
+
 	for name, text := range map[string]string{
 		"smoke-local":  readTextFile(t, "../scripts/smoke-local.sh"),
 		"smoke-docker": readTextFile(t, "../scripts/smoke-docker.sh"),
