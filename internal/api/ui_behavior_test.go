@@ -10892,6 +10892,25 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 		t.Fatalf("marshal blocked apply preflight: %v", err)
 	}
 
+	applyPreflightReadyJSON, err := json.Marshal(map[string]any{
+		"state":     "ready",
+		"summary":   "Preflight checks passed for local-safe executor handoff.",
+		"checkedAt": "2026-04-18T08:04:00Z",
+		"operations": []map[string]any{{
+			"operationId":  "operation-shift-canary",
+			"phase":        "Promoting",
+			"target":       "api-prod-codedeploy-group (codeDeployDeploymentGroup)",
+			"ready":        true,
+			"summary":      "Operation has the local-safe handoff metadata it needs.",
+			"handoffs": map[string]any{
+				"planApplyWorkspaceRoute": "/?applyId=apply_failed_123&deployment=api-prod&page=plan&planId=plan_ready_123",
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal ready apply preflight: %v", err)
+	}
+
 	applyRecordFailedJSON, err := json.Marshal(map[string]any{
 		"id":             "apply_failed_123",
 		"planId":         "plan_ready_123",
@@ -11236,7 +11255,9 @@ const scriptContent = ` + string(scriptJSON) + `;
 const detailBody = ` + string(detailJSON) + `;
 const planPreview = ` + string(planPreviewReadyJSON) + `;
 const applyRecord = ` + string(applyRecordFailedJSON) + `;
-const applyPreflight = ` + string(applyPreflightBlockedJSON) + `;
+const applyPreflightBlocked = ` + string(applyPreflightBlockedJSON) + `;
+const applyPreflightReady = ` + string(applyPreflightReadyJSON) + `;
+let applyPreflightResponse = { ok: true, json: () => Promise.resolve(applyPreflightBlocked) };
 ` + domHarness + `
 const document = new Document();
 document.byID.set('toolbar', document.createElement('section'));
@@ -11269,7 +11290,7 @@ const fetch = (url, options = {}) => {
     return Promise.resolve({ ok: true, json: () => Promise.resolve(applyRecord) });
   }
   if (url === '/v1/applies/apply_failed_123/preflight') {
-    return Promise.resolve({ ok: true, json: () => Promise.resolve(applyPreflight) });
+    return Promise.resolve(applyPreflightResponse);
   }
   throw new Error('unexpected fetch url: ' + url);
 };
@@ -11555,12 +11576,38 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Readiness checked | 2026-04-18T08:03:00Z')) throw new Error('expected standalone preflight checked timestamp');
   if (!text.includes('Readiness evidence | reused immutable applyId apply_failed_123; did not contact AWS')) throw new Error('expected standalone preflight evidence');
   if (!text.includes('Apply preflight operation handoffs')) throw new Error('expected preflight operation handoffs section');
+  if (!text.includes('Apply preflight next action')) throw new Error('expected blocked preflight next-action summary');
+  if (!text.includes('Blocked by | operation-shift-canary')) throw new Error('expected next-action summary to name highest-priority blocked operation');
+  if (!text.includes('Operator note | Operation has reviewed apply intent, but live AWS mutation is not implemented for this local-safe executor boundary.')) throw new Error('expected blocked next-action operator note');
   if (!text.includes('Capability · codedeploy:CreateDeployment')) throw new Error('expected preflight capability handoff copy');
   if (!text.includes('Reason · Live AWS mutation is not implemented for this local-safe executor boundary.')) throw new Error('expected preflight unavailable reason copy');
   const preflightLinks = collectNodes(root, (node) => node.tagName === 'A');
   if (!preflightLinks.find((node) => node.textContent === 'Live inspection' && node.href === '/v1/overview/deployments/api-prod/resource-inspection?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup')) throw new Error('expected live-inspection preflight handoff link');
   if (!preflightLinks.find((node) => node.textContent === 'Recent logs' && node.href === '/v1/overview/deployments/api-prod/resource-logs?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup')) throw new Error('expected recent-logs preflight handoff link');
   if (!preflightLinks.find((node) => node.textContent === 'Plan/apply workspace' && node.href === '/?applyId=apply_failed_123&deployment=api-prod&page=plan&planId=plan_ready_123' && node.target === '_self')) throw new Error('expected preflight workspace self-link');
+  applyPreflightResponse = { ok: true, json: () => Promise.resolve(applyPreflightReady) };
+  refreshPreflight = collectNodes(root, (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh apply preflight')[0];
+  refreshPreflight.dispatch('click');
+  await waitForFetchCount(fetchCalls, 6);
+  await settle();
+  if (fetchCalls[5] !== '/v1/applies/apply_failed_123/preflight') throw new Error('expected apply preflight re-fetch for ready summary, got ' + fetchCalls.join(', '));
+  if (window.location.search !== bookmarkedPlanApplySearch) throw new Error('expected ready preflight refresh to preserve plan/apply query, got ' + window.location.search);
+  text = collectText(root).join(' | ');
+  if (!text.includes('Execution readiness | Preflight ready')) throw new Error('expected ready preflight readiness label');
+  if (!text.includes('Apply preflight next action')) throw new Error('expected ready preflight next-action summary');
+  if (!text.includes('Next action | Local-safe handoff ready')) throw new Error('expected ready next-action calm copy');
+  if (!text.includes('Operator note | Preflight reports no blocked operations. The queued local-safe handoff is ready to be claimed, but Tenet is not claiming live AWS mutation succeeded.')) throw new Error('expected ready next-action operator note');
+  applyPreflightResponse = { ok: false, status: 503, text: () => Promise.resolve('preflight temporarily unavailable') };
+  refreshPreflight = collectNodes(root, (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh apply preflight')[0];
+  refreshPreflight.dispatch('click');
+  await waitForFetchCount(fetchCalls, 7);
+  await settle();
+  if (fetchCalls[6] !== '/v1/applies/apply_failed_123/preflight') throw new Error('expected apply preflight re-fetch for unavailable summary, got ' + fetchCalls.join(', '));
+  if (window.location.search !== bookmarkedPlanApplySearch) throw new Error('expected unavailable preflight refresh to preserve plan/apply query, got ' + window.location.search);
+  text = collectText(root).join(' | ');
+  if (!text.includes('Apply preflight unavailable')) throw new Error('expected unavailable preflight heading');
+  if (!text.includes('GET /v1/applies/apply_failed_123/preflight is temporarily unavailable. Keep using the immutable apply-record fallback evidence below; Tenet is not assuming execution readiness from missing preflight data.')) throw new Error('expected unavailable preflight fallback copy');
+  if (text.includes('Apply preflight next action')) throw new Error('preflight unavailable state should not invent a next-action summary');
   document.scrolledTo = '';
   refreshApply.dispatch('click');
   await settle();

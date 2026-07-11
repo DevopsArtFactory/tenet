@@ -5349,7 +5349,10 @@
         if (typeof onRefresh === 'function') {
           button.addEventListener('click', () => {
             if (button.disabled) return;
-            onRefresh();
+            const result = onRefresh();
+            if (result && typeof result.catch === 'function') {
+              result.catch(() => {});
+            }
           });
         }
         return button;
@@ -9350,6 +9353,48 @@
         ].filter(Boolean).join(' · '),
         links: applyPreflightHandoffLinks(operation),
       }));
+      const applyPreflightNextActionSummary = (readiness) => {
+        if (!readiness || typeof readiness !== 'object') return null;
+        const operations = applyPreflightOperations(readiness);
+        const blocked = operations.find((operation) => operation.status === 'failed');
+        if (blocked) {
+          return {
+            title: 'Blocked by',
+            value: blocked.kind,
+            detail: blocked.summary || 'Resolve the first blocked preflight operation before expecting executor progress.',
+            links: blocked.links || [],
+          };
+        }
+        const state = applyExecutionReadinessState(null, readiness);
+        if (state === 'ready') {
+          return {
+            title: 'Next action',
+            value: 'Local-safe handoff ready',
+            detail: 'Preflight reports no blocked operations. The queued local-safe handoff is ready to be claimed, but Tenet is not claiming live AWS mutation succeeded.',
+            links: [],
+          };
+        }
+        return null;
+      };
+      const createApplyPreflightNextActionSummary = (readiness) => {
+        const summary = applyPreflightNextActionSummary(readiness);
+        if (!summary) return null;
+        const section = createDetailSection('Apply preflight next action');
+        const grid = createElement('div', 'detail-grid');
+        grid.append(
+          createMetric(summary.title, summary.value, 'summary'),
+          createMetric('Operator note', summary.detail, 'summary'),
+        );
+        section.append(grid);
+        if (summary.links.length) {
+          const links = createElement('div', 'row-links');
+          summary.links.forEach(([label, href, target]) => {
+            links.append(createNavLink(href, label, target));
+          });
+          section.append(links);
+        }
+        return section;
+      };
       const createOperationsSection = ({ title, intro, operations, emptyMessage, shareURLForOperation = null }) => {
         const section = createDetailSection(title);
         if (!operations.length) {
@@ -10340,7 +10385,7 @@
           if (typeof planState?.onReloadPlan === 'function') {
             refreshPlanButton.addEventListener('click', () => {
               if (refreshPlanButton.disabled) return;
-              planState.onReloadPlan(refreshPlanID);
+              planState.onReloadPlan(refreshPlanID)?.catch(() => {});
             });
           }
           const refreshApplyID = activeApplyRecord?.id || applyState?.applyId || '';
@@ -10350,7 +10395,7 @@
           if (typeof applyState?.onReloadApply === 'function') {
             refreshApplyButton.addEventListener('click', () => {
               if (refreshApplyButton.disabled) return;
-              applyState.onReloadApply(refreshApplyID);
+              applyState.onReloadApply(refreshApplyID)?.catch(() => {});
             });
           }
           const refreshPreflightButton = createElement('button', 'toolbar-button', 'Refresh apply preflight');
@@ -10359,7 +10404,7 @@
           if (typeof applyState?.onReloadPreflight === 'function') {
             refreshPreflightButton.addEventListener('click', () => {
               if (refreshPreflightButton.disabled) return;
-              applyState.onReloadPreflight(refreshApplyID);
+              applyState.onReloadPreflight(refreshApplyID)?.catch(() => {});
             });
           }
           actionBar.append(createPlanButton, applyPlanButton, refreshPlanButton, refreshApplyButton, refreshPreflightButton);
@@ -10548,6 +10593,10 @@
               preflightState,
               readinessDetailsGrid,
             );
+            const nextActionSection = createApplyPreflightNextActionSummary(activeApplyReadiness || activeApplyRecord.executionReadiness);
+            if (nextActionSection) {
+              readinessSection.append(nextActionSection);
+            }
             const preflightHandoffSection = createOperationsSection({
               title: 'Apply preflight operation handoffs',
               intro: 'Standalone apply preflight rows include read-only troubleshooting handoffs so operators can jump from a blocked operation to deployment detail, resource inspection, and recent logs without treating the row as live AWS execution.',

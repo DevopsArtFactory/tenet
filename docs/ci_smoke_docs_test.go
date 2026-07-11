@@ -1003,7 +1003,8 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 		"Backend `executionReadiness` evidence is readiness/preflight context, not live AWS execution success",
 		"explicit no-backend-preflight fallback copy",
 		"per-operation preflight `handoffs`",
-		"Preflight handoffs are read-only next-step routes",
+		"Apply preflight next action",
+		"Preflight next-action and row handoffs are read-only next-step routes",
 		"`deploymentDetailRoute`, `planApplyWorkspaceRoute`, `resourceInspectionRoute`, `resourceLogsRoute`",
 	} {
 		if !strings.Contains(runbook, fragment) {
@@ -1017,6 +1018,8 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 		"records without backend preflight data show explicit missing-preflight fallback copy",
 		"do not mistake local-safe handoff metadata for live AWS readiness",
 		"Apply preflight operation handoffs",
+		"Apply preflight next action",
+		"local-safe handoff is ready to be claimed without implying live AWS mutation succeeded",
 		"deploymentDetailRoute`, `planApplyWorkspaceRoute`, `resourceInspectionRoute`, and `resourceLogsRoute",
 		"does not contact AWS, and does not imply live AWS mutation readiness or success",
 	} {
