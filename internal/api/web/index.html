@@ -9315,6 +9315,41 @@
           lifecycleLabel: applyRecordStatusLabel(normalizedStatus),
         };
       });
+      const applyPreflightHandoffLinks = (operation) => {
+        const handoffs = operation?.handoffs || {};
+        const links = [];
+        if (handoffs.deploymentDetailRoute) links.push(['Deployment detail', handoffs.deploymentDetailRoute]);
+        if (handoffs.planApplyWorkspaceRoute) links.push(['Plan/apply workspace', handoffs.planApplyWorkspaceRoute, '_self']);
+        if (handoffs.resourceInspectionRoute) links.push(['Live inspection', handoffs.resourceInspectionRoute]);
+        if (handoffs.resourceLogsRoute) links.push(['Recent logs', handoffs.resourceLogsRoute]);
+        return links;
+      };
+      const applyPreflightUnavailableReasonLabel = (reason) => {
+        switch (reason) {
+          case 'live_aws_mutation_not_implemented':
+            return 'Live AWS mutation is not implemented for this local-safe executor boundary.';
+          case 'apply_record_missing_operations':
+            return 'The stored apply record does not include operation-level execution intent yet.';
+          default:
+            return textOrDash(reason);
+        }
+      };
+      const applyPreflightOperations = (readiness) => (readiness?.operations || []).map((operation, index) => ({
+        id: typeof operation?.operationId === 'string' ? operation.operationId.trim() : '',
+        anchorID: operation?.operationId ? `operation-preflight-${sectionIDSegment(operation.operationId, 'unknown')}` : '',
+        kind: operation?.operationId || `Preflight row ${index + 1}`,
+        status: operation?.ready ? 'succeeded' : 'failed',
+        statusLabel: operation?.ready ? 'Ready' : 'Blocked',
+        phase: textOrDash(operation?.phase),
+        target: textOrDash(operation?.target),
+        summary: [
+          textOrDash(operation?.summary),
+          operation?.requiredCapability ? `Capability · ${operation.requiredCapability}` : '',
+          operation?.requiredRole ? `Role · ${operation.requiredRole}` : '',
+          operation?.unavailableReason ? `Reason · ${applyPreflightUnavailableReasonLabel(operation.unavailableReason)}` : '',
+        ].filter(Boolean).join(' · '),
+        links: applyPreflightHandoffLinks(operation),
+      }));
       const createOperationsSection = ({ title, intro, operations, emptyMessage, shareURLForOperation = null }) => {
         const section = createDetailSection(title);
         if (!operations.length) {
@@ -9350,11 +9385,19 @@
             operationLinks.append(createNavLink(shareURLForOperation(operation), 'Share operation', '_self'));
             operationCell.append(operationLinks);
           }
+          const noteCell = createElement('td', '', operation.summary);
+          if (operation.links?.length) {
+            const handoffLinks = createElement('div', 'row-links');
+            operation.links.forEach(([label, href, target]) => {
+              handoffLinks.append(createNavLink(href, label, target));
+            });
+            noteCell.append(handoffLinks);
+          }
           row.append(
             operationCell,
             createElement('td', '', operation.phase),
             createElement('td', '', operation.target),
-            createElement('td', '', operation.summary),
+            noteCell,
           );
           tbody.append(row);
         });
@@ -10505,6 +10548,18 @@
               preflightState,
               readinessDetailsGrid,
             );
+            const preflightHandoffSection = createOperationsSection({
+              title: 'Apply preflight operation handoffs',
+              intro: 'Standalone apply preflight rows include read-only troubleshooting handoffs so operators can jump from a blocked operation to deployment detail, resource inspection, and recent logs without treating the row as live AWS execution.',
+              operations: applyPreflightOperations(activeApplyReadiness || activeApplyRecord.executionReadiness),
+              emptyMessage: 'No per-operation apply preflight handoffs are available yet. Refresh apply preflight after loading an apply record to read the standalone non-mutating route.',
+              shareURLForOperation: (operation) => buildPageSectionURL('plan', operation.anchorID, {
+                deployment: detail.name || currentPageState.deployment || '',
+                planId: activePlanRecord?.id || currentPageState.planId || activeApplyRecord.planId || '',
+                applyId: activeApplyRecord.id || currentPageState.applyId || '',
+              }),
+            });
+            readinessSection.append(preflightHandoffSection);
             pushPlanSection(readinessSection, 'plan-apply-readiness', 'Apply execution readiness');
           }
 
