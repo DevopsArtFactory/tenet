@@ -876,10 +876,11 @@ func TestExpiredApplyClaimRecoveryDocsAndSmoke(t *testing.T) {
 
 func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 	docs := map[string]string{
-		"README":            readTextFile(t, "../README.md"),
-		"local runtime":     readTextFile(t, "architecture/tenet-v1-local-runtime.md"),
-		"operator contract": readTextFile(t, "architecture/tenet-v1-operator-contracts.md"),
-		"operator runbook":  readTextFile(t, "runbooks/operator-troubleshooting.md"),
+		"README":             readTextFile(t, "../README.md"),
+		"local runtime":      readTextFile(t, "architecture/tenet-v1-local-runtime.md"),
+		"overview dashboard": readTextFile(t, "features/overview-dashboard.md"),
+		"operator contract":  readTextFile(t, "architecture/tenet-v1-operator-contracts.md"),
+		"operator runbook":   readTextFile(t, "runbooks/operator-troubleshooting.md"),
 	}
 
 	for name, text := range docs {
@@ -1003,6 +1004,7 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 		"explicit no-backend-preflight fallback copy",
 		"per-operation preflight `handoffs`",
 		"Preflight handoffs are read-only next-step routes",
+		"`deploymentDetailRoute`, `planApplyWorkspaceRoute`, `resourceInspectionRoute`, `resourceLogsRoute`",
 	} {
 		if !strings.Contains(runbook, fragment) {
 			t.Fatalf("expected operator runbook to lock apply readiness evidence fragment %q", fragment)
