@@ -348,6 +348,38 @@ func TestServicePreflightReportsTerminalApplyRequestsAsBlocked(t *testing.T) {
 	}
 }
 
+func TestServicePreflightSkipsDeployerRoleProbeForTerminalApplyRequests(t *testing.T) {
+	store := &memoryStore{records: map[string]Record{
+		"apply_failed": {
+			ID:             "apply_failed",
+			PlanID:         "plan_1234",
+			DeploymentName: "api-prod",
+			Status:         StatusFailed,
+			CreatedAt:      "2026-04-18T08:05:00Z",
+			Error:          disabledError,
+			Operations:     []Operation{{Target: "api-prod listener (productionListener)"}},
+		},
+	}}
+	service := Service{
+		Store: store,
+		DeployerRoleReadiness: func(ctx context.Context, target DeployerRoleTarget) (DeployerRoleReadiness, error) {
+			t.Fatalf("terminal apply request should not probe live deployer-role readiness")
+			return DeployerRoleReadiness{}, nil
+		},
+	}
+
+	readiness, err := service.Preflight(context.Background(), "apply_failed")
+	if err != nil {
+		t.Fatalf("Preflight returned error: %v", err)
+	}
+	if readiness.DeployerRole != nil {
+		t.Fatalf("expected no live deployer-role evidence for terminal local-safe record, got %+v", readiness.DeployerRole)
+	}
+	if readiness.State != ExecutionReadinessStateDisabled || !strings.Contains(readiness.Summary, "local-safe apply record") {
+		t.Fatalf("expected deterministic disabled readiness without AWS probing, got %+v", readiness)
+	}
+}
+
 func TestServicePreflightIncludesConfiguredDeployerRoleProbeEvidence(t *testing.T) {
 	store := &memoryStore{records: map[string]Record{
 		"apply_queued": {
