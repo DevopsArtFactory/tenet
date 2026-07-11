@@ -744,6 +744,7 @@ The backend now also exposes local-safe immutable apply-request routes:
 - `GET /v1/applies?status=active`
 - `GET /v1/applies?status=queued`
 - `GET /v1/applies/{applyId}`
+- `GET /v1/applies/{applyId}/preflight`
 - `POST /v1/applies/{applyId}/claim`
 - `POST /v1/applies/{applyId}/heartbeat`
 - `POST /v1/applies/{applyId}/transitions`
@@ -752,7 +753,7 @@ These routes are additive and local-friendly. They persist immutable records to 
 
 Local-safe apply executor release guard: reviewers should verify the active collection (`GET /v1/applies?status=active`), stale active-claim collection
 (`GET /v1/applies?status=active&claim=stale`), queued exact subset
-(`GET /v1/applies?status=queued`), stored apply read (`GET /v1/applies/{applyId}`), claim (`POST /v1/applies/{applyId}/claim`),
+(`GET /v1/applies?status=queued`), stored apply read (`GET /v1/applies/{applyId}`), non-mutating preflight read (`GET /v1/applies/{applyId}/preflight`), claim (`POST /v1/applies/{applyId}/claim`),
 heartbeat (`POST /v1/applies/{applyId}/heartbeat`), and transition
 (`POST /v1/applies/{applyId}/transitions`) routes together. They persist and
 advance Tenet apply metadata only; this local-safe record lifecycle does not

@@ -1055,7 +1055,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if deploymentScopedRead["allowed"] != true || deploymentScopedRead["requiresExactDeploymentAllowlistMatch"] != true || deploymentScopedRead["acceptsProjectEnvironmentScopes"] != true || deploymentScopedRead["reason"] != "deployment-scoped reads can pass for deployments named in X-Tenet-Authorized-Deployments or matched by X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments" {
 		t.Fatalf("expected conditional deployment read verdict, got %#v", deploymentScopedRead)
 	}
-	if !reflect.DeepEqual(deploymentScopedRead["exampleRoutes"], []any{"GET /v1/overview/deployments/{deploymentName}", "GET /v1/status/deployments/{deploymentName}", "GET /v1/audit-logs?deployment={deploymentName}"}) {
+	if !reflect.DeepEqual(deploymentScopedRead["exampleRoutes"], []any{"GET /v1/overview/deployments/{deploymentName}", "GET /v1/status/deployments/{deploymentName}", "GET /v1/applies/{applyId}/preflight", "GET /v1/audit-logs?deployment={deploymentName}"}) {
 		t.Fatalf("expected deployment-scoped read route examples, got %#v", deploymentScopedRead["exampleRoutes"])
 	}
 	if !reflect.DeepEqual(deploymentScopedRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments", "X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"}) {
@@ -11639,6 +11639,54 @@ func TestRouterCreateApplyRequest(t *testing.T) {
 	}
 	if record.Operations[0].ID != "op_plan_create-1" || !strings.Contains(resp.Body.String(), `"id":"op_plan_create-1"`) {
 		t.Fatalf("expected raw JSON operation id field in apply request payload, got %+v body=%s", record.Operations, resp.Body.String())
+	}
+}
+
+func TestRouterGetApplyExecutionPreflight(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		ApplyExecutionPreflight: func(ctx context.Context, applyID string) (applyrequest.ExecutionReadiness, error) {
+			if applyID != "apply_1234abcd" {
+				return applyrequest.ExecutionReadiness{}, applyrequest.ErrNotFound
+			}
+			return applyrequest.ExecutionReadiness{
+				State:     applyrequest.ExecutionReadinessStateBlocked,
+				Summary:   "Local-safe executor handoff metadata is present, but live AWS mutation remains blocked.",
+				CheckedAt: "2026-04-18T08:00:00Z",
+				Evidence:  []string{"Preflight reused immutable applyId apply_1234abcd and did not contact AWS."},
+				Operations: []applyrequest.OperationExecutionPreflight{
+					{OperationID: "op_plan_create-1", Phase: "Provisioning", Target: "api-prod-codedeploy-group (codeDeployDeploymentGroup)", ResourceType: "codeDeployDeploymentGroup", ResourceName: "api-prod-codedeploy-group", RequiredCapability: "codedeploy:CreateDeployment", RequiredRole: "future AWS mutation role for deployment api-prod", InputsSufficient: true, Ready: false, UnavailableReason: "live_aws_mutation_not_implemented", Summary: "Operation has reviewed apply intent, but live AWS mutation is not implemented for this local-safe executor boundary."},
+				},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/applies/apply_1234abcd/preflight", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+	}
+	var readiness applyrequest.ExecutionReadiness
+	if err := json.Unmarshal(resp.Body.Bytes(), &readiness); err != nil {
+		t.Fatalf("failed to decode execution preflight: %v", err)
+	}
+	if readiness.State != applyrequest.ExecutionReadinessStateBlocked || readiness.CheckedAt != "2026-04-18T08:00:00Z" {
+		t.Fatalf("unexpected execution preflight payload: %+v", readiness)
+	}
+	if len(readiness.Operations) != 1 || readiness.Operations[0].RequiredCapability != "codedeploy:CreateDeployment" || readiness.Operations[0].Ready {
+		t.Fatalf("expected blocked per-operation preflight row, got %+v", readiness.Operations)
+	}
+	if strings.Contains(resp.Body.String(), `"executionReadiness"`) || !strings.Contains(resp.Body.String(), `"requiredCapability":"codedeploy:CreateDeployment"`) {
+		t.Fatalf("expected direct readiness JSON without an apply-record wrapper, got %s", resp.Body.String())
+	}
+
+	missing := httptest.NewRecorder()
+	router.ServeHTTP(missing, httptest.NewRequest(http.MethodGet, "/v1/applies/apply_missing/preflight", nil))
+	if missing.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing apply preflight, got %d body=%q", missing.Code, missing.Body.String())
 	}
 }
 
