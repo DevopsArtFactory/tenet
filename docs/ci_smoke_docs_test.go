@@ -992,6 +992,17 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 		}
 	}
 
+	overviewDashboard := docs["overview dashboard"]
+	for _, fragment := range []string{
+		"execution-readiness label/summary/evidence when backend `executionReadiness` is present",
+		"records without backend preflight data show explicit missing-preflight fallback copy",
+		"do not mistake local-safe handoff metadata for live AWS readiness",
+	} {
+		if !strings.Contains(overviewDashboard, fragment) {
+			t.Fatalf("expected overview dashboard docs to lock applies monitor readiness fragment %q", fragment)
+		}
+	}
+
 	for name, text := range map[string]string{
 		"smoke-local":  readTextFile(t, "../scripts/smoke-local.sh"),
 		"smoke-docker": readTextFile(t, "../scripts/smoke-docker.sh"),
