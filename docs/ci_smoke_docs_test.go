@@ -987,7 +987,9 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 
 	operatorContract := docs["operator contract"]
 	for _, fragment := range []string{
-		"`GET /v1/applies/{applyId}/preflight` is a non-mutating readiness read and does not contact AWS",
+		"`GET /v1/applies/{applyId}/preflight` is a non-mutating readiness read",
+		"read-only STS identity probe",
+		"it never performs CodeDeploy, ECS, ALB, or ASG mutation",
 		"executionReadiness and preflight evidence are readiness context, not proof that live AWS mutation ran or succeeded",
 		"queued/running apply records are local-safe executor handoffs until a future live executor exists",
 		"disabled/default apply records are expected local-safe evidence, not a product failure",
