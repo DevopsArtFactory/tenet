@@ -146,6 +146,12 @@ func TestServiceCreatePersistsImmutableFailedApplyRequestWhenExecutionIsDisabled
 	if first.Record.Error != disabledError || len(first.Record.Details) != 2 {
 		t.Fatalf("expected disabled error/details, got %+v", first.Record)
 	}
+	if first.Record.ExecutionReadiness == nil || first.Record.ExecutionReadiness.State != ExecutionReadinessStateDisabled {
+		t.Fatalf("expected disabled backend execution readiness evidence, got %+v", first.Record.ExecutionReadiness)
+	}
+	if len(first.Record.ExecutionReadiness.Operations) != 2 || first.Record.ExecutionReadiness.Operations[0].RequiredCapability != "codedeploy:CreateDeployment" || first.Record.ExecutionReadiness.Operations[0].Ready {
+		t.Fatalf("expected non-mutating per-operation preflight rows, got %+v", first.Record.ExecutionReadiness.Operations)
+	}
 	if first.Record.Lifecycle.UpdatedAt != "2026-04-18T08:00:00Z" || first.Record.Lifecycle.FinishedAt != "2026-04-18T08:00:00Z" || first.Record.Lifecycle.TotalSteps != 2 {
 		t.Fatalf("expected additive lifecycle metadata on create, got %+v", first.Record.Lifecycle)
 	}
@@ -217,11 +223,75 @@ func TestServiceCreatePersistsImmutableQueuedApplyRequestWhenExecutionIsEnabled(
 	if len(result.Record.Details) != 2 || !strings.Contains(result.Record.Details[0], "TENET_AWS_ENABLE_APPLY=true") || !strings.Contains(result.Record.Details[1], "same applyId locally") {
 		t.Fatalf("expected queued details, got %+v", result.Record.Details)
 	}
+	if result.Record.ExecutionReadiness == nil || result.Record.ExecutionReadiness.State != ExecutionReadinessStateBlocked || !strings.Contains(result.Record.ExecutionReadiness.Summary, "Local-safe executor handoff") {
+		t.Fatalf("expected queued preflight to report blocked live mutation with local-safe handoff evidence, got %+v", result.Record.ExecutionReadiness)
+	}
 	if len(result.Record.Operations) != 2 {
 		t.Fatalf("expected projected operations, got %+v", result.Record.Operations)
 	}
 	if result.Record.Operations[0].Status != OperationStatusQueued || result.Record.Operations[1].Status != OperationStatusQueued {
 		t.Fatalf("expected queued projected operation rows, got %+v", result.Record.Operations)
+	}
+}
+
+func TestServicePreflightReturnsBackendAuthoredReadinessEvidence(t *testing.T) {
+	store := &memoryStore{records: map[string]Record{
+		"apply_1234abcd": {
+			ID:             "apply_1234abcd",
+			PlanID:         "plan_1234abcd",
+			DeploymentName: "api-prod",
+			Status:         StatusQueued,
+			CreatedAt:      "2026-04-18T08:05:00Z",
+			Lifecycle:      Lifecycle{UpdatedAt: "2026-04-18T08:06:00Z", TotalSteps: 1},
+			Operations: []Operation{{
+				ID:      "op_codedeploy-1",
+				Status:  OperationStatusQueued,
+				Phase:   "Promoting",
+				Target:  "api-prod-codedeploy-group (codeDeployDeploymentGroup)",
+				Summary: "Create the CodeDeploy deployment for api-prod.",
+			}},
+			Source: SourceContext{PlanID: "plan_1234abcd", Route: "/v1/plans/plan_1234abcd", PlanStatus: "ready"},
+		},
+	}}
+	service := Service{Store: store}
+
+	readiness, err := service.Preflight(context.Background(), "apply_1234abcd")
+	if err != nil {
+		t.Fatalf("Preflight returned error: %v", err)
+	}
+	if readiness.State != ExecutionReadinessStateBlocked || readiness.CheckedAt != "2026-04-18T08:06:00Z" {
+		t.Fatalf("unexpected readiness summary: %+v", readiness)
+	}
+	if len(readiness.Evidence) != 2 || !strings.Contains(readiness.Evidence[0], "apply_1234abcd") {
+		t.Fatalf("expected immutable applyId evidence, got %+v", readiness.Evidence)
+	}
+	if len(readiness.Operations) != 1 {
+		t.Fatalf("expected one operation preflight row, got %+v", readiness.Operations)
+	}
+	operation := readiness.Operations[0]
+	if operation.OperationID != "op_codedeploy-1" || operation.ResourceName != "api-prod-codedeploy-group" || operation.ResourceType != "codeDeployDeploymentGroup" {
+		t.Fatalf("expected parsed operation resource identity, got %+v", operation)
+	}
+	if operation.RequiredCapability != "codedeploy:CreateDeployment" || operation.RequiredRole == "" || !operation.InputsSufficient || operation.Ready || operation.UnavailableReason != "live_aws_mutation_not_implemented" {
+		t.Fatalf("expected explicit blocked AWS capability preflight row, got %+v", operation)
+	}
+}
+
+func TestServicePreflightReportsTerminalApplyRequestsAsBlocked(t *testing.T) {
+	store := &memoryStore{records: map[string]Record{
+		"apply_failed": {ID: "apply_failed", PlanID: "plan_1234", DeploymentName: "api-prod", Status: StatusFailed, CreatedAt: "2026-04-18T08:05:00Z", Error: "promotion failed", Operations: []Operation{{Target: "api-prod listener (productionListener)"}}},
+	}}
+	service := Service{Store: store}
+
+	readiness, err := service.Preflight(context.Background(), "apply_failed")
+	if err != nil {
+		t.Fatalf("Preflight returned error: %v", err)
+	}
+	if readiness.State != ExecutionReadinessStateBlocked || !strings.Contains(readiness.Summary, "terminal") {
+		t.Fatalf("expected terminal apply request preflight blocker, got %+v", readiness)
+	}
+	if len(readiness.Operations) != 1 || readiness.Operations[0].UnavailableReason != "terminal_apply_request" || readiness.Operations[0].Ready {
+		t.Fatalf("expected terminal operation to stay blocked, got %+v", readiness.Operations)
 	}
 }
 

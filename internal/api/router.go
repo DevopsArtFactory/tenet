@@ -736,6 +736,7 @@ var (
 	operatorContextDeploymentScopedReadExampleRoutes = []string{
 		"GET /v1/overview/deployments/{deploymentName}",
 		"GET /v1/status/deployments/{deploymentName}",
+		"GET /v1/applies/{applyId}/preflight",
 		"GET /v1/audit-logs?deployment={deploymentName}",
 	}
 	operatorContextDeploymentScopedWriteExampleRoutes = []string{
@@ -2407,6 +2408,7 @@ type Options struct {
 	CreateApplyRequest                   func(context.Context, string) (applyrequest.CreateResult, error)
 	ApplyRequests                        func(context.Context, applyrequest.ListQuery) ([]applyrequest.Record, error)
 	ApplyRequest                         func(context.Context, string) (applyrequest.Record, error)
+	ApplyExecutionPreflight              func(context.Context, string) (applyrequest.ExecutionReadiness, error)
 	ClaimApplyRequest                    func(context.Context, string, applyrequest.ClaimRequest) (applyrequest.Record, error)
 	HeartbeatApplyRequest                func(context.Context, string, applyrequest.HeartbeatRequest) (applyrequest.Record, error)
 	TransitionApplyRequest               func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error)
@@ -3310,6 +3312,38 @@ func NewRouter(options Options) http.Handler {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(record)
+		case len(segments) == 2 && segments[0] != "" && segments[1] == "preflight":
+			if !requireMethod(w, r, http.MethodGet) {
+				return
+			}
+			if options.ApplyExecutionPreflight == nil {
+				http.Error(w, "apply execution preflight unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			if !requireDeploymentReadIdentity(w, r, options) {
+				return
+			}
+			if options.RequireDeploymentReadAuthorization {
+				if options.ApplyRequest == nil {
+					http.Error(w, "apply request unavailable", http.StatusServiceUnavailable)
+					return
+				}
+				record, err := options.ApplyRequest(r.Context(), segments[0])
+				if err != nil {
+					respondLookupError(w, err)
+					return
+				}
+				if !requireDeploymentReadAccessWithOptions(w, r, options, record.DeploymentName) {
+					return
+				}
+			}
+			readiness, err := options.ApplyExecutionPreflight(r.Context(), segments[0])
+			if err != nil {
+				respondLookupError(w, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(readiness)
 		case len(segments) == 2 && segments[0] != "" && segments[1] == "claim":
 			if !requireMethod(w, r, http.MethodPost) {
 				return

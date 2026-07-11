@@ -88,6 +88,8 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 	if err != nil {
 		return CreateResult{}, err
 	}
+	readiness := deriveExecutionReadiness(record)
+	record.ExecutionReadiness = &readiness
 
 	existing, err := s.Store.Get(ctx, record.ID)
 	if err == nil {
@@ -167,8 +169,7 @@ func (s Service) List(ctx context.Context, query ListQuery) ([]Record, error) {
 // NormalizeOperationIDs returns a copy of record with additive backend-authored operation IDs.
 // Existing non-empty IDs are preserved so immutable stored records do not need to be rewritten.
 func NormalizeOperationIDs(record Record) Record {
-	record.Operations = normalizeOperationIDs(record.Operations)
-	return record
+	return normalizeExecutionReadiness(record)
 }
 
 // Claim records a local-safe executor lease and advances one queued apply request to running.
@@ -267,6 +268,8 @@ func (s Service) claimRecord(ctx context.Context, request ClaimRequest) func(Rec
 		step := firstRunnableStep(record)
 		record.Operations = transitionOperations(record.Operations, StatusRunning, step)
 		record.Lifecycle = transitionLifecycle(record.Lifecycle, len(record.Operations), TransitionRequest{Status: StatusRunning, Step: step}, now)
+		readiness := deriveExecutionReadiness(record)
+		record.ExecutionReadiness = &readiness
 		record.Transitions = appendTransition(record.Transitions, Transition{
 			TransitionedAt: claim.ClaimedAt,
 			PreviousStatus: previousStatus,
@@ -301,6 +304,8 @@ func recoverExpiredClaim(ctx context.Context, record Record, workerID string, pr
 	step := recoveryStep(record)
 	record.Operations = transitionOperations(record.Operations, StatusRunning, step)
 	record.Lifecycle = transitionLifecycle(record.Lifecycle, len(record.Operations), TransitionRequest{Status: StatusRunning, Step: step}, now)
+	readiness := deriveExecutionReadiness(record)
+	record.ExecutionReadiness = &readiness
 	record.Transitions = appendTransition(record.Transitions, Transition{
 		TransitionedAt: claim.ClaimedAt,
 		PreviousStatus: previousStatus,
@@ -464,6 +469,8 @@ func (s Service) heartbeatRecord(request HeartbeatRequest) func(Record) (Record,
 		claim.LastHeartbeatAt = now.Format(time.RFC3339)
 		claim.ExpiresAt = now.Add(claimFreshnessTTL).Format(time.RFC3339)
 		record.Claim = &claim
+		readiness := deriveExecutionReadiness(record)
+		record.ExecutionReadiness = &readiness
 		return record, nil
 	}
 }
@@ -498,6 +505,8 @@ func (s Service) Transition(ctx context.Context, id string, request TransitionRe
 	}
 	record.Operations = transitionOperations(record.Operations, request.Status, request.Step)
 	record.Lifecycle = transitionLifecycle(record.Lifecycle, len(record.Operations), request, now)
+	readiness := deriveExecutionReadiness(record)
+	record.ExecutionReadiness = &readiness
 	record.Transitions = appendTransition(record.Transitions, Transition{
 		TransitionedAt: now.UTC().Format(time.RFC3339),
 		PreviousStatus: previousStatus,
