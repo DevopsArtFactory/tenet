@@ -238,6 +238,10 @@ func parseApplyRequestListQuery(w http.ResponseWriter, r *http.Request) (applyre
 		if claim == "" {
 			return applyrequest.ListQuery{Status: applyrequest.StatusQueued}, true
 		}
+	case string(applyrequest.StatusSucceeded), string(applyrequest.StatusFailed), string(applyrequest.StatusCancelled):
+		if claim == "" {
+			return applyrequest.ListQuery{Status: applyrequest.Status(status)}, true
+		}
 	case string(applyrequest.ListStatusActive):
 		if claim == "" {
 			return applyrequest.ListQuery{Status: applyrequest.ListStatusActive}, true
@@ -246,7 +250,7 @@ func parseApplyRequestListQuery(w http.ResponseWriter, r *http.Request) (applyre
 			return applyrequest.ListQuery{Status: applyrequest.ListStatusActive, Claim: applyrequest.ListClaimStale}, true
 		}
 	}
-	http.Error(w, "status=queued, status=active, or status=active&claim=stale is required", http.StatusBadRequest)
+	http.Error(w, "status=queued, status=active, status=active&claim=stale, or terminal status=succeeded|failed|cancelled is required", http.StatusBadRequest)
 	return applyrequest.ListQuery{}, false
 }
 

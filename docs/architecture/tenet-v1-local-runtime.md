@@ -35,11 +35,10 @@ This stack is not API-read-only: the shipped immutable plan/apply write routes `
 Local-safe apply executor release guard: reviewers should verify the
 active collection (`GET /v1/applies?status=active`), stale active-claim collection
 (`GET /v1/applies?status=active&claim=stale`), queued exact subset
-(`GET /v1/applies?status=queued`), stored apply read
-(`GET /v1/applies/{applyId}`), non-mutating preflight read
-(`GET /v1/applies/{applyId}/preflight`), claim (`POST /v1/applies/{applyId}/claim`),
-heartbeat (`POST /v1/applies/{applyId}/heartbeat`), and transition
-(`POST /v1/applies/{applyId}/transitions`) routes together. They persist and
+(`GET /v1/applies?status=queued`), terminal exact subsets such as `GET /v1/applies?status=failed`, stored apply read (`GET /v1/applies/{applyId}`),
+non-mutating preflight read (`GET /v1/applies/{applyId}/preflight`), claim (`POST /v1/applies/{applyId}/claim`),
+heartbeat (`POST /v1/applies/{applyId}/heartbeat`),
+and transition (`POST /v1/applies/{applyId}/transitions`) routes together. They persist and
 advance Tenet apply metadata only; this local-safe record lifecycle does not
 perform live AWS mutation. Local smoke covers the active-vs-queued apply collection split and stale-claim refinement: `GET /v1/applies?status=active` returns queued plus running records, `GET /v1/applies?status=active&claim=stale` returns running records whose claim lease is stale or expired, a claimed heartbeat record carries freshness fields, and `GET /v1/applies?status=queued` stays the queued-only subset. The read-only `/?page=applies` monitor defaults to the queued subset read, adds explicit queued/active/stale view controls (`?appliesView=active` for the active collection, `?appliesView=stale` for stale active claims), preserves the explicit `Refresh applies` action and bookmarkable URL, translates claim heartbeat/lease metadata into fresh/stale/pending operator copy, links operators back to the plan/apply workspace for detail review, and keeps JSON handoff, `Copy read route`, refresh, and Applications overview recovery actions visible on populated, empty, loading, unavailable, and generic fetch-error monitor states.
 
