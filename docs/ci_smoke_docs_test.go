@@ -1203,8 +1203,14 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 		"the immutable apply record state (`GET /v1/applies/{applyId}`)",
 		"the non-mutating readiness/preflight evidence (`GET /v1/applies/{applyId}/preflight`)",
 		"any local-safe claim freshness (`GET /v1/applies?status=active[&claim=stale]`)",
-		"This proves Tenet preserved and can route the handoff; it does not prove that a",
-		"CodeDeploy, ECS, ALB, ASG, or EC2 mutation ran or succeeded",
+		"Treat the execution preview `blocker.reason` as the operator-safe stoplight",
+		"`execution_disabled`, `live_aws_mutation_not_implemented`, `missing_deployer_role`",
+		"and `aws_unavailable` are expected read-only blockers",
+		"not evidence that a live",
+		"executor attempted mutation",
+		"This proves Tenet preserved and can route the",
+		"handoff; it does not prove that a CodeDeploy, ECS, ALB, ASG, or EC2 mutation ran",
+		"or succeeded",
 	} {
 		if !strings.Contains(runbook, fragment) {
 			t.Fatalf("expected operator runbook to lock apply readiness evidence fragment %q", fragment)
