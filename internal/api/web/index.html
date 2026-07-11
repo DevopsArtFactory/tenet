@@ -9216,6 +9216,17 @@
           : 'No queued apply requests are visible right now. GET /v1/applies?status=queued returned an empty collection.';
       };
       const createAppliesMonitorRefreshButton = (state) => createRefreshButton('Refresh applies', state?.status === 'loading', () => state?.onRefresh?.().catch(() => {}));
+      const createAppliesMonitorRecoveryActions = (state = {}) => {
+        const view = normalizeAppliesMonitorView(state.view || currentPageState.appliesView || 'queued');
+        const route = appliesMonitorRoutePath(view);
+        const readRoute = appliesMonitorReadRoute(view);
+        return [
+          createNavLink(route, `${appliesMonitorViewLabel(view)} JSON`),
+          createCopyReadRouteButton(readRoute),
+          createAppliesMonitorRefreshButton(state),
+          createNavLink(buildPageURL('applications'), 'Applications overview', '_self'),
+        ];
+      };
       const createAppliesMonitorViewControl = (state) => {
         const currentView = normalizeAppliesMonitorView(state?.view || currentPageState.appliesView || 'queued');
         const wrap = createElement('div', 'toolbar-chips');
@@ -9361,22 +9372,17 @@
         const route = appliesMonitorRoutePath(view);
         const readRoute = appliesMonitorReadRoute(view);
         if (state?.status === 'loading' && !(state.records || []).length) {
-          renderQueuedAppliesState(`Loading ${appliesMonitorLoadingLabel(view)} from ${readRoute}…`, '', [
-            createAppliesMonitorRefreshButton(state),
-          ], state);
+          renderQueuedAppliesState(`Loading ${appliesMonitorLoadingLabel(view)} from ${readRoute}…`, '', createAppliesMonitorRecoveryActions(state), state);
           return;
         }
         if (state?.status === 'unavailable') {
           const detail = state.error?.message ? ` ${state.error.message}` : '';
-          renderQueuedAppliesState(`${appliesMonitorViewLabel(view)} are temporarily unavailable.${detail}`, 'error', [
-            createAppliesMonitorRefreshButton(state),
-            createNavLink(currentBookmarkableURL(), 'Retry current page', '_self'),
-          ], state);
+          renderQueuedAppliesState(`${appliesMonitorViewLabel(view)} are temporarily unavailable.${detail}`, 'error', createAppliesMonitorRecoveryActions(state), state);
           return;
         }
         if (state?.status === 'error') {
           renderQueuedAppliesState(`Failed to load ${view} applies: ${state.error?.message || 'unknown error'}`, 'error', [
-            createAppliesMonitorRefreshButton(state),
+            ...createAppliesMonitorRecoveryActions(state),
             createNavLink(currentBookmarkableURL(), 'Retry current page', '_self'),
           ], state);
           return;

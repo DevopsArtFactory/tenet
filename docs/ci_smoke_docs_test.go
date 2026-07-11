@@ -1039,7 +1039,7 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 			"Refresh applies",
 			"fresh/stale/pending",
 			"plan/apply workspace for detail review",
-			"in-shell Applications overview escape link on populated monitor views",
+			"JSON handoff, `Copy read route`, refresh, and Applications overview recovery actions visible on populated, empty, loading, unavailable, and generic fetch-error monitor states",
 		} {
 			if !strings.Contains(text, fragment) {
 				t.Fatalf("expected %s docs to include local-safe apply release guard fragment %q", name, fragment)
