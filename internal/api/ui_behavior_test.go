@@ -11101,6 +11101,12 @@ const scenarios = [
       'Claim status | Pending executor claim — no local-safe executor has claimed this apply request yet.',
       'Readiness summary | No backend preflight readiness evidence is attached yet. Use claim/lifecycle metadata and local-safe docs before treating this as ready for live AWS execution.',
     ],
+    summaryExpected: [
+      'Queued applies | 4',
+      'Lifecycle signals | 2 queued · 2 running',
+      'Operation signals | 1/6 terminal · 3 running · 2 queued',
+      'Claim signals | 1 current · 2 attention · 1 pending',
+    ],
     link: { href: '/?page=plan&deployment=api-prod&applyId=apply_queued_123', text: 'Open plan/apply workspace' },
   },
   {
@@ -11221,6 +11227,12 @@ const scenarios = [
       if (!text.includes(fragment)) throw new Error('expected fragment for ' + scenario.name + ': ' + fragment + '\nUI text: ' + text);
     });
     if (scenario.unexpected && text.includes(scenario.unexpected)) throw new Error('unexpected fragment for ' + scenario.name + ': ' + scenario.unexpected + '\nUI text: ' + text);
+    if (scenario.summaryExpected) {
+      const summaryText = collectText(document.getElementById('summary')).join(' | ');
+      scenario.summaryExpected.forEach((fragment) => {
+        if (!summaryText.includes(fragment)) throw new Error('expected summary fragment for ' + scenario.name + ': ' + fragment + '\nSummary text: ' + summaryText);
+      });
+    }
     if (scenario.link) {
       const link = collectNodes(root, (node) => node.tagName === 'A').find((node) => node.href === scenario.link.href && node.textContent === scenario.link.text);
       if (!link || link.target !== '_self' || link.rel) throw new Error('expected _self plan/apply workspace link for ' + scenario.name + ': ' + JSON.stringify(scenario.link));
