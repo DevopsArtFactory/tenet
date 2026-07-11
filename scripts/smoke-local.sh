@@ -1190,6 +1190,9 @@ assert 'did not contact AWS' in ' '.join(apply_preflight['evidence']), apply_pre
 assert len(apply_preflight.get('operations', [])) == len(apply_record['operations']), apply_preflight
 assert all(row.get('ready') is False for row in apply_preflight['operations']), apply_preflight
 assert all(row.get('requiredCapability') for row in apply_preflight['operations']), apply_preflight
+assert all(row.get('capabilityChecks') for row in apply_preflight['operations']), apply_preflight
+assert all(check.get('action') and check.get('state') in ('blocked', 'unknown') for row in apply_preflight['operations'] for check in row.get('capabilityChecks', [])), apply_preflight
+assert all(check.get('requiredRole') and check.get('summary') for row in apply_preflight['operations'] for check in row.get('capabilityChecks', [])), apply_preflight
 assert all(row.get('handoffs', {}).get('deploymentDetailRoute', '').startswith('/v1/overview/deployments/') for row in apply_preflight['operations']), apply_preflight
 assert all(row.get('handoffs', {}).get('planApplyWorkspaceRoute', '').startswith('/?') for row in apply_preflight['operations']), apply_preflight
 for row in apply_preflight['operations']:
