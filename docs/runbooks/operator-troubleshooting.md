@@ -62,11 +62,11 @@ keeps an in-shell Applications overview escape link on populated monitor views.
 
 Use the narrowest command that proves the slice you changed:
 
-Fast-to-broad ladder: `go test ./internal/api -run TestOperatorTroubleshootingRunbookDocsContract -count=1`,
+Fast-to-broad ladder: `go test ./docs -run TestOperatorTroubleshootingRunbookDocumentsDailyTriageFlow -count=1`,
 `make test`, `make smoke-local`, then `make smoke-docker`.
 
 ```bash
-go test ./internal/api -run TestOperatorTroubleshootingRunbookDocsContract -count=1
+go test ./docs -run TestOperatorTroubleshootingRunbookDocumentsDailyTriageFlow -count=1
 make test
 make smoke-local
 make smoke-docker

@@ -247,6 +247,7 @@ func TestOperatorTroubleshootingRunbookDocumentsDailyTriageFlow(t *testing.T) {
 		"no_log_source",
 		"source_mismatch",
 		"no retained controller history",
+		"go test ./docs -run TestOperatorTroubleshootingRunbookDocumentsDailyTriageFlow -count=1",
 	} {
 		if !strings.Contains(runbookText, fragment) {
 			t.Fatalf("expected operator troubleshooting runbook to preserve daily triage fragment %q", fragment)
