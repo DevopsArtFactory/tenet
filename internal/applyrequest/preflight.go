@@ -81,6 +81,53 @@ type OperationExecutionPreflight struct {
 	Handoffs           *OperationExecutionPreflightHandoffs `json:"handoffs,omitempty"`
 }
 
+// ExecutionActionPreview is a read-only description of the first concrete AWS
+// action a future executor would attempt for an immutable apply request. It is
+// intentionally derived from stored apply/preflight metadata and never mutates AWS.
+type ExecutionActionPreview struct {
+	ApplyID        string                               `json:"applyId"`
+	DeploymentName string                               `json:"deploymentName"`
+	ReadOnly       bool                                 `json:"readOnly"`
+	State          string                               `json:"state"`
+	CheckedAt      string                               `json:"checkedAt,omitempty"`
+	Summary        string                               `json:"summary"`
+	Operation      *ExecutionActionPreviewOperation     `json:"operation,omitempty"`
+	AWSContext     ExecutionActionPreviewAWSContext     `json:"awsContext"`
+	Blocker        *ExecutionActionPreviewBlocker       `json:"blocker,omitempty"`
+	Handoffs       *OperationExecutionPreflightHandoffs `json:"handoffs,omitempty"`
+}
+
+// ExecutionActionPreviewOperation identifies the reviewed apply operation and
+// deterministic AWS action/resource pair that would be considered next.
+type ExecutionActionPreviewOperation struct {
+	OperationID        string                              `json:"operationId,omitempty"`
+	Phase              string                              `json:"phase,omitempty"`
+	Target             string                              `json:"target"`
+	Action             string                              `json:"action"`
+	ResourceType       string                              `json:"resourceType,omitempty"`
+	ResourceName       string                              `json:"resourceName,omitempty"`
+	RequiredCapability string                              `json:"requiredCapability"`
+	RequiredRole       string                              `json:"requiredRole"`
+	CapabilityChecks   []OperationExecutionCapabilityCheck `json:"capabilityChecks,omitempty"`
+}
+
+// ExecutionActionPreviewAWSContext is the target AWS context for the action preview.
+type ExecutionActionPreviewAWSContext struct {
+	AWSAccountID      string `json:"awsAccountId,omitempty"`
+	Region            string `json:"region,omitempty"`
+	RoleARN           string `json:"roleArn,omitempty"`
+	RoleConfigured    bool   `json:"roleConfigured"`
+	RoleReady         bool   `json:"roleReady"`
+	CheckedWithAWS    bool   `json:"checkedWithAws"`
+	UnavailableReason string `json:"unavailableReason,omitempty"`
+}
+
+// ExecutionActionPreviewBlocker explains why the preview is not executable today.
+type ExecutionActionPreviewBlocker struct {
+	Reason  string `json:"reason"`
+	Summary string `json:"summary"`
+}
+
 // Preflight returns backend-authored execution readiness evidence for one apply request.
 // The same immutable applyId is used; this method never mutates AWS. A configured
 // DeployerRoleReadiness provider may add non-mutating identity-readiness evidence.
@@ -89,6 +136,25 @@ func (s Service) Preflight(ctx context.Context, id string) (ExecutionReadiness, 
 	if err != nil {
 		return ExecutionReadiness{}, err
 	}
+	return s.preflightForRecord(ctx, record)
+}
+
+// ExecutionPreview returns a read-only next-action preview for one apply request.
+// It reuses the same immutable apply/preflight evidence as Preflight and never
+// contacts mutating AWS APIs.
+func (s Service) ExecutionPreview(ctx context.Context, id string) (ExecutionActionPreview, error) {
+	record, err := s.Get(ctx, id)
+	if err != nil {
+		return ExecutionActionPreview{}, err
+	}
+	readiness, err := s.preflightForRecord(ctx, record)
+	if err != nil {
+		return ExecutionActionPreview{}, err
+	}
+	return deriveExecutionActionPreview(record, readiness), nil
+}
+
+func (s Service) preflightForRecord(ctx context.Context, record Record) (ExecutionReadiness, error) {
 	readiness := deriveExecutionReadiness(record)
 	if record.ExecutionReadiness != nil {
 		readiness = *record.ExecutionReadiness
@@ -115,6 +181,72 @@ func normalizeExecutionReadiness(record Record) Record {
 	readiness := deriveExecutionReadiness(record)
 	record.ExecutionReadiness = &readiness
 	return record
+}
+
+func deriveExecutionActionPreview(record Record, readiness ExecutionReadiness) ExecutionActionPreview {
+	preview := ExecutionActionPreview{
+		ApplyID:        record.ID,
+		DeploymentName: record.DeploymentName,
+		ReadOnly:       true,
+		State:          readiness.State,
+		CheckedAt:      readiness.CheckedAt,
+		Summary:        "Read-only executor action preview derived from immutable apply/preflight evidence; no AWS mutation was attempted.",
+	}
+	if readiness.DeployerRole != nil {
+		preview.AWSContext = ExecutionActionPreviewAWSContext{
+			AWSAccountID:      readiness.DeployerRole.AWSAccountID,
+			Region:            readiness.DeployerRole.Region,
+			RoleARN:           readiness.DeployerRole.RoleARN,
+			RoleConfigured:    readiness.DeployerRole.Configured,
+			RoleReady:         readiness.DeployerRole.Ready,
+			CheckedWithAWS:    readiness.DeployerRole.CheckedWithAWS,
+			UnavailableReason: readiness.DeployerRole.UnavailableReason,
+		}
+	}
+	if len(readiness.Operations) == 0 {
+		preview.State = "unavailable"
+		preview.Summary = "No reviewed apply operations are available to preview for this immutable apply request."
+		preview.Blocker = &ExecutionActionPreviewBlocker{
+			Reason:  "missing_apply_operations",
+			Summary: "The apply record does not contain an operation inventory from a ready plan preview.",
+		}
+		return preview
+	}
+	operation := readiness.Operations[0]
+	action := strings.TrimSpace(operation.RequiredCapability)
+	if action == "" && len(operation.CapabilityChecks) > 0 {
+		action = operation.CapabilityChecks[len(operation.CapabilityChecks)-1].Action
+	}
+	if action == "" {
+		action = "future AWS mutation capability"
+	}
+	preview.Operation = &ExecutionActionPreviewOperation{
+		OperationID:        operation.OperationID,
+		Phase:              operation.Phase,
+		Target:             operation.Target,
+		Action:             action,
+		ResourceType:       operation.ResourceType,
+		ResourceName:       operation.ResourceName,
+		RequiredCapability: operation.RequiredCapability,
+		RequiredRole:       operation.RequiredRole,
+		CapabilityChecks:   operation.CapabilityChecks,
+	}
+	preview.Handoffs = operation.Handoffs
+	reason := strings.TrimSpace(operation.UnavailableReason)
+	if reason == "" && !operation.Ready {
+		reason = "live_aws_mutation_not_implemented"
+	}
+	if reason != "" {
+		preview.Blocker = &ExecutionActionPreviewBlocker{
+			Reason:  reason,
+			Summary: operation.Summary,
+		}
+	}
+	if operation.Ready {
+		preview.State = "ready"
+		preview.Summary = "Read-only preview identified the next executor action from immutable apply evidence; execution remains outside this route."
+	}
+	return preview
 }
 
 func deriveExecutionReadiness(record Record) ExecutionReadiness {

@@ -11710,6 +11710,77 @@ func TestRouterGetApplyExecutionPreflight(t *testing.T) {
 	}
 }
 
+func TestRouterGetApplyExecutionPreview(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		ApplyExecutionPreview: func(ctx context.Context, applyID string) (applyrequest.ExecutionActionPreview, error) {
+			if applyID != "apply_1234abcd" {
+				return applyrequest.ExecutionActionPreview{}, applyrequest.ErrNotFound
+			}
+			return applyrequest.ExecutionActionPreview{
+				ApplyID:        applyID,
+				DeploymentName: "api-prod",
+				ReadOnly:       true,
+				State:          applyrequest.ExecutionReadinessStateBlocked,
+				CheckedAt:      "2026-04-18T08:00:00Z",
+				Summary:        "Read-only executor action preview derived from immutable apply/preflight evidence; no AWS mutation was attempted.",
+				Operation: &applyrequest.ExecutionActionPreviewOperation{
+					OperationID:        "op_plan_create-1",
+					Phase:              "Promoting",
+					Target:             "api-prod-codedeploy-group (codeDeployDeploymentGroup)",
+					Action:             "codedeploy:CreateDeployment",
+					ResourceType:       "codeDeployDeploymentGroup",
+					ResourceName:       "api-prod-codedeploy-group",
+					RequiredCapability: "codedeploy:CreateDeployment",
+					RequiredRole:       "arn:aws:iam::123456789012:role/TenetDeployerRole",
+					CapabilityChecks: []applyrequest.OperationExecutionCapabilityCheck{
+						{Action: "codedeploy:GetDeploymentGroup", ResourceType: "codeDeployDeploymentGroup", ResourceName: "api-prod-codedeploy-group", RequiredRole: "arn:aws:iam::123456789012:role/TenetDeployerRole", State: "blocked", Reason: "live_aws_mutation_not_implemented", Summary: "Future live executors must prove this AWS capability for the ECS/CodeDeploy rollout boundary; this local-safe preflight does not perform live mutation."},
+						{Action: "codedeploy:CreateDeployment", ResourceType: "codeDeployDeploymentGroup", ResourceName: "api-prod-codedeploy-group", RequiredRole: "arn:aws:iam::123456789012:role/TenetDeployerRole", State: "blocked", Reason: "live_aws_mutation_not_implemented", Summary: "Future live executors must prove this AWS capability for the ECS/CodeDeploy rollout boundary; this local-safe preflight does not perform live mutation."},
+					},
+				},
+				AWSContext: applyrequest.ExecutionActionPreviewAWSContext{AWSAccountID: "123456789012", Region: "ap-northeast-2", RoleARN: "arn:aws:iam::123456789012:role/TenetDeployerRole", RoleConfigured: true, RoleReady: true, CheckedWithAWS: true},
+				Blocker:    &applyrequest.ExecutionActionPreviewBlocker{Reason: "live_aws_mutation_not_implemented", Summary: "Operation has reviewed apply intent, but live AWS mutation is not implemented for this local-safe executor boundary."},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/applies/apply_1234abcd/execution-preview", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+	}
+	var preview applyrequest.ExecutionActionPreview
+	if err := json.Unmarshal(resp.Body.Bytes(), &preview); err != nil {
+		t.Fatalf("failed to decode execution preview: %v", err)
+	}
+	if !preview.ReadOnly || preview.ApplyID != "apply_1234abcd" || preview.Operation == nil || preview.Operation.Action != "codedeploy:CreateDeployment" {
+		t.Fatalf("unexpected execution preview payload: %+v", preview)
+	}
+	if preview.Operation.ResourceType != "codeDeployDeploymentGroup" || preview.Operation.ResourceName != "api-prod-codedeploy-group" || preview.Operation.RequiredRole != "arn:aws:iam::123456789012:role/TenetDeployerRole" {
+		t.Fatalf("expected resource identity and role context, got %+v", preview.Operation)
+	}
+	if preview.AWSContext.AWSAccountID != "123456789012" || preview.AWSContext.Region != "ap-northeast-2" || !preview.AWSContext.RoleConfigured || !preview.AWSContext.RoleReady || !preview.AWSContext.CheckedWithAWS {
+		t.Fatalf("expected role/account/region context, got %+v", preview.AWSContext)
+	}
+	if preview.Blocker == nil || preview.Blocker.Reason != "live_aws_mutation_not_implemented" {
+		t.Fatalf("expected explicit live-mutation blocker, got %+v", preview.Blocker)
+	}
+	body := resp.Body.String()
+	for _, fragment := range []string{`"readOnly":true`, `"operation"`, `"action":"codedeploy:CreateDeployment"`, `"resourceType":"codeDeployDeploymentGroup"`, `"resourceName":"api-prod-codedeploy-group"`, `"awsAccountId":"123456789012"`, `"region":"ap-northeast-2"`, `"roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole"`, `"blocker"`, `"reason":"live_aws_mutation_not_implemented"`} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected execution-preview JSON fragment %s in %s", fragment, body)
+		}
+	}
+
+	missing := httptest.NewRecorder()
+	router.ServeHTTP(missing, httptest.NewRequest(http.MethodGet, "/v1/applies/apply_missing/execution-preview", nil))
+	if missing.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing apply execution preview, got %d body=%q", missing.Code, missing.Body.String())
+	}
+}
+
 func TestRouterCreateApplyRequestPropagatesExplicitRequestActor(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},

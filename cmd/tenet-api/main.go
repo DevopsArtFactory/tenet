@@ -341,6 +341,7 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 		options.ApplyRequests = applyService.List
 		options.ApplyRequest = applyService.Get
 		options.ApplyExecutionPreflight = applyService.Preflight
+		options.ApplyExecutionPreview = applyService.ExecutionPreview
 		options.ClaimApplyRequest = applyService.Claim
 		options.HeartbeatApplyRequest = applyService.Heartbeat
 		options.TransitionApplyRequest = applyService.Transition
