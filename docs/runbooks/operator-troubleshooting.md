@@ -46,7 +46,10 @@ bookmarkable URL, translates claim heartbeat/lease metadata into fresh/stale/pen
 operator copy, renders backend `executionReadiness` summary/evidence when present,
 keeps the explicit no-backend-preflight fallback copy when readiness evidence is
 missing, links operators back to the plan/apply workspace for detail review, and
-keeps an in-shell Applications overview escape link on populated monitor views.
+keeps an in-shell Applications overview escape link on populated monitor views. Its summary strip
+uses the labels `Queued applies`, `Lifecycle signals`, `Operation signals`, and
+`Claim signals` so operators can distinguish backlog size, lifecycle spread,
+operation spread, and claim-health cues before opening individual records.
 
 ## Unavailable-State Decoder
 
