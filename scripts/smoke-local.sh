@@ -1971,6 +1971,7 @@ assert 'applications-overview-freshness' in ui, ui
 assert "meta.setAttribute('role', 'status');" in ui, ui
 assert "meta.setAttribute('aria-live', 'polite');" in ui, ui
 assert "meta.setAttribute('aria-atomic', 'true');" in ui, ui
+assert "['Project', textOrDash(deployment.appRef)]" in ui, ui
 assert "['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)]" in ui, ui
 assert "container.append(createElement('strong', '', 'Latest runtime change'));" in ui, ui
 assert 'Applications JSON' in ui, ui

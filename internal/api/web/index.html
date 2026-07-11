@@ -3618,6 +3618,7 @@
           const core = createElement('div', 'application-row-core');
           [
             ['Account / environment', [textOrDash(deployment.accountName), textOrDash(deployment.environmentRef)].filter((part) => part !== '—').join(' · ') || '—'],
+            ['Project', textOrDash(deployment.appRef)],
             ['Health', `${healthLabel(deployment.health)}${deployment.health?.summary ? ` · ${deployment.health.summary}` : ''}`],
             ['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)],
           ].forEach(([label, value]) => {
