@@ -2596,6 +2596,8 @@ assert "const createAccountQuickNav = (account, sectionLinks = []) => {" in acco
 assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in account_ui, account_ui
 assert "createQuickNavChip('Account detail', 'Current destination: Account detail', 'page')" in account_ui, account_ui
 assert 'Refresh account detail' in account_ui, account_ui
+assert 'Current account read: ${accountDetailReadRoute(account.awsAccountId)}' in account_ui, account_ui
+assert 'account-detail-read-route' in account_ui, account_ui
 assert 'Copy account read route' in account_ui, account_ui
 assert 'Copy group read route' in account_ui, account_ui
 assert "accountLinks.append(createCopyReadRouteButton(accountDetailReadRoute(account.awsAccountId), 'Copy account read route'));" in account_ui, account_ui

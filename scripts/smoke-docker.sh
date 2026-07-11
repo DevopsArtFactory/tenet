@@ -1890,6 +1890,8 @@ assert_fragments("account_ui", account_ui, (
     "Account detail read refreshed ·",
     "Account detail read not refreshed yet",
     "account-detail-freshness",
+    "Current account read: ${accountDetailReadRoute(account.awsAccountId)}",
+    "account-detail-read-route",
     "Copy account read route",
     "Copy group read route",
     "accountLinks.append(createCopyReadRouteButton(accountDetailReadRoute(account.awsAccountId), 'Copy account read route'));",

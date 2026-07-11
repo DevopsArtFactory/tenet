@@ -2581,6 +2581,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Group runtime events retained · No recent runtime events')) throw new Error('expected no-data account group runtime event cue, got ' + accountsText);
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected account page deployment row');
   if (!accountsText.includes('Account JSON')) throw new Error('expected account page account json link');
+  if (!accountsText.includes('Current account read: GET /v1/overview/accounts/210987654321')) throw new Error('expected account page visible current read route');
   if (!accountsText.includes('Copy account read route')) throw new Error('expected account page copyable account read route');
   if (!accountsText.includes('Group JSON')) throw new Error('expected account page group json link');
   if (!accountsText.includes('Copy group read route')) throw new Error('expected account page copyable group read route');
