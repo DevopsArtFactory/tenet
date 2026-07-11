@@ -11088,6 +11088,8 @@ const scenarios = [
       'Apply status | Queued',
       'Created at | 2026-04-18T08:00:00Z',
       'Operation progress | 1/3 terminal · 1 running · 1 queued',
+      'Next safe action | Monitor queued handoff',
+      'Next action detail | Preflight reports this immutable handoff is ready; wait for a local-safe executor claim or refresh the applies monitor.',
       'Claim status | Claimed by worker-a; heartbeat freshness looks current. Lease expires at 2099-04-18T08:06:00Z.',
       'Execution readiness | Preflight ready',
       'Readiness summary | Preflight checks passed for local-safe executor handoff.',
@@ -11098,7 +11100,9 @@ const scenarios = [
       'Claim expires | 2099-04-18T08:06:00Z',
       'worker-prod',
       'Claim status | Claimed by worker-stale, but attention is needed. Reason: lease expired before the executor heartbeat refreshed it',
+      'Next safe action | Recover stale executor claim',
       'reporting-prod',
+      'Next safe action | Wait for executor claim',
       'Claim status | Pending executor claim — no local-safe executor has claimed this apply request yet.',
       'Readiness summary | No backend preflight readiness evidence is attached yet. Use claim/lifecycle metadata and local-safe docs before treating this as ready for live AWS execution.',
     ],
@@ -11131,6 +11135,7 @@ const scenarios = [
       'Apply status | Running',
       'Executor worker | worker-stale',
       'Claim status | Claimed by worker-stale, but attention is needed. Reason: lease expired before the executor heartbeat refreshed it',
+      'Next safe action | Recover stale executor claim',
     ],
     link: { href: '/?page=plan&deployment=worker-prod&applyId=apply_running_stale', text: 'Open plan/apply workspace' },
   },
@@ -11155,6 +11160,7 @@ const scenarios = [
       'Apply status | Running',
       'Executor worker | worker-stale',
       'Claim status | Claimed by worker-stale, but attention is needed. Reason: lease expired before the executor heartbeat refreshed it',
+      'Next safe action | Recover stale executor claim',
     ],
     link: { href: '/?page=plan&deployment=worker-prod&applyId=apply_running_stale', text: 'Open plan/apply workspace' },
   },
@@ -11170,6 +11176,7 @@ const scenarios = [
       'Executor worker | worker-legacy',
       'Claimed at | 2026-04-18T08:00:00Z',
       'Claim status | Claimed by worker-legacy, but attention is needed. Reason: persisted claim expiry metadata is missing; Tenet inferred this legacy claim is stale from claimedAt, and manual recovery may be required.',
+      'Next safe action | Recover stale executor claim',
     ],
     unexpected: 'Freshness metadata unavailable for this active apply claim.',
     link: { href: '/?page=plan&deployment=legacy-prod&applyId=apply_running_legacy_stale', text: 'Open plan/apply workspace' },
@@ -11537,6 +11544,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Apply request failed')) throw new Error('expected apply failed heading after create');
   if (!text.includes('Immutable apply request apply_failed_123 was created and recorded as failed.')) throw new Error('expected apply failed create message');
   if (!text.includes('Stored apply request')) throw new Error('expected stored apply request section');
+  if (!text.includes('Apply next safe action')) throw new Error('expected apply next-safe-action section');
+  if (!text.includes('Next safe action | Review local-safe disabled result')) throw new Error('expected disabled apply next-safe-action cue after create');
+  if (!text.includes('Operator note | This failed record is the expected disabled-by-default local-safe outcome; review details, then create a fresh plan/apply only when execution should be retried.')) throw new Error('expected disabled apply next-safe-action detail after create');
   if (!text.includes('Apply execution readiness')) throw new Error('expected apply execution readiness section');
   if (!text.includes('Execution readiness | Local-safe disabled')) throw new Error('expected disabled readiness label after create');
   if (!text.includes('Readiness summary | Live AWS mutation is disabled for this local-safe apply record; this is expected metadata-only evidence, not an AWS readiness failure.')) throw new Error('expected disabled readiness summary after create');
@@ -11568,6 +11578,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-preview-actions', 'Plan preview actions'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-preview', 'Stored plan preview'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-actions', 'Apply request actions'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-next-action', 'Apply next safe action'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-apply', 'Stored apply request'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-readiness', 'Apply execution readiness'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-details', 'Apply request details'],
@@ -12412,7 +12423,7 @@ const fetch = (url) => {
   const currentSectionChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current section: Apply operations');
   if (!currentSectionChip) throw new Error('expected bookmarked plan/apply hash route to render the current-section chip');
   const sectionIDs = collectNodes(accounts, (node) => typeof node.id === 'string' && node.id.startsWith('plan-')).map((node) => node.id).sort();
-  const expectedSectionIDs = ['plan-apply-actions', 'plan-apply-details', 'plan-apply-operations', 'plan-apply-readiness', 'plan-approval-guidance', 'plan-operations', 'plan-preview-actions', 'plan-rollout-execution', 'plan-runtime-signals', 'plan-stored-apply', 'plan-stored-preview'];
+  const expectedSectionIDs = ['plan-apply-actions', 'plan-apply-details', 'plan-apply-next-action', 'plan-apply-operations', 'plan-apply-readiness', 'plan-approval-guidance', 'plan-operations', 'plan-preview-actions', 'plan-rollout-execution', 'plan-runtime-signals', 'plan-stored-apply', 'plan-stored-preview'];
   if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected plan section ids: ' + JSON.stringify(sectionIDs));
   const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#plan-'));
   const expectedLinks = [
@@ -12422,6 +12433,7 @@ const fetch = (url) => {
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-preview-actions', 'Plan preview actions'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-preview', 'Stored plan preview'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-actions', 'Apply request actions'],
+    ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-next-action', 'Apply next safe action'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-apply', 'Stored apply request'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-readiness', 'Apply execution readiness'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-details', 'Apply request details'],

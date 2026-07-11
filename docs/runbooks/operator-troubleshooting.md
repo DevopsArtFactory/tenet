@@ -43,7 +43,7 @@ perform live AWS mutation. The read-only `/?page=applies` monitor defaults to
 the queued subset read, adds explicit queued/active/stale view controls (`?appliesView=active`
 for the active collection, `?appliesView=stale` for stale active claims), preserves the explicit `Refresh applies` action and
 bookmarkable URL, translates claim heartbeat/lease metadata into fresh/stale/pending
-operator copy, renders backend `executionReadiness` summary/evidence when present,
+operator copy, renders backend `executionReadiness` summary/evidence and one `Next safe action` cue when present,
 keeps the explicit no-backend-preflight fallback copy when readiness evidence is
 missing, links operators back to the plan/apply workspace for detail review, and
 keeps JSON handoff, `Copy read route`, refresh, and Applications overview recovery actions visible on populated, empty, loading, unavailable, and generic fetch-error monitor states. Its summary strip

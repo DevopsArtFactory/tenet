@@ -2048,6 +2048,8 @@ for fragment in (
     "actions.push(createNavLink(buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }), 'Open field-level drift', '_self'));",
     "Plan preview actions",
     "Apply request actions",
+    "Apply next safe action",
+    "Next safe action",
     "Plan preview approval guidance",
     "Apply Plan",
     "Open bookmarked workspace",
@@ -2528,6 +2530,8 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
 for fragment in (
     "Plan preview actions",
     "Apply request actions",
+    "Apply next safe action",
+    "Next safe action",
     "Plan preview approval guidance",
     "Apply Plan",
     "On this page",
