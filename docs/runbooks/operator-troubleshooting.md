@@ -51,6 +51,13 @@ uses the labels `Queued applies`, `Lifecycle signals`, `Operation signals`, and
 `Claim signals` so operators can distinguish backlog size, lifecycle spread,
 operation spread, and claim-health cues before opening individual records.
 
+Apply handoff safety check: before describing an apply as actionable, capture
+three separate facts: the immutable apply record state (`GET /v1/applies/{applyId}`),
+the non-mutating readiness/preflight evidence (`GET /v1/applies/{applyId}/preflight`),
+and any local-safe claim freshness (`GET /v1/applies?status=active[&claim=stale]`).
+This proves Tenet preserved and can route the handoff; it does not prove that a
+CodeDeploy, ECS, ALB, ASG, or EC2 mutation ran or succeeded.
+
 ## Unavailable-State Decoder
 
 | State | Meaning | Next check |
