@@ -401,6 +401,86 @@ func TestServicePreflightIncludesConfiguredDeployerRoleProbeEvidence(t *testing.
 	}
 }
 
+func TestServiceExecutionPreviewNamesNextCodeDeployActionAndAWSContext(t *testing.T) {
+	store := &memoryStore{records: map[string]Record{
+		"apply_queued": {
+			ID:             "apply_queued",
+			PlanID:         "plan_1234",
+			DeploymentName: "api-prod",
+			Status:         StatusQueued,
+			CreatedAt:      "2026-04-18T08:05:00Z",
+			Lifecycle:      Lifecycle{UpdatedAt: "2026-04-18T08:06:00Z"},
+			Operations: []Operation{{
+				ID:      "op-codedeploy",
+				Phase:   "Promoting",
+				Target:  "api-prod-codedeploy-group (codeDeployDeploymentGroup)",
+				Summary: "Create CodeDeploy deployment.",
+			}},
+			Source: SourceContext{PlanID: "plan_1234", Route: "/v1/plans/plan_1234", PlanStatus: "ready"},
+		},
+	}}
+	service := Service{
+		Store: store,
+		DeployerRoleReadiness: func(ctx context.Context, target DeployerRoleTarget) (DeployerRoleReadiness, error) {
+			return DeployerRoleReadiness{
+				AWSAccountID:   "123456789012",
+				Region:         "ap-northeast-2",
+				RoleARN:        "arn:aws:iam::123456789012:role/TenetDeployerRole",
+				Configured:     true,
+				Ready:          true,
+				CheckedWithAWS: true,
+				Summary:        "Configured deployer role was assumed with a read-only identity probe.",
+			}, nil
+		},
+	}
+
+	preview, err := service.ExecutionPreview(context.Background(), "apply_queued")
+	if err != nil {
+		t.Fatalf("ExecutionPreview returned error: %v", err)
+	}
+	if !preview.ReadOnly || preview.ApplyID != "apply_queued" || preview.DeploymentName != "api-prod" || preview.CheckedAt != "2026-04-18T08:06:00Z" {
+		t.Fatalf("expected immutable read-only preview identity, got %+v", preview)
+	}
+	if preview.Operation == nil || preview.Operation.Action != "codedeploy:CreateDeployment" || preview.Operation.ResourceType != "codeDeployDeploymentGroup" || preview.Operation.ResourceName != "api-prod-codedeploy-group" {
+		t.Fatalf("expected next CodeDeploy action/resource preview, got %+v", preview.Operation)
+	}
+	if preview.Operation.RequiredRole != "arn:aws:iam::123456789012:role/TenetDeployerRole" || len(preview.Operation.CapabilityChecks) != 2 || preview.Operation.CapabilityChecks[1].Action != "codedeploy:CreateDeployment" {
+		t.Fatalf("expected role-aware CodeDeploy capability checks, got %+v", preview.Operation)
+	}
+	if preview.AWSContext.AWSAccountID != "123456789012" || preview.AWSContext.Region != "ap-northeast-2" || !preview.AWSContext.RoleConfigured || !preview.AWSContext.RoleReady || !preview.AWSContext.CheckedWithAWS {
+		t.Fatalf("expected target AWS context, got %+v", preview.AWSContext)
+	}
+	if preview.Blocker == nil || preview.Blocker.Reason != "live_aws_mutation_not_implemented" || !strings.Contains(preview.Blocker.Summary, "live AWS mutation is not implemented") {
+		t.Fatalf("expected explicit non-mutating blocker, got %+v", preview.Blocker)
+	}
+}
+
+func TestServiceExecutionPreviewNamesNextASGActionWithMissingRoleBlocker(t *testing.T) {
+	store := &memoryStore{records: map[string]Record{
+		"apply_asg": {ID: "apply_asg", PlanID: "plan_asg", DeploymentName: "web-prod", Status: StatusQueued, CreatedAt: "2026-04-18T08:05:00Z", Operations: []Operation{{ID: "op-asg", Phase: "Provisioning", Target: "web-prod-candidate (candidateAutoScalingGroup)", Summary: "Create replacement EC2 capacity for web-prod."}}},
+	}}
+	service := Service{
+		Store: store,
+		DeployerRoleReadiness: func(ctx context.Context, target DeployerRoleTarget) (DeployerRoleReadiness, error) {
+			return DeployerRoleReadiness{AWSAccountID: "210987654321", Region: "us-west-2", Configured: false, Ready: false, UnavailableReason: "missing_deployer_role", Summary: "No deployer role is configured for this target account and region."}, nil
+		},
+	}
+
+	preview, err := service.ExecutionPreview(context.Background(), "apply_asg")
+	if err != nil {
+		t.Fatalf("ExecutionPreview returned error: %v", err)
+	}
+	if preview.Operation == nil || preview.Operation.Action != "autoscaling:UpdateAutoScalingGroup" || preview.Operation.ResourceType != "candidateAutoScalingGroup" || preview.Operation.ResourceName != "web-prod-candidate" {
+		t.Fatalf("expected next ASG action/resource preview, got %+v", preview.Operation)
+	}
+	if preview.AWSContext.AWSAccountID != "210987654321" || preview.AWSContext.Region != "us-west-2" || preview.AWSContext.RoleConfigured || preview.AWSContext.RoleReady || preview.AWSContext.UnavailableReason != "missing_deployer_role" {
+		t.Fatalf("expected missing-role AWS context, got %+v", preview.AWSContext)
+	}
+	if preview.Blocker == nil || preview.Blocker.Reason != "missing_deployer_role" || !strings.Contains(preview.Blocker.Summary, "No deployer role") {
+		t.Fatalf("expected missing deployer role blocker, got %+v", preview.Blocker)
+	}
+}
+
 func TestServicePreflightReportsMissingDeployerRole(t *testing.T) {
 	store := &memoryStore{records: map[string]Record{
 		"apply_queued": {ID: "apply_queued", PlanID: "plan_1234", DeploymentName: "api-prod", Status: StatusQueued, CreatedAt: "2026-04-18T08:05:00Z", Operations: []Operation{{Target: "api-prod-service (ecsService)"}}},

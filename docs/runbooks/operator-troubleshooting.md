@@ -35,7 +35,7 @@ Local-safe apply executor release guard: reviewers should verify the
 active collection (`GET /v1/applies?status=active`), stale active-claim collection
 (`GET /v1/applies?status=active&claim=stale`), queued exact subset
 (`GET /v1/applies?status=queued`), terminal exact subsets (`GET /v1/applies?status=failed`, `GET /v1/applies?status=succeeded`, and `GET /v1/applies?status=cancelled`), stored apply read (`GET /v1/applies/{applyId}`),
-non-mutating preflight read (`GET /v1/applies/{applyId}/preflight`), claim (`POST /v1/applies/{applyId}/claim`),
+non-mutating preflight read (`GET /v1/applies/{applyId}/preflight`), read-only execution preview (`GET /v1/applies/{applyId}/execution-preview`), claim (`POST /v1/applies/{applyId}/claim`),
 heartbeat (`POST /v1/applies/{applyId}/heartbeat`), and transition
 (`POST /v1/applies/{applyId}/transitions`) routes together. They persist and
 advance Tenet apply metadata only; this local-safe record lifecycle does not
@@ -53,7 +53,7 @@ operation spread, and claim-health cues before opening individual records.
 
 Apply handoff safety check: before describing an apply as actionable, capture
 three separate facts: the immutable apply record state (`GET /v1/applies/{applyId}`),
-the non-mutating readiness/preflight evidence (`GET /v1/applies/{applyId}/preflight`),
+the non-mutating readiness/preflight evidence (`GET /v1/applies/{applyId}/preflight`) and read-only execution preview (`GET /v1/applies/{applyId}/execution-preview`),
 and any local-safe claim freshness (`GET /v1/applies?status=active[&claim=stale]`).
 This proves Tenet preserved and can route the handoff; it does not prove that a
 CodeDeploy, ECS, ALB, ASG, or EC2 mutation ran or succeeded.

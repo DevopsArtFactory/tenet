@@ -2413,6 +2413,7 @@ type Options struct {
 	ApplyRequests                        func(context.Context, applyrequest.ListQuery) ([]applyrequest.Record, error)
 	ApplyRequest                         func(context.Context, string) (applyrequest.Record, error)
 	ApplyExecutionPreflight              func(context.Context, string) (applyrequest.ExecutionReadiness, error)
+	ApplyExecutionPreview                func(context.Context, string) (applyrequest.ExecutionActionPreview, error)
 	ClaimApplyRequest                    func(context.Context, string, applyrequest.ClaimRequest) (applyrequest.Record, error)
 	HeartbeatApplyRequest                func(context.Context, string, applyrequest.HeartbeatRequest) (applyrequest.Record, error)
 	TransitionApplyRequest               func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error)
@@ -3348,6 +3349,38 @@ func NewRouter(options Options) http.Handler {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(readiness)
+		case len(segments) == 2 && segments[0] != "" && segments[1] == "execution-preview":
+			if !requireMethod(w, r, http.MethodGet) {
+				return
+			}
+			if options.ApplyExecutionPreview == nil {
+				http.Error(w, "apply execution preview unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			if !requireDeploymentReadIdentity(w, r, options) {
+				return
+			}
+			if options.RequireDeploymentReadAuthorization {
+				if options.ApplyRequest == nil {
+					http.Error(w, "apply request unavailable", http.StatusServiceUnavailable)
+					return
+				}
+				record, err := options.ApplyRequest(r.Context(), segments[0])
+				if err != nil {
+					respondLookupError(w, err)
+					return
+				}
+				if !requireDeploymentReadAccessWithOptions(w, r, options, record.DeploymentName) {
+					return
+				}
+			}
+			preview, err := options.ApplyExecutionPreview(r.Context(), segments[0])
+			if err != nil {
+				respondLookupError(w, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(preview)
 		case len(segments) == 2 && segments[0] != "" && segments[1] == "claim":
 			if !requireMethod(w, r, http.MethodPost) {
 				return
