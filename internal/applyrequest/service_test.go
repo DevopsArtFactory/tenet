@@ -152,6 +152,10 @@ func TestServiceCreatePersistsImmutableFailedApplyRequestWhenExecutionIsDisabled
 	if len(first.Record.ExecutionReadiness.Operations) != 2 || first.Record.ExecutionReadiness.Operations[0].RequiredCapability != "codedeploy:CreateDeployment" || first.Record.ExecutionReadiness.Operations[0].Ready {
 		t.Fatalf("expected non-mutating per-operation preflight rows, got %+v", first.Record.ExecutionReadiness.Operations)
 	}
+	checks := first.Record.ExecutionReadiness.Operations[0].CapabilityChecks
+	if len(checks) != 2 || checks[0].Action != "codedeploy:GetDeploymentGroup" || checks[1].Action != "codedeploy:CreateDeployment" || checks[0].State != "blocked" || checks[0].Reason != "execution_disabled" {
+		t.Fatalf("expected deterministic CodeDeploy capability checks, got %+v", checks)
+	}
 	if handoffs := first.Record.ExecutionReadiness.Operations[0].Handoffs; handoffs == nil || handoffs.DeploymentDetailRoute != "/v1/overview/deployments/api-prod" || handoffs.PlanApplyWorkspaceRoute != "/?applyId="+first.Record.ID+"&deployment=api-prod&page=plan&planId="+plan.ID || handoffs.ResourceInspectionRoute != "/v1/overview/deployments/api-prod/resource-inspection?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup" || handoffs.ResourceLogsRoute != "/v1/overview/deployments/api-prod/resource-logs?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup" {
 		t.Fatalf("expected operation troubleshooting handoffs, got %+v", handoffs)
 	}
@@ -278,11 +282,51 @@ func TestServicePreflightReturnsBackendAuthoredReadinessEvidence(t *testing.T) {
 	if operation.RequiredCapability != "codedeploy:CreateDeployment" || operation.RequiredRole == "" || !operation.InputsSufficient || operation.Ready || operation.UnavailableReason != "live_aws_mutation_not_implemented" {
 		t.Fatalf("expected explicit blocked AWS capability preflight row, got %+v", operation)
 	}
+	if len(operation.CapabilityChecks) != 2 || operation.CapabilityChecks[0].Action != "codedeploy:GetDeploymentGroup" || operation.CapabilityChecks[1].Action != "codedeploy:CreateDeployment" || operation.CapabilityChecks[0].RequiredRole != operation.RequiredRole || operation.CapabilityChecks[0].State != "blocked" || operation.CapabilityChecks[0].Reason != "live_aws_mutation_not_implemented" {
+		t.Fatalf("expected nested CodeDeploy capability matrix, got %+v", operation.CapabilityChecks)
+	}
 	if operation.Handoffs == nil || operation.Handoffs.DeploymentDetailRoute != "/v1/overview/deployments/api-prod" || operation.Handoffs.PlanApplyWorkspaceRoute != "/?applyId=apply_1234abcd&deployment=api-prod&page=plan&planId=plan_1234abcd" {
 		t.Fatalf("expected deployment and workspace handoffs, got %+v", operation.Handoffs)
 	}
 	if operation.Handoffs.ResourceInspectionRoute != "/v1/overview/deployments/api-prod/resource-inspection?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup" || operation.Handoffs.ResourceLogsRoute != "/v1/overview/deployments/api-prod/resource-logs?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup" {
 		t.Fatalf("expected resource troubleshooting handoffs, got %+v", operation.Handoffs)
+	}
+}
+
+func TestServicePreflightIncludesASGCapabilityMatrix(t *testing.T) {
+	store := &memoryStore{records: map[string]Record{
+		"apply_asg": {
+			ID:             "apply_asg",
+			PlanID:         "plan_asg",
+			DeploymentName: "web-prod",
+			Status:         StatusQueued,
+			CreatedAt:      "2026-04-18T08:05:00Z",
+			Operations: []Operation{{
+				ID:      "op-asg",
+				Phase:   "Provisioning",
+				Target:  "web-prod-candidate (candidateAutoScalingGroup)",
+				Summary: "Create replacement EC2 capacity for web-prod.",
+			}},
+		},
+	}}
+	service := Service{Store: store}
+
+	readiness, err := service.Preflight(context.Background(), "apply_asg")
+	if err != nil {
+		t.Fatalf("Preflight returned error: %v", err)
+	}
+	if len(readiness.Operations) != 1 {
+		t.Fatalf("expected one operation, got %+v", readiness.Operations)
+	}
+	operation := readiness.Operations[0]
+	if operation.RequiredCapability != "autoscaling:UpdateAutoScalingGroup" || operation.ResourceType != "candidateAutoScalingGroup" {
+		t.Fatalf("expected ASG capability row, got %+v", operation)
+	}
+	if len(operation.CapabilityChecks) != 2 || operation.CapabilityChecks[0].Action != "autoscaling:DescribeAutoScalingGroups" || operation.CapabilityChecks[1].Action != "autoscaling:UpdateAutoScalingGroup" {
+		t.Fatalf("expected deterministic ASG capability checks, got %+v", operation.CapabilityChecks)
+	}
+	if operation.CapabilityChecks[0].State != "blocked" || operation.CapabilityChecks[0].ResourceName != "web-prod-candidate" || !strings.Contains(operation.CapabilityChecks[0].Summary, "EC2/ASG rollout boundary") {
+		t.Fatalf("expected operator-facing ASG capability summary, got %+v", operation.CapabilityChecks[0])
 	}
 }
 

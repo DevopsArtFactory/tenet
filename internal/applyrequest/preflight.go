@@ -52,6 +52,18 @@ type OperationExecutionPreflightHandoffs struct {
 	ResourceLogsRoute       string `json:"resourceLogsRoute,omitempty"`
 }
 
+// OperationExecutionCapabilityCheck captures one deterministic, non-mutating capability item
+// that a future live executor would need to satisfy before mutating AWS resources.
+type OperationExecutionCapabilityCheck struct {
+	Action       string `json:"action"`
+	ResourceType string `json:"resourceType,omitempty"`
+	ResourceName string `json:"resourceName,omitempty"`
+	RequiredRole string `json:"requiredRole"`
+	State        string `json:"state"`
+	Reason       string `json:"reason,omitempty"`
+	Summary      string `json:"summary"`
+}
+
 // OperationExecutionPreflight captures one non-mutating readiness row for an apply operation.
 type OperationExecutionPreflight struct {
 	OperationID        string                               `json:"operationId,omitempty"`
@@ -65,6 +77,7 @@ type OperationExecutionPreflight struct {
 	Ready              bool                                 `json:"ready"`
 	UnavailableReason  string                               `json:"unavailableReason,omitempty"`
 	Summary            string                               `json:"summary"`
+	CapabilityChecks   []OperationExecutionCapabilityCheck  `json:"capabilityChecks,omitempty"`
 	Handoffs           *OperationExecutionPreflightHandoffs `json:"handoffs,omitempty"`
 }
 
@@ -81,6 +94,8 @@ func (s Service) Preflight(ctx context.Context, id string) (ExecutionReadiness, 
 		readiness = *record.ExecutionReadiness
 		if len(readiness.Operations) == 0 && len(record.Operations) > 0 {
 			readiness.Operations = deriveOperationExecutionPreflight(record, nil)
+		} else {
+			readiness.Operations = backfillOperationCapabilityChecks(readiness.Operations)
 		}
 	}
 	if s.DeployerRoleReadiness == nil {
@@ -193,6 +208,7 @@ func deriveOperationExecutionPreflight(record Record, role *DeployerRoleReadines
 			Ready:              false,
 			UnavailableReason:  reason,
 			Summary:            summary,
+			CapabilityChecks:   operationCapabilityChecks(resourceType, resourceName, requiredRole, reason, inputsSufficient),
 			Handoffs:           operationExecutionHandoffs(record, resourceType, resourceName),
 		})
 	}
@@ -248,6 +264,87 @@ func parseOperationTarget(target string) (string, string) {
 		}
 	}
 	return target, ""
+}
+
+func backfillOperationCapabilityChecks(rows []OperationExecutionPreflight) []OperationExecutionPreflight {
+	if len(rows) == 0 {
+		return rows
+	}
+	backfilled := make([]OperationExecutionPreflight, len(rows))
+	copy(backfilled, rows)
+	for i := range backfilled {
+		if len(backfilled[i].CapabilityChecks) > 0 {
+			continue
+		}
+		inputsSufficient := backfilled[i].InputsSufficient
+		if strings.TrimSpace(backfilled[i].Target) == "" {
+			inputsSufficient = false
+		}
+		backfilled[i].CapabilityChecks = operationCapabilityChecks(backfilled[i].ResourceType, backfilled[i].ResourceName, backfilled[i].RequiredRole, backfilled[i].UnavailableReason, inputsSufficient)
+	}
+	return backfilled
+}
+
+func operationCapabilityChecks(resourceType, resourceName, requiredRole, reason string, inputsSufficient bool) []OperationExecutionCapabilityCheck {
+	actions := capabilityActions(resourceType)
+	if len(actions) == 0 {
+		actions = []string{"future AWS mutation capability"}
+	}
+	state := "blocked"
+	if !inputsSufficient {
+		state = "unknown"
+	}
+	summary := capabilityCheckSummary(resourceType, state)
+	checks := make([]OperationExecutionCapabilityCheck, 0, len(actions))
+	for _, action := range actions {
+		checks = append(checks, OperationExecutionCapabilityCheck{
+			Action:       action,
+			ResourceType: resourceType,
+			ResourceName: resourceName,
+			RequiredRole: requiredRole,
+			State:        state,
+			Reason:       reason,
+			Summary:      summary,
+		})
+	}
+	return checks
+}
+
+func capabilityActions(resourceType string) []string {
+	switch resourceType {
+	case "codeDeployDeploymentGroup":
+		return []string{"codedeploy:GetDeploymentGroup", "codedeploy:CreateDeployment"}
+	case "codeDeployApplication":
+		return []string{"codedeploy:GetApplication"}
+	case "ecsService":
+		return []string{"ecs:DescribeServices", "ecs:UpdateService"}
+	case "blueTaskSetTargetGroup", "greenTaskSetTargetGroup", "activeTargetGroup", "candidateTargetGroup":
+		return []string{"elasticloadbalancing:DescribeTargetGroups"}
+	case "productionListener", "testListener":
+		return []string{"elasticloadbalancing:DescribeListeners", "elasticloadbalancing:ModifyListener"}
+	case "productionListenerRule", "trafficShiftPlan":
+		return []string{"elasticloadbalancing:DescribeRules", "elasticloadbalancing:ModifyRule"}
+	case "candidateAutoScalingGroup", "serviceAutoScalingGroup":
+		return []string{"autoscaling:DescribeAutoScalingGroups", "autoscaling:UpdateAutoScalingGroup"}
+	case "userDataBootstrapSource":
+		return []string{"ec2:DescribeLaunchTemplateVersions"}
+	default:
+		return []string{"future AWS mutation capability"}
+	}
+}
+
+func capabilityCheckSummary(resourceType, state string) string {
+	family := "this rollout resource"
+	switch resourceType {
+	case "codeDeployDeploymentGroup", "codeDeployApplication", "ecsService", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup", "productionListener", "testListener":
+		family = "the ECS/CodeDeploy rollout boundary"
+	case "candidateAutoScalingGroup", "serviceAutoScalingGroup", "activeTargetGroup", "candidateTargetGroup", "productionListenerRule", "trafficShiftPlan", "userDataBootstrapSource":
+		family = "the EC2/ASG rollout boundary"
+	}
+	if state == "unknown" {
+		return "Tenet cannot evaluate the required capability because the reviewed operation lacks a concrete resource target."
+	}
+	return "Future live executors must prove this AWS capability for " + family + "; this local-safe preflight does not perform live mutation."
 }
 
 func requiredCapability(resourceType string) string {
