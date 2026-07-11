@@ -3530,6 +3530,8 @@ queued_plan_preview_get_path=$(write_payload queued-plan-preview-get.json "$queu
 queued_apply_record_get_path=$(write_payload queued-apply-record-get.json "$queued_apply_record_get")
 file_backed_claim_apply_id=apply_smoke_docker_claim_heartbeat
 file_backed_queued_apply_id=apply_smoke_docker_queued_subset
+file_backed_succeeded_apply_id=apply_smoke_docker_succeeded_subset
+file_backed_cancelled_apply_id=apply_smoke_docker_cancelled_subset
 docker_apply_store_before_claim=$("${COMPOSE[@]}" exec -T api sh -c 'cat /tmp/tenet/apply-requests.json 2>/dev/null || printf "[]\n"')
 docker_apply_store_before_claim_path=$(write_payload docker-apply-store-before-claim.json "$docker_apply_store_before_claim")
 docker_apply_store_seeded_path="$PAYLOAD_DIR/docker-apply-store-seeded.json"
@@ -3538,6 +3540,8 @@ APPLY_STORE_PATH="$docker_apply_store_before_claim_path" \
 OUTPUT_PATH="$docker_apply_store_seeded_path" \
 CLAIM_APPLY_ID="$file_backed_claim_apply_id" \
 QUEUED_APPLY_ID="$file_backed_queued_apply_id" \
+SUCCEEDED_APPLY_ID="$file_backed_succeeded_apply_id" \
+CANCELLED_APPLY_ID="$file_backed_cancelled_apply_id" \
 python3 - <<'PY'
 import json
 import os
@@ -3552,33 +3556,43 @@ store_text = store_path.read_text(encoding="utf-8").strip()
 records = json.loads(store_text or "[]")
 claim_apply_id = os.environ["CLAIM_APPLY_ID"]
 queued_apply_id = os.environ["QUEUED_APPLY_ID"]
-records = [record for record in records if record.get("id") not in {claim_apply_id, queued_apply_id}]
+succeeded_apply_id = os.environ["SUCCEEDED_APPLY_ID"]
+cancelled_apply_id = os.environ["CANCELLED_APPLY_ID"]
+seeded_ids = {claim_apply_id, queued_apply_id, succeeded_apply_id, cancelled_apply_id}
+records = [record for record in records if record.get("id") not in seeded_ids]
 
-def apply_record(apply_id, created_at):
+def operation_rows(status):
+    return [
+        {
+            "id": operation.get("id", ""),
+            "status": status,
+            "phase": operation.get("phase", ""),
+            "target": operation.get("target", ""),
+            "summary": operation.get("summary", ""),
+        }
+        for operation in operations
+    ]
+
+def apply_record(apply_id, created_at, status="queued"):
+    lifecycle = {
+        "updatedAt": created_at,
+        "totalSteps": len(operations),
+    }
+    if status in {"succeeded", "cancelled"}:
+        lifecycle["finishedAt"] = created_at
+        lifecycle["completedSteps"] = len(operations)
     return {
         "id": apply_id,
         "planId": plan["id"],
         "deploymentName": plan["deploymentName"],
-        "status": "queued",
+        "status": status,
         "createdAt": created_at,
         "details": [
             "Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true enabled the local-safe executor handoff path.",
             "Tenet will advance this same applyId locally, but live AWS mutation is still not implemented for this backend slice.",
         ],
-        "lifecycle": {
-            "updatedAt": created_at,
-            "totalSteps": len(operations),
-        },
-        "operations": [
-            {
-                "id": operation.get("id", ""),
-                "status": "queued",
-                "phase": operation.get("phase", ""),
-                "target": operation.get("target", ""),
-                "summary": operation.get("summary", ""),
-            }
-            for operation in operations
-        ],
+        "lifecycle": lifecycle,
+        "operations": operation_rows(status),
         "source": {
             "planId": plan["id"],
             "route": f"/v1/plans/{plan['id']}",
@@ -3590,6 +3604,8 @@ def apply_record(apply_id, created_at):
 
 records.append(apply_record(claim_apply_id, "2026-04-18T08:10:00Z"))
 records.append(apply_record(queued_apply_id, "2026-04-18T08:09:00Z"))
+records.append(apply_record(succeeded_apply_id, "2026-04-18T08:08:00Z", "succeeded"))
+records.append(apply_record(cancelled_apply_id, "2026-04-18T08:07:00Z", "cancelled"))
 Path(os.environ["OUTPUT_PATH"]).write_text(json.dumps(records, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
 "${COMPOSE[@]}" exec -T api sh -c 'mkdir -p /tmp/tenet && cat > /tmp/tenet/apply-requests.json' <"$docker_apply_store_seeded_path"
@@ -3606,11 +3622,15 @@ file_backed_claimed_apply_heartbeat=$(curl -fsS \
   "$API_BASE_URL/v1/applies/$file_backed_claim_apply_id/heartbeat")
 file_backed_active_apply_records_after_heartbeat=$(curl -fsS "$API_BASE_URL/v1/applies?status=active")
 file_backed_queued_apply_records_after_heartbeat=$(curl -fsS "$API_BASE_URL/v1/applies?status=queued")
+file_backed_succeeded_apply_records=$(curl -fsS "$API_BASE_URL/v1/applies?status=succeeded")
+file_backed_cancelled_apply_records=$(curl -fsS "$API_BASE_URL/v1/applies?status=cancelled")
 file_backed_active_apply_records_before_claim_path=$(write_payload file-backed-active-apply-records-before-claim.json "$file_backed_active_apply_records_before_claim")
 file_backed_claimed_apply_record_path=$(write_payload file-backed-claimed-apply-record.json "$file_backed_claimed_apply_record")
 file_backed_claimed_apply_heartbeat_path=$(write_payload file-backed-claimed-apply-heartbeat.json "$file_backed_claimed_apply_heartbeat")
 file_backed_active_apply_records_after_heartbeat_path=$(write_payload file-backed-active-apply-records-after-heartbeat.json "$file_backed_active_apply_records_after_heartbeat")
 file_backed_queued_apply_records_after_heartbeat_path=$(write_payload file-backed-queued-apply-records-after-heartbeat.json "$file_backed_queued_apply_records_after_heartbeat")
+file_backed_succeeded_apply_records_path=$(write_payload file-backed-succeeded-apply-records.json "$file_backed_succeeded_apply_records")
+file_backed_cancelled_apply_records_path=$(write_payload file-backed-cancelled-apply-records.json "$file_backed_cancelled_apply_records")
 
 QUEUED_PLAN_PREVIEW_PATH="$queued_plan_preview_path" \
 QUEUED_PLAN_PREVIEW_GET_PATH="$queued_plan_preview_get_path" \
@@ -3621,8 +3641,12 @@ FILE_BACKED_CLAIMED_APPLY_RECORD_PATH="$file_backed_claimed_apply_record_path" \
 FILE_BACKED_CLAIMED_APPLY_HEARTBEAT_PATH="$file_backed_claimed_apply_heartbeat_path" \
 FILE_BACKED_ACTIVE_AFTER_HEARTBEAT_PATH="$file_backed_active_apply_records_after_heartbeat_path" \
 FILE_BACKED_QUEUED_AFTER_HEARTBEAT_PATH="$file_backed_queued_apply_records_after_heartbeat_path" \
+FILE_BACKED_SUCCEEDED_APPLY_RECORDS_PATH="$file_backed_succeeded_apply_records_path" \
+FILE_BACKED_CANCELLED_APPLY_RECORDS_PATH="$file_backed_cancelled_apply_records_path" \
 FILE_BACKED_CLAIM_APPLY_ID="$file_backed_claim_apply_id" \
 FILE_BACKED_QUEUED_APPLY_ID="$file_backed_queued_apply_id" \
+FILE_BACKED_SUCCEEDED_APPLY_ID="$file_backed_succeeded_apply_id" \
+FILE_BACKED_CANCELLED_APPLY_ID="$file_backed_cancelled_apply_id" \
 python3 - <<'PY'
 import json
 import os
@@ -3645,9 +3669,15 @@ with open(os.environ["FILE_BACKED_ACTIVE_AFTER_HEARTBEAT_PATH"], encoding="utf-8
     file_backed_active_after_heartbeat = json.load(fh)
 with open(os.environ["FILE_BACKED_QUEUED_AFTER_HEARTBEAT_PATH"], encoding="utf-8") as fh:
     file_backed_queued_after_heartbeat = json.load(fh)
+with open(os.environ["FILE_BACKED_SUCCEEDED_APPLY_RECORDS_PATH"], encoding="utf-8") as fh:
+    file_backed_succeeded_records = json.load(fh)
+with open(os.environ["FILE_BACKED_CANCELLED_APPLY_RECORDS_PATH"], encoding="utf-8") as fh:
+    file_backed_cancelled_records = json.load(fh)
 
 file_backed_claim_apply_id = os.environ["FILE_BACKED_CLAIM_APPLY_ID"]
 file_backed_queued_apply_id = os.environ["FILE_BACKED_QUEUED_APPLY_ID"]
+file_backed_succeeded_apply_id = os.environ["FILE_BACKED_SUCCEEDED_APPLY_ID"]
+file_backed_cancelled_apply_id = os.environ["FILE_BACKED_CANCELLED_APPLY_ID"]
 
 assert queued_plan_preview["deploymentName"] == "worker-prod", queued_plan_preview
 assert queued_plan_preview["status"] == "ready", queued_plan_preview
@@ -3730,7 +3760,20 @@ assert all(record.get("status") == "queued" for record in file_backed_queued_aft
 queued_after_heartbeat_ids = {record.get("id") for record in file_backed_queued_after_heartbeat}
 assert file_backed_claim_apply_id not in queued_after_heartbeat_ids, file_backed_queued_after_heartbeat
 assert queued_after_heartbeat_ids.issubset(set(active_after_heartbeat_by_id)), (file_backed_queued_after_heartbeat, file_backed_active_after_heartbeat)
+
+assert isinstance(file_backed_succeeded_records, list), file_backed_succeeded_records
+assert all(record.get("status") == "succeeded" for record in file_backed_succeeded_records), file_backed_succeeded_records
+succeeded_record_by_id = {record.get("id"): record for record in file_backed_succeeded_records}
+assert succeeded_record_by_id[file_backed_succeeded_apply_id]["operations"], file_backed_succeeded_records
+assert all(operation.get("status") == "succeeded" for operation in succeeded_record_by_id[file_backed_succeeded_apply_id]["operations"]), succeeded_record_by_id[file_backed_succeeded_apply_id]
+
+assert isinstance(file_backed_cancelled_records, list), file_backed_cancelled_records
+assert all(record.get("status") == "cancelled" for record in file_backed_cancelled_records), file_backed_cancelled_records
+cancelled_record_by_id = {record.get("id"): record for record in file_backed_cancelled_records}
+assert cancelled_record_by_id[file_backed_cancelled_apply_id]["operations"], file_backed_cancelled_records
+assert all(operation.get("status") == "cancelled" for operation in cancelled_record_by_id[file_backed_cancelled_apply_id]["operations"]), cancelled_record_by_id[file_backed_cancelled_apply_id]
 PY
 
 echo "Verified active/queued apply collection split and claim freshness"
+echo "Verified active/queued and terminal apply collection filters plus claim freshness"
 echo "smoke-docker: compose stack path ok"

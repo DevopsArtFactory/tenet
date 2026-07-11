@@ -1049,6 +1049,20 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 	}
 
 	for name, text := range map[string]string{
+		"README":        docs["README"],
+		"local runtime": docs["local runtime"],
+	} {
+		for _, fragment := range []string{
+			"Local and Docker smoke cover the active-vs-queued apply collection split, stale-claim refinement, and terminal exact subsets",
+			"`GET /v1/applies?status=succeeded` / `GET /v1/applies?status=cancelled` return only matching terminal records",
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s docs to include Docker terminal apply filter release-guard fragment %q", name, fragment)
+			}
+		}
+	}
+
+	for name, text := range map[string]string{
 		"smoke-local":  readTextFile(t, "../scripts/smoke-local.sh"),
 		"smoke-docker": readTextFile(t, "../scripts/smoke-docker.sh"),
 	} {
@@ -1083,9 +1097,16 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 		"smoke-docker": {
 			"file_backed_active_apply_records_before_claim=$(curl -fsS \"$API_BASE_URL/v1/applies?status=active\")",
 			"file_backed_queued_apply_records_after_heartbeat=$(curl -fsS \"$API_BASE_URL/v1/applies?status=queued\")",
+			"file_backed_succeeded_apply_records=$(curl -fsS \"$API_BASE_URL/v1/applies?status=succeeded\")",
+			"file_backed_cancelled_apply_records=$(curl -fsS \"$API_BASE_URL/v1/applies?status=cancelled\")",
+			"FILE_BACKED_SUCCEEDED_APPLY_RECORDS_PATH",
+			"FILE_BACKED_CANCELLED_APPLY_RECORDS_PATH",
 			"it can claim or advance seeded queued records between read requests",
 			"assert file_backed_claimed_apply_heartbeat[\"claim\"][\"expiresAt\"]",
 			"assert file_backed_claim_apply_id not in queued_after_heartbeat_ids",
+			"assert all(record.get(\"status\") == \"succeeded\" for record in file_backed_succeeded_records)",
+			"assert all(record.get(\"status\") == \"cancelled\" for record in file_backed_cancelled_records)",
+			"Verified active/queued and terminal apply collection filters plus claim freshness",
 		},
 	} {
 		text := map[string]string{
