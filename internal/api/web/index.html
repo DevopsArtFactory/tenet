@@ -9272,6 +9272,56 @@
         }
         return rows;
       };
+      const formatNonZeroCountParts = (parts, fallback = 'None reported') => {
+        const text = parts.filter(([, count]) => count > 0).map(([label, count]) => `${count} ${label}`).join(' · ');
+        return text || fallback;
+      };
+      const appliesMonitorClaimSignal = (record) => {
+        if (!isActiveApplyRecord(record) && !hasApplyClaimCoreMetadata(record)) return 'none';
+        if (!hasApplyClaimCoreMetadata(record)) return 'pending';
+        const state = applyClaimFreshnessState(record);
+        const expiresAt = applyClaimDateValue(record, 'expiresAt');
+        const legacyExpiresAt = legacyApplyClaimExpiryDate(record);
+        const staleStates = ['stale', 'expired', 'lease_expired', 'lease-expired', 'heartbeat_stale', 'heartbeat-stale'];
+        if (staleStates.includes(state) || (expiresAt && expiresAt.getTime() <= Date.now()) || (legacyExpiresAt && legacyExpiresAt.getTime() <= Date.now())) return 'attention';
+        const freshStates = ['fresh', 'healthy', 'active'];
+        if (freshStates.includes(state) || applyClaimFreshnessValue(record, 'lastHeartbeatAt') !== '—' || (expiresAt && expiresAt.getTime() > Date.now())) return 'current';
+        return 'unknown';
+      };
+      const appliesMonitorSummaryMetrics = (records) => {
+        const lifecycle = { queued: 0, running: 0, succeeded: 0, failed: 0, cancelled: 0 };
+        const operations = { total: 0, queued: 0, running: 0, succeeded: 0, failed: 0, cancelled: 0 };
+        const claims = { current: 0, attention: 0, pending: 0, unknown: 0 };
+        (records || []).forEach((record) => {
+          lifecycle[normalizeApplyRecordStatus(record?.status)] += 1;
+          const operationCounts = applyOperationCounts(record?.operations || []);
+          operations.total += operationCounts.total;
+          operations.queued += operationCounts.queued;
+          operations.running += operationCounts.running;
+          operations.succeeded += operationCounts.succeeded;
+          operations.failed += operationCounts.failed;
+          operations.cancelled += operationCounts.cancelled;
+          const claimSignal = appliesMonitorClaimSignal(record);
+          if (claims[claimSignal] !== undefined) claims[claimSignal] += 1;
+        });
+        const terminalOperations = operations.succeeded + operations.failed + operations.cancelled;
+        return [
+          ['Lifecycle signals', formatNonZeroCountParts([
+            ['queued', lifecycle.queued],
+            ['running', lifecycle.running],
+            ['succeeded', lifecycle.succeeded],
+            ['failed', lifecycle.failed],
+            ['cancelled', lifecycle.cancelled],
+          ])],
+          ['Operation signals', operations.total ? `${terminalOperations}/${operations.total} terminal · ${operations.running} running · ${operations.queued} queued` : 'No stored apply operations yet'],
+          ['Claim signals', formatNonZeroCountParts([
+            ['current', claims.current],
+            ['attention', claims.attention],
+            ['pending', claims.pending],
+            ['unknown', claims.unknown],
+          ], 'No executor claim signals reported')],
+        ];
+      };
       const createQueuedApplyRow = (record) => {
         const row = createElement('article', 'row');
         const top = createElement('div', 'row-toggle');
@@ -9349,9 +9399,11 @@
         controls.append(createElement('div', 'toolbar-active', `Monitor view: ${appliesMonitorViewLabel(view)}`), createAppliesMonitorViewControl(state));
         toolbar.append(controls);
         const summary = document.getElementById('summary');
+        const summaryMetrics = appliesMonitorSummaryMetrics(records).map(([label, value]) => createMetric(label, value, 'summary'));
         summary.replaceChildren(
           createMetric(appliesMonitorViewLabel(view), String(records.length)),
           createMetric('Read route', readRoute, 'summary'),
+          ...summaryMetrics,
         );
 
         const header = createElement('article', 'account');

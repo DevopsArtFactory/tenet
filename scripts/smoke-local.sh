@@ -2151,6 +2151,10 @@ assert "syncAppliesMonitorPageState();" in applies_ui, applies_ui
 assert "createNavLink(buildPageURL('plan', { deployment: record.deploymentName, applyId: record.id }), 'Open plan/apply workspace', '_self')" in applies_ui, applies_ui
 assert "['Operation progress', applyOperationProgressSummary(record.operations || []), 'summary']" in applies_ui, applies_ui
 assert "['Claim status', applyClaimFreshnessSummary(record, { inferLegacyStale: true }), 'summary']" in applies_ui, applies_ui
+assert "const appliesMonitorSummaryMetrics = (records) => {" in applies_ui, applies_ui
+assert "['Lifecycle signals', formatNonZeroCountParts([" in applies_ui, applies_ui
+assert "['Operation signals', operations.total ? `${terminalOperations}/${operations.total} terminal · ${operations.running} running · ${operations.queued} queued` : 'No stored apply operations yet']" in applies_ui, applies_ui
+assert "['Claim signals', formatNonZeroCountParts([" in applies_ui, applies_ui
 assert "persisted claim expiry metadata is missing; Tenet inferred this legacy claim is stale from claimedAt" in applies_ui, applies_ui
 assert "Pending executor claim — no local-safe executor has claimed this apply request yet." in applies_ui, applies_ui
 assert "heartbeat freshness looks current" in applies_ui, applies_ui
