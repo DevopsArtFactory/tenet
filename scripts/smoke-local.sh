@@ -2140,6 +2140,11 @@ assert "return appliesMonitorReadRoute(pageState?.appliesView || 'queued');" in 
 assert "appliesView: normalizeAppliesMonitorView(params.get('appliesView') || params.get('applyView') || '')," in applies_ui, applies_ui
 assert "renderQueuedAppliesPage(appliesState);" in applies_ui, applies_ui
 assert "Loading ${appliesMonitorLoadingLabel(view)} from ${readRoute}…" in applies_ui, applies_ui
+assert "const createAppliesMonitorRecoveryActions = (state = {}) => {" in applies_ui, applies_ui
+assert "createCopyReadRouteButton(readRoute)" in applies_ui, applies_ui
+assert "renderQueuedAppliesState(`Loading ${appliesMonitorLoadingLabel(view)} from ${readRoute}…`, '', createAppliesMonitorRecoveryActions(state), state);" in applies_ui, applies_ui
+assert "renderQueuedAppliesState(`${appliesMonitorViewLabel(view)} are temporarily unavailable.${detail}`, 'error', createAppliesMonitorRecoveryActions(state), state);" in applies_ui, applies_ui
+assert "...createAppliesMonitorRecoveryActions(state)," in applies_ui, applies_ui
 assert "No queued apply requests are visible right now. GET /v1/applies?status=queued returned an empty collection." in applies_ui, applies_ui
 assert "No active apply handoffs are visible right now. GET /v1/applies?status=active returned an empty collection." in applies_ui, applies_ui
 assert "No stale active apply claims are visible right now. GET /v1/applies?status=active&claim=stale returned an empty collection." in applies_ui, applies_ui

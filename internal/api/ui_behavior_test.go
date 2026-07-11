@@ -11184,6 +11184,18 @@ const scenarios = [
     ],
   },
   {
+    name: 'generic error keeps recovery actions',
+    search: '?page=applies&appliesView=active',
+    response: { ok: false, status: 500, text: () => Promise.resolve('database unavailable') },
+    expected: [
+      'Failed to load active applies: active applies request failed (500): database unavailable',
+      'Refresh applies',
+      'Copy read route',
+      'Active handoffs JSON',
+      'Applications overview',
+    ],
+  },
+  {
     name: 'denied collection reuses operator read guidance',
     search: '?page=applies',
     response: { ok: false, status: 403, text: () => Promise.resolve('forbidden: authenticated viewer-capable role is required for this operator read route') },
@@ -11250,6 +11262,10 @@ const scenarios = [
       refreshButton.dispatch('click');
       const loadingButton = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh applies')[0];
       if (!loadingButton || !loadingButton.disabled) throw new Error('expected refresh applies control to disable while the collection reloads');
+      const loadingText = collectText(document.getElementById('accounts')).join(' | ');
+      if (!loadingText.includes('Copy read route')) throw new Error('expected loading applies monitor to keep read-route copy action, got ' + loadingText);
+      if (!loadingText.includes('Queued applies JSON')) throw new Error('expected loading applies monitor to keep JSON handoff, got ' + loadingText);
+      if (!loadingText.includes('Applications overview')) throw new Error('expected loading applies monitor to keep applications escape link, got ' + loadingText);
       if (window.location.search !== scenario.search) throw new Error('expected refresh to preserve applies URL state, got ' + window.location.search);
       await settle();
       await waitForFetchCount(fetchCalls, 3);
