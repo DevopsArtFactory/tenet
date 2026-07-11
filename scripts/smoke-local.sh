@@ -2463,6 +2463,7 @@ assert "pushPlanSection(runtimeSignalsSection, 'plan-runtime-signals', 'Runtime 
 assert "pushPlanSection(executionSection, 'plan-rollout-execution', 'Rollout execution');" in ui, ui
 assert "pushPlanSection(actionsSection, 'plan-preview-actions', 'Plan preview actions');" in ui, ui
 assert "pushPlanSection(applySection, 'plan-apply-actions', 'Apply request actions');" in ui, ui
+assert "pushPlanSection(createApplyNextSafeActionSection(activeApplyRecord, activeApplyReadiness), 'plan-apply-next-action', 'Apply next safe action');" in ui, ui
 assert "pushPlanSection(planOperationsSection, 'plan-operations', 'Plan operations');" in ui, ui
 assert "const operationAnchorID = (prefix, operation) => {" in ui, ui
 assert "const previewOperations = (record) => mapRecordOperations(record?.operations || [], 'Plan step', 'operation-plan');" in ui, ui
@@ -3022,6 +3023,8 @@ assert 'Tenet found provider records, but none could be formatted into operator-
 assert 'No rows matched the current Recent logs window. Increase the Log limit, refresh after deployment activity, or use the lookup context above before escalating.' in ui, ui
 assert 'Plan preview actions' in ui, ui
 assert 'Apply request actions' in ui, ui
+assert 'Apply next safe action' in ui, ui
+assert 'Next safe action' in ui, ui
 assert 'Plan preview approval guidance' in ui, ui
 assert 'Create Plan will POST /v1/plans/deployments/${deploymentName}, store an immutable server-authored preview, and update this workspace URL with a shareable planId.' in ui, ui
 assert 'Authenticated operator required' in ui, ui

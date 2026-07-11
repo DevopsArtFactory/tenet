@@ -9335,6 +9335,106 @@
           ], 'No executor claim signals reported')],
         ];
       };
+      const applyNextSafeActionCue = (record, readinessOverride = null) => {
+        if (!record || typeof record !== 'object') {
+          return {
+            action: 'Load apply request',
+            detail: 'Open or refresh an immutable apply request before deciding the next operator action.',
+            tone: 'pending',
+          };
+        }
+        const readinessState = applyExecutionReadinessState(record, readinessOverride);
+        const readinessSummary = applyExecutionReadinessSummary(record, readinessOverride);
+        if (readinessState === 'blocked') {
+          return {
+            action: 'Resolve preflight blocker',
+            detail: readinessSummary,
+            tone: 'attention',
+          };
+        }
+        const status = normalizeApplyRecordStatus(record?.status);
+        const claimSignal = appliesMonitorClaimSignal(record);
+        if ((status === 'queued' || status === 'running') && claimSignal === 'attention') {
+          return {
+            action: 'Recover stale executor claim',
+            detail: applyClaimFreshnessSummary(record, { inferLegacyStale: true }),
+            tone: 'attention',
+          };
+        }
+        if ((status === 'queued' || status === 'running') && claimSignal === 'pending') {
+          return {
+            action: 'Wait for executor claim',
+            detail: 'No local-safe executor has claimed this active apply request yet. Refresh applies or the apply workspace before escalating.',
+            tone: 'pending',
+          };
+        }
+        if (status === 'queued') {
+          const readyCopy = readinessState === 'ready'
+            ? 'Preflight reports this immutable handoff is ready; wait for a local-safe executor claim or refresh the applies monitor.'
+            : readinessSummary;
+          return {
+            action: 'Monitor queued handoff',
+            detail: readyCopy,
+            tone: readinessState === 'ready' ? 'ready' : 'pending',
+          };
+        }
+        if (status === 'running') {
+          return {
+            action: 'Monitor executor progress',
+            detail: claimSignal === 'current'
+              ? 'Executor heartbeat looks current; refresh the immutable apply record or preflight route before intervening.'
+              : 'The apply request is running, but claim freshness is unclear. Refresh before assuming progress or recovery is needed.',
+            tone: claimSignal === 'current' ? 'ready' : 'pending',
+          };
+        }
+        if (status === 'failed') {
+          const localSafeDisabled = readinessState === 'disabled' || String(record?.error || '').toLowerCase().includes('apply execution is disabled');
+          return {
+            action: localSafeDisabled ? 'Review local-safe disabled result' : 'Review failed apply request',
+            detail: localSafeDisabled
+              ? 'This failed record is the expected disabled-by-default local-safe outcome; review details, then create a fresh plan/apply only when execution should be retried.'
+              : (record?.error || readinessSummary || 'Review the stored error/details before retrying apply.'),
+            tone: 'attention',
+          };
+        }
+        if (status === 'succeeded') {
+          return {
+            action: 'Review completed apply',
+            detail: 'The immutable apply request is terminal and succeeded. Use the bookmarked workspace for post-apply evidence.',
+            tone: 'ready',
+          };
+        }
+        if (status === 'cancelled') {
+          return {
+            action: 'Review cancelled apply',
+            detail: 'The immutable apply request is terminal and cancelled. Create a fresh plan/apply if operators still need to proceed.',
+            tone: 'attention',
+          };
+        }
+        return {
+          action: 'Refresh apply evidence',
+          detail: 'Refresh the immutable apply request and preflight route before deciding the next operator action.',
+          tone: 'pending',
+        };
+      };
+      const applyNextSafeActionRows = (record, readinessOverride = null) => {
+        const cue = applyNextSafeActionCue(record, readinessOverride);
+        return [
+          ['Next safe action', cue.action, cue.tone === 'attention' ? 'summary' : ''],
+          ['Next action detail', cue.detail, 'summary'],
+        ];
+      };
+      const createApplyNextSafeActionSection = (record, readinessOverride = null) => {
+        const cue = applyNextSafeActionCue(record, readinessOverride);
+        const section = createDetailSection('Apply next safe action');
+        const grid = createElement('div', 'detail-grid');
+        grid.append(
+          createMetric('Next safe action', cue.action, cue.tone === 'attention' ? 'summary' : ''),
+          createMetric('Operator note', cue.detail, 'summary'),
+        );
+        section.append(grid);
+        return section;
+      };
       const createQueuedApplyRow = (record) => {
         const row = createElement('article', 'row');
         const top = createElement('div', 'row-toggle');
@@ -9354,6 +9454,7 @@
           ['Apply status', applyRecordStatusLabel(record?.status)],
           ['Created at', metricValue(record?.createdAt)],
           ['Operation progress', applyOperationProgressSummary(record.operations || []), 'summary'],
+          ...applyNextSafeActionRows(record),
           ...queuedApplyClaimRows(record),
           ...applyExecutionReadinessRows(record),
         ].forEach(([label, value, className]) => metrics.append(createMetric(label, value, className || '')));
@@ -10669,6 +10770,10 @@
             applySection.append(applyWriteActions);
           }
           pushPlanSection(applySection, 'plan-apply-actions', 'Apply request actions');
+
+          if (activeApplyRecord) {
+            pushPlanSection(createApplyNextSafeActionSection(activeApplyRecord, activeApplyReadiness), 'plan-apply-next-action', 'Apply next safe action');
+          }
 
           if (activeApplyRecord) {
             const recordSection = createDetailSection('Stored apply request');
