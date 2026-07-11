@@ -10525,6 +10525,7 @@
             createElement('h2', 'account-name', account.name || 'Unknown account'),
             createElement('div', 'account-meta', `AWS account ${metricValue(account.awsAccountId)} · Regions: ${(account.allowedRegions || []).join(', ') || '—'}`),
             createElement('div', 'account-topology', `${topology.projectCount} projects · ${topology.environmentCount} environments`),
+            createElement('div', 'account-topology account-detail-read-route', `Current account read: ${accountDetailReadRoute(account.awsAccountId)}`),
           );
           const accountLinks = createElement('div', 'row-links');
           accountLinks.classList.add('account-links');
