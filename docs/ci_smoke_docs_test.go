@@ -1160,6 +1160,12 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 		"Apply preflight next action",
 		"Preflight next-action and row handoffs are read-only next-step routes",
 		"`deploymentDetailRoute`, `planApplyWorkspaceRoute`, `resourceInspectionRoute`, `resourceLogsRoute`",
+		"Apply handoff safety check",
+		"the immutable apply record state (`GET /v1/applies/{applyId}`)",
+		"the non-mutating readiness/preflight evidence (`GET /v1/applies/{applyId}/preflight`)",
+		"any local-safe claim freshness (`GET /v1/applies?status=active[&claim=stale]`)",
+		"This proves Tenet preserved and can route the handoff; it does not prove that a",
+		"CodeDeploy, ECS, ALB, ASG, or EC2 mutation ran or succeeded",
 	} {
 		if !strings.Contains(runbook, fragment) {
 			t.Fatalf("expected operator runbook to lock apply readiness evidence fragment %q", fragment)
