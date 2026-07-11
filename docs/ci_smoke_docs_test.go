@@ -1311,6 +1311,7 @@ func TestOverviewDashboardDocumentsRuntimeRetentionAndLatestRuntimeCueGuard(t *t
 
 func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditChips(t *testing.T) {
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
+	readmeText := readTextFile(t, "../README.md")
 	section := markdownSection(t, overviewText, "### Deployment-scoped audit workspace")
 	for _, fragment := range []string{
 		"clearable toolbar chips",
@@ -1326,6 +1327,14 @@ func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditC
 	} {
 		if !strings.Contains(section, fragment) {
 			t.Fatalf("expected deployment-scoped audit workspace docs to include clearable chip contract %q", fragment)
+		}
+	}
+	for _, fragment := range []string{
+		"`Refresh audit log` control",
+		"`q`/`sync`/`account`, and stripping stale `#audit-*` anchors",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README audit workspace docs to include unsplit refresh/control contract %q", fragment)
 		}
 	}
 }
