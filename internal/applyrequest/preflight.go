@@ -164,7 +164,7 @@ func (s Service) preflightForRecord(ctx context.Context, record Record) (Executi
 			readiness.Operations = backfillOperationCapabilityChecks(readiness.Operations)
 		}
 	}
-	if s.DeployerRoleReadiness == nil {
+	if s.DeployerRoleReadiness == nil || record.Status.IsTerminal() {
 		return readiness, nil
 	}
 	role, err := s.DeployerRoleReadiness(ctx, DeployerRoleTarget{DeploymentName: record.DeploymentName})
