@@ -567,6 +567,13 @@ func TestEmbeddedUIIncludesQueuedAppliesMonitorContracts(t *testing.T) {
 		"This is the healthy state for the recovery queue",
 		"['Last heartbeat', applyClaimFreshnessValue(record, 'lastHeartbeatAt')]",
 		"['Claim expires', applyClaimFreshnessValue(record, 'expiresAt')]",
+		"const appliesMonitorExecutionPreviewState = (state, applyId) => state?.executionPreviews?.[applyId]",
+		"Use Preview next execution action to read ${route} without leaving this monitor or changing the bookmarkable applies view.",
+		"Preview next execution action",
+		"Apply execution preview JSON",
+		"Copy execution preview read route",
+		"Read-only execution preview loaded from ${route}. It summarizes immutable apply/preflight metadata only; it does not mutate AWS or prove executor progress.",
+		"appliesState.onPreviewExecution = (applyId) => {",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected queued applies monitor contract fragment %q", fragment)

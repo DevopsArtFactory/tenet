@@ -2170,6 +2170,14 @@ assert_fragments("applies_ui", applies_ui, operator_read_auth_fragments + (
     "createAppliesMonitorRefreshButton = (state) => createRefreshButton('Refresh applies'",
     "['Last heartbeat', applyClaimFreshnessValue(record, 'lastHeartbeatAt')]",
     "['Claim expires', applyClaimFreshnessValue(record, 'expiresAt')]",
+    "const appliesMonitorExecutionPreviewState = (state, applyId) => state?.executionPreviews?.[applyId]",
+    "Preview next execution action",
+    "Apply execution preview JSON",
+    "Copy execution preview read route",
+    "Use Preview next execution action to read ${route} without leaving this monitor or changing the bookmarkable applies view.",
+    "Read-only execution preview loaded from ${route}. It summarizes immutable apply/preflight metadata only; it does not mutate AWS or prove executor progress.",
+    "appliesState.onPreviewExecution = (applyId) => {",
+    "fetchApplyExecutionPreview(applyId)",
 ))
 
 for fragment in (

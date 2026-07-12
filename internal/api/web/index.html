@@ -9449,7 +9449,66 @@
         section.append(grid);
         return section;
       };
-      const createQueuedApplyRow = (record) => {
+      const appliesMonitorExecutionPreviewState = (state, applyId) => state?.executionPreviews?.[applyId] || { status: 'idle', applyId, record: null, error: null };
+      const appliesMonitorExecutionPreviewReadRoute = (applyId) => operatorApplyExecutionPreviewReadRoute(applyId);
+      const appliesMonitorExecutionPreviewMessage = (previewState, record) => {
+        const applyId = previewState?.applyId || record?.id || '';
+        const route = appliesMonitorExecutionPreviewReadRoute(applyId);
+        switch (previewState?.status) {
+          case 'loading':
+            return `Loading row-local, non-mutating execution preview from ${route}…`;
+          case 'ready':
+            return `Read-only execution preview loaded from ${route}. It summarizes immutable apply/preflight metadata only; it does not mutate AWS or prove executor progress.`;
+          case 'unavailable':
+            return `${route} is temporarily unavailable. Keep using the apply row and plan/apply workspace handoff; Tenet is not inferring executor progress from a missing preview.`;
+          case 'fetch-error':
+            return operatorReadFailureHeading(previewState.error)
+              ? operatorReadFailureMessage(route, previewState.error)
+              : `Failed to load ${route}: ${previewState.error?.message || 'unknown error'}`;
+          default:
+            return `Use Preview next execution action to read ${route} without leaving this monitor or changing the bookmarkable applies view.`;
+        }
+      };
+      const appliesMonitorExecutionPreviewRows = (preview) => {
+        if (!preview || typeof preview !== 'object') return [];
+        const operation = preview.operation && typeof preview.operation === 'object' ? preview.operation : null;
+        const rows = [
+          ['Preview source', preview.readOnly === true ? 'Read-only metadata; no AWS mutation' : 'Read-only status not reported', 'summary'],
+          ['Preview summary', textOrDash(preview.summary), 'summary'],
+        ];
+        if (operation) {
+          rows.push(
+            ['Next action', textOrDash(operation.action || operation.operationId), preview.blocker?.reason ? 'summary' : ''],
+            ['Next target', [operation.resourceType, operation.resourceName].filter(Boolean).join(' / ') || textOrDash(operation.target)],
+          );
+          if (operation.requiredCapability) rows.push(['Required capability', operation.requiredCapability]);
+        }
+        if (preview.blocker && typeof preview.blocker === 'object') {
+          rows.push(['Blocked by', applyPreflightUnavailableReasonLabel(preview.blocker.reason), 'summary']);
+          if (preview.blocker.summary) rows.push(['Blocker summary', preview.blocker.summary, 'summary']);
+        }
+        return rows;
+      };
+      const createAppliesMonitorExecutionPreviewPanel = (record, state) => {
+        if (!record?.id) return null;
+        const previewState = appliesMonitorExecutionPreviewState(state, record.id);
+        const panel = createElement('div', previewState.status === 'unavailable' || previewState.status === 'fetch-error' ? 'detail-state error' : 'detail-state');
+        panel.append(createElement('strong', '', 'Execution preview'));
+        panel.append(createElement('div', '', appliesMonitorExecutionPreviewMessage(previewState, record)));
+        if (previewState.status === 'ready') {
+          const grid = createElement('div', 'detail-grid');
+          appliesMonitorExecutionPreviewRows(previewState.record).forEach(([label, value, className]) => grid.append(createMetric(label, value, className || '')));
+          panel.append(grid);
+        }
+        const actions = createElement('div', 'row-links');
+        actions.append(
+          createNavLink(buildApplyExecutionPreviewRoute(record.id), 'Apply execution preview JSON'),
+          createCopyReadRouteButton(appliesMonitorExecutionPreviewReadRoute(record.id), 'Copy execution preview read route'),
+        );
+        panel.append(actions);
+        return panel;
+      };
+      const createQueuedApplyRow = (record, state = {}) => {
         const row = createElement('article', 'row');
         const top = createElement('div', 'row-toggle');
         const rowTop = createElement('div', 'row-top');
@@ -9479,9 +9538,17 @@
           links.append(createNavLink(buildPageURL('plan', { deployment: record.deploymentName, applyId: record.id }), 'Open plan/apply workspace', '_self'));
         }
         if (record?.id) {
-          links.append(createNavLink(buildApplyRequestRoute(record.id), 'Apply JSON'));
+          const previewState = appliesMonitorExecutionPreviewState(state, record.id);
+          const previewButton = createRefreshButton(
+            previewState.status === 'ready' ? 'Refresh execution preview' : 'Preview next execution action',
+            previewState.status === 'loading',
+            () => state?.onPreviewExecution?.(record.id).catch(() => {}),
+          );
+          links.append(previewButton, createNavLink(buildApplyRequestRoute(record.id), 'Apply JSON'));
         }
+        const previewPanel = createAppliesMonitorExecutionPreviewPanel(record, state);
         row.append(top, links);
+        if (previewPanel) row.append(previewPanel);
         return row;
       };
       const renderQueuedAppliesPage = (state) => {
@@ -9546,7 +9613,7 @@
         );
         head.append(intro, actions);
         const rows = createElement('div', 'rows');
-        records.forEach((record) => rows.append(createQueuedApplyRow(record)));
+        records.forEach((record) => rows.append(createQueuedApplyRow(record, state)));
         header.append(head, rows);
         document.getElementById('accounts').replaceChildren(header);
       };
@@ -11455,6 +11522,8 @@
           records: [],
           error: null,
           onRefresh: null,
+          onPreviewExecution: null,
+          executionPreviews: {},
         };
         const loadQueuedApplies = () => {
           appliesState.status = 'loading';
@@ -11477,6 +11546,33 @@
               }
               appliesState.status = error.kind === 'unavailable' ? 'unavailable' : 'error';
               appliesState.error = error;
+              renderQueuedAppliesPage(appliesState);
+              throw error;
+            });
+        };
+        appliesState.onPreviewExecution = (applyId) => {
+          if (!applyId) return Promise.resolve(null);
+          const current = appliesState.executionPreviews[applyId] || {};
+          if (current.status === 'loading') return Promise.resolve(current.record || null);
+          appliesState.executionPreviews = {
+            ...appliesState.executionPreviews,
+            [applyId]: { ...current, status: 'loading', applyId, error: null },
+          };
+          renderQueuedAppliesPage(appliesState);
+          return fetchApplyExecutionPreview(applyId)
+            .then((record) => {
+              appliesState.executionPreviews = {
+                ...appliesState.executionPreviews,
+                [applyId]: { status: 'ready', applyId, record, error: null },
+              };
+              renderQueuedAppliesPage(appliesState);
+              return record;
+            })
+            .catch((error) => {
+              appliesState.executionPreviews = {
+                ...appliesState.executionPreviews,
+                [applyId]: { status: error.kind === 'unavailable' ? 'unavailable' : 'fetch-error', applyId, record: null, error },
+              };
               renderQueuedAppliesPage(appliesState);
               throw error;
             });
