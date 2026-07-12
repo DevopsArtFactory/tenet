@@ -2205,6 +2205,14 @@ assert "createAppliesMonitorRefreshButton = (state) => createRefreshButton('Refr
 assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in applies_ui, applies_ui
 assert "['Last heartbeat', applyClaimFreshnessValue(record, 'lastHeartbeatAt')]" in applies_ui, applies_ui
 assert "['Claim expires', applyClaimFreshnessValue(record, 'expiresAt')]" in applies_ui, applies_ui
+assert "const appliesMonitorExecutionPreviewState = (state, applyId) => state?.executionPreviews?.[applyId]" in applies_ui, applies_ui
+assert "Preview next execution action" in applies_ui, applies_ui
+assert "Apply execution preview JSON" in applies_ui, applies_ui
+assert "Copy execution preview read route" in applies_ui, applies_ui
+assert "Use Preview next execution action to read ${route} without leaving this monitor or changing the bookmarkable applies view." in applies_ui, applies_ui
+assert "Read-only execution preview loaded from ${route}. It summarizes immutable apply/preflight metadata only; it does not mutate AWS or prove executor progress." in applies_ui, applies_ui
+assert "appliesState.onPreviewExecution = (applyId) => {" in applies_ui, applies_ui
+assert "fetchApplyExecutionPreview(applyId)" in applies_ui, applies_ui
 assert "const setEmbeddedBrowserTitle = (...parts) => {" in ui, ui
 assert "document.title = [...titleParts, 'Tenet'].join(' · ');" in ui, ui
 assert "setBrowserTitleFromPageState(currentPageState);" in ui, ui

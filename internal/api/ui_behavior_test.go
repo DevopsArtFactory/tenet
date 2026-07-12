@@ -11349,6 +11349,70 @@ const scenarios = [
 		runNodeHarness(t, nodeProgram)
 	})
 
+	t.Run("applies monitor previews row execution evidence without rewriting view URL", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const executionPreview = ` + string(applyExecutionPreviewBlockedJSON) + `;
+` + domHarness + `
+const queuedRecords = [{
+  id: 'apply_queued_123',
+  planId: 'plan_ready_123',
+  deploymentName: 'api-prod',
+  status: 'queued',
+  createdAt: '2026-04-18T08:00:00Z',
+  operations: [{ status: 'queued', phase: 'Promoting', target: 'api-prod-codedeploy-group', summary: 'Create CodeDeploy deployment' }],
+}];
+(async () => {
+  const document = new Document();
+  document.byID.set('operator-context', document.createElement('section'));
+  document.byID.set('operator-context-status', document.createElement('div'));
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  const fetchCalls = [];
+  const window = { location: { pathname: '/', search: '?page=applies&appliesView=active', hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [withoutHash, hash = ''] = String(url).split('#'); const [pathname, query = ''] = withoutHash.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
+  const fetch = (url) => {
+    fetchCalls.push(String(url));
+    if (url === '/v1/operator/context') return Promise.resolve({ ok: true, json: () => Promise.resolve({ trustedHeaders: { enabled: true }, identity: { authenticated: true }, roles: { canRead: true, canWrite: false }, deploymentAccess: { enforced: true, forwarded: true } }) });
+    if (url === '/v1/applies?status=active') return Promise.resolve({ ok: true, json: () => Promise.resolve(queuedRecords) });
+    if (url === '/v1/applies/apply_queued_123/execution-preview') return Promise.resolve({ ok: true, json: () => Promise.resolve(executionPreview) });
+    throw new Error('unexpected fetch url: ' + url);
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle(); await settle(); await settle();
+  const root = document.getElementById('accounts');
+  let text = collectText(root).join(' | ');
+  if (!text.includes('Preview next execution action')) throw new Error('expected row preview action before fetch: ' + text);
+  if (!text.includes('Use Preview next execution action to read GET /v1/applies/apply_queued_123/execution-preview without leaving this monitor or changing the bookmarkable applies view.')) throw new Error('expected idle row-local preview guidance: ' + text);
+  const previewButton = collectNodes(root, (node) => node.tagName === 'BUTTON' && node.textContent === 'Preview next execution action')[0];
+  if (!previewButton) throw new Error('expected Preview next execution action button');
+  previewButton.dispatch('click');
+  text = collectText(document.getElementById('accounts')).join(' | ');
+  if (!text.includes('Loading row-local, non-mutating execution preview from GET /v1/applies/apply_queued_123/execution-preview…')) throw new Error('expected row-local loading state: ' + text);
+  if (window.location.search !== '?page=applies&appliesView=active') throw new Error('expected preview fetch to preserve applies view URL, got ' + window.location.search);
+  await waitForFetchCount(fetchCalls, 3);
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/operator/context, /v1/applies?status=active, /v1/applies/apply_queued_123/execution-preview') throw new Error('unexpected fetch sequence: ' + fetchCalls.join(', '));
+  text = collectText(document.getElementById('accounts')).join(' | ');
+  [
+    'Refresh execution preview',
+    'Read-only execution preview loaded from GET /v1/applies/apply_queued_123/execution-preview. It summarizes immutable apply/preflight metadata only; it does not mutate AWS or prove executor progress.',
+    'Preview source | Read-only metadata; no AWS mutation',
+    'Next action | codedeploy:CreateDeployment',
+    'Required capability | codedeploy:CreateDeployment',
+    'Blocked by | No deployer role is configured for this target account and region.',
+    'Apply execution preview JSON',
+    'Copy execution preview read route',
+    'Open plan/apply workspace',
+  ].forEach((fragment) => {
+    if (!text.includes(fragment)) throw new Error('expected preview fragment ' + fragment + '\nText: ' + text);
+  });
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
 	t.Run("create flow renders server authored preview", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
