@@ -1019,23 +1019,25 @@ assert apply_record["source"]["planId"] == plan_preview["id"], apply_record
 assert apply_record["source"]["planStatus"] == "ready", apply_record
 assert apply_record["source"]["fingerprint"] == plan_preview["source"]["fingerprint"], (apply_record, plan_preview)
 assert apply_record_get == apply_record, (apply_record_get, apply_record)
-assert apply_preflight["applyId"] == apply_record["id"], (apply_preflight, apply_record)
-assert apply_preflight["deploymentName"] == apply_record["deploymentName"], (apply_preflight, apply_record)
-assert apply_preflight["readOnly"] is True, apply_preflight
-assert isinstance(apply_preflight.get("operations"), list) and apply_preflight["operations"], apply_preflight
+assert apply_preflight["state"] == apply_record["executionReadiness"]["state"], (apply_preflight, apply_record)
+assert apply_preflight["checkedAt"] == apply_record["executionReadiness"]["checkedAt"], (apply_preflight, apply_record)
+assert isinstance(apply_preflight.get("evidence", []), list) and apply_preflight["evidence"], apply_preflight
+assert "did not contact AWS" in " ".join(apply_preflight["evidence"]), apply_preflight
+assert len(apply_preflight.get("operations", [])) == len(apply_record["operations"]), apply_preflight
+assert all(row.get("requiredCapability") for row in apply_preflight["operations"]), apply_preflight
+assert all(row.get("capabilityChecks") for row in apply_preflight["operations"]), apply_preflight
+assert all(check.get("action") and check.get("state") in ("blocked", "unknown") for row in apply_preflight["operations"] for check in row.get("capabilityChecks", [])), apply_preflight
 assert apply_execution_preview["applyId"] == apply_record["id"], (apply_execution_preview, apply_record)
 assert apply_execution_preview["deploymentName"] == apply_record["deploymentName"], (apply_execution_preview, apply_record)
 assert apply_execution_preview["readOnly"] is True, apply_execution_preview
 assert apply_execution_preview["state"] == apply_preflight["state"], (apply_execution_preview, apply_preflight)
-assert apply_execution_preview["state"] == "disabled", apply_execution_preview
-assert "no AWS mutation was attempted" in apply_execution_preview["summary"], apply_execution_preview
-assert isinstance(apply_execution_preview.get("operation"), dict), apply_execution_preview
+assert apply_execution_preview["summary"].startswith("Read-only executor action preview"), apply_execution_preview
+assert isinstance(apply_execution_preview.get("operation"), dict) and apply_execution_preview["operation"], apply_execution_preview
 assert apply_execution_preview["operation"].get("target") == apply_record["operations"][0]["target"], (apply_execution_preview, apply_record)
 assert apply_execution_preview["operation"].get("action") == apply_preflight["operations"][0].get("requiredCapability"), (apply_execution_preview, apply_preflight)
 assert apply_execution_preview["operation"].get("capabilityChecks") == apply_preflight["operations"][0].get("capabilityChecks"), (apply_execution_preview, apply_preflight)
 assert (apply_execution_preview.get("blocker") or {}).get("reason") == apply_preflight["operations"][0].get("unavailableReason"), (apply_execution_preview, apply_preflight)
-assert (apply_execution_preview.get("blocker") or {}).get("reason") == "execution_disabled", apply_execution_preview
-assert "disabled local-safe apply record" in apply_execution_preview["blocker"]["summary"], apply_execution_preview
+assert (apply_execution_preview.get("blocker") or {}).get("reason") in {"execution_disabled", "live_aws_mutation_not_implemented", "missing_deployer_role", "aws_unavailable"}, apply_execution_preview
 assert os.environ["INVALID_APPLY_TRANSITION_STATUS"] == "400", os.environ["INVALID_APPLY_TRANSITION_STATUS"]
 assert invalid_apply_transition.strip() == "invalid apply transition request body", invalid_apply_transition
 assert os.environ["UNKNOWN_APPLY_TRANSITION_STATUS"] == "404", os.environ["UNKNOWN_APPLY_TRANSITION_STATUS"]
