@@ -10929,6 +10929,47 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 		t.Fatalf("marshal ready apply preflight: %v", err)
 	}
 
+	applyExecutionPreviewBlockedJSON, err := json.Marshal(map[string]any{
+		"applyId":        "apply_failed_123",
+		"deploymentName": "api-prod",
+		"readOnly":       true,
+		"state":          "blocked",
+		"checkedAt":      "2026-04-18T08:05:00Z",
+		"summary":        "Execution preview confirms the next handoff would create a CodeDeploy deployment, but no AWS mutation is performed by this read route.",
+		"operation": map[string]any{
+			"operationId":        "operation-shift-canary",
+			"phase":              "Promoting",
+			"target":             "api-prod-codedeploy-group (codeDeployDeploymentGroup)",
+			"action":             "codedeploy:CreateDeployment",
+			"resourceType":       "codeDeployDeploymentGroup",
+			"resourceName":       "api-prod-codedeploy-group",
+			"requiredCapability": "codedeploy:CreateDeployment",
+			"requiredRole":       "arn:aws:iam::123456789012:role/tenet-deployer",
+		},
+		"awsContext": map[string]any{
+			"awsAccountId":      "123456789012",
+			"region":            "us-west-2",
+			"roleArn":           "arn:aws:iam::123456789012:role/tenet-deployer",
+			"roleConfigured":    false,
+			"roleReady":         false,
+			"checkedWithAws":    false,
+			"unavailableReason": "missing_deployer_role",
+		},
+		"blocker": map[string]any{
+			"reason":  "missing_deployer_role",
+			"summary": "No deployer role is configured for this target account and region.",
+		},
+		"handoffs": map[string]any{
+			"deploymentDetailRoute":   "/v1/overview/deployments/api-prod",
+			"planApplyWorkspaceRoute": "/?applyId=apply_failed_123&deployment=api-prod&page=plan&planId=plan_ready_123",
+			"resourceInspectionRoute": "/v1/overview/deployments/api-prod/resource-inspection?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup",
+			"resourceLogsRoute":       "/v1/overview/deployments/api-prod/resource-logs?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup",
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal blocked apply execution preview: %v", err)
+	}
+
 	applyRecordFailedJSON, err := json.Marshal(map[string]any{
 		"id":             "apply_failed_123",
 		"planId":         "plan_ready_123",
@@ -11316,6 +11357,7 @@ const planPreview = ` + string(planPreviewReadyJSON) + `;
 const applyRecord = ` + string(applyRecordFailedJSON) + `;
 const applyPreflightBlocked = ` + string(applyPreflightBlockedJSON) + `;
 const applyPreflightReady = ` + string(applyPreflightReadyJSON) + `;
+const applyExecutionPreviewBlocked = ` + string(applyExecutionPreviewBlockedJSON) + `;
 let applyPreflightResponse = { ok: true, json: () => Promise.resolve(applyPreflightBlocked) };
 ` + domHarness + `
 const document = new Document();
@@ -11350,6 +11392,9 @@ const fetch = (url, options = {}) => {
   }
   if (url === '/v1/applies/apply_failed_123/preflight') {
     return Promise.resolve(applyPreflightResponse);
+  }
+  if (url === '/v1/applies/apply_failed_123/execution-preview') {
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(applyExecutionPreviewBlocked) });
   }
   throw new Error('unexpected fetch url: ' + url);
 };
@@ -11545,7 +11590,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle();
   await settle();
   await settle();
-  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod, /v1/applies/plans/plan_ready_123') throw new Error('unexpected fetch sequence after apply create: ' + fetchCalls.join(', '));
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod, /v1/applies/plans/plan_ready_123, /v1/applies/apply_failed_123/execution-preview') throw new Error('unexpected fetch sequence after apply create: ' + fetchCalls.join(', '));
   if (!createApplyRequestOptions || createApplyRequestOptions.method !== 'POST') throw new Error('expected Apply Plan to POST');
   if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123') throw new Error('expected Apply Plan to persist applyId in URL, got ' + window.location.search);
   text = collectText(root).join(' | ');
@@ -11562,7 +11607,12 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Apply preflight not loaded')) throw new Error('expected preflight idle state after create');
   if (!text.includes('Use Refresh apply preflight to read GET /v1/applies/apply_failed_123/preflight.')) throw new Error('expected preflight read-route prompt after create');
   if (!text.includes('Apply preflight JSON')) throw new Error('expected apply preflight JSON handoff after create');
+  if (!text.includes('Apply execution preview JSON')) throw new Error('expected apply execution preview JSON handoff after create');
   if (!text.includes('Copy apply preflight read route')) throw new Error('expected copy preflight read route handoff after create');
+  if (!text.includes('Copy execution preview read route')) throw new Error('expected copy execution preview read route handoff after create');
+  if (!text.includes('Apply execution preview loaded')) throw new Error('expected execution preview loaded state after create');
+  if (!text.includes('Read-only execution preview loaded from GET /v1/applies/apply_failed_123/execution-preview. It is derived from immutable apply/preflight metadata and does not perform AWS mutation or claim executor progress.')) throw new Error('expected execution preview loaded route copy after create');
+  if (!text.includes('This preview surfaces the first concrete executor action Tenet would hand off from immutable apply/preflight metadata. It is read-only operator evidence, not a live executor claim and not AWS mutation.')) throw new Error('expected execution preview non-mutating callout');
   if (!text.includes('Apply lifecycle summary')) throw new Error('expected apply lifecycle summary after create');
   if (!text.includes('0/1 terminal · 0 running · 1 queued')) throw new Error('expected queued lifecycle progress summary after create');
   if (text.includes('Apply lifecycle metadata')) throw new Error('expected failed/default apply record to omit lifecycle metadata section when lifecycle fields are missing');
@@ -11589,6 +11639,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-next-action', 'Apply next safe action'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-apply', 'Stored apply request'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-readiness', 'Apply execution readiness'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-execution-preview', 'Apply execution preview'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-details', 'Apply request details'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-operations', 'Apply operations'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-operations', 'Plan operations'],
@@ -11617,9 +11668,30 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   toolbarButtons = collectNodes(toolbarRoot, (node) => node.tagName === 'BUTTON');
   refreshWorkspace = toolbarButtons.find((node) => node.textContent === 'Refresh plan workspace');
   let refreshPreflight = buttons.find((node) => node.textContent === 'Refresh apply preflight');
-  if (!refreshPlan || !refreshApply || !refreshPreflight || !refreshWorkspace) throw new Error('expected refresh buttons after apply create');
-  if (refreshPlan.disabled || refreshApply.disabled || refreshPreflight.disabled || refreshWorkspace.disabled) throw new Error('expected refresh buttons enabled after apply create');
+  let refreshExecutionPreview = buttons.find((node) => node.textContent === 'Refresh execution preview');
+  if (!refreshPlan || !refreshApply || !refreshPreflight || !refreshExecutionPreview || !refreshWorkspace) throw new Error('expected refresh buttons after apply create');
+  if (refreshPlan.disabled || refreshApply.disabled || refreshPreflight.disabled || refreshExecutionPreview.disabled || refreshWorkspace.disabled) throw new Error('expected refresh buttons enabled after apply create');
   const bookmarkedPlanApplySearch = window.location.search;
+  refreshExecutionPreview.dispatch('click');
+  text = collectText(root).join(' | ');
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshExecutionPreview = buttons.find((node) => node.textContent === 'Refresh execution preview');
+  if (!refreshExecutionPreview || !refreshExecutionPreview.disabled) throw new Error('expected execution-preview refresh disabled while loading');
+  if (!text.includes('Loading apply execution preview')) throw new Error('expected execution preview loading heading');
+  if (!text.includes('Loading non-mutating apply execution preview from GET /v1/applies/apply_failed_123/execution-preview.')) throw new Error('expected execution preview loading route copy');
+  await waitForFetchCount(fetchCalls, 6);
+  await settle();
+  if (fetchCalls[5] !== '/v1/applies/apply_failed_123/execution-preview') throw new Error('expected execution preview fetch after manual refresh, got ' + fetchCalls.join(', '));
+  if (window.location.search !== bookmarkedPlanApplySearch) throw new Error('expected execution-preview refresh to preserve plan/apply query, got ' + window.location.search);
+  text = collectText(root).join(' | ');
+  if (!text.includes('Apply execution preview loaded')) throw new Error('expected execution preview loaded heading');
+  if (!text.includes('Read-only execution preview loaded from GET /v1/applies/apply_failed_123/execution-preview. It is derived from immutable apply/preflight metadata and does not perform AWS mutation or claim executor progress.')) throw new Error('expected read-only execution preview route copy after refresh');
+  if (!text.includes('Read-only preview | Yes — metadata only, no AWS mutation')) throw new Error('expected execution preview read-only metric');
+  if (!text.includes('Preview summary | Execution preview confirms the next handoff would create a CodeDeploy deployment, but no AWS mutation is performed by this read route.')) throw new Error('expected execution preview summary metric');
+  if (!text.includes('Apply execution preview action')) throw new Error('expected execution preview action section');
+  if (!text.includes('Action · codedeploy:CreateDeployment')) throw new Error('expected execution preview operation action');
+  if (!text.includes('Capability · codedeploy:CreateDeployment')) throw new Error('expected execution preview required capability');
+  if (!text.includes('AWS identity probe | Not checked — local metadata only')) throw new Error('expected execution preview AWS probe status');
   refreshPreflight.dispatch('click');
   text = collectText(root).join(' | ');
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
@@ -11627,9 +11699,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!refreshPreflight || !refreshPreflight.disabled) throw new Error('expected preflight refresh disabled while the route reloads');
   if (!text.includes('Loading apply preflight')) throw new Error('expected preflight loading heading');
   if (!text.includes('Loading non-mutating execution preflight from GET /v1/applies/apply_failed_123/preflight.')) throw new Error('expected preflight loading route copy');
-  await waitForFetchCount(fetchCalls, 5);
+  await waitForFetchCount(fetchCalls, 7);
   await settle();
-  if (fetchCalls[4] !== '/v1/applies/apply_failed_123/preflight') throw new Error('expected apply preflight fetch after manual refresh, got ' + fetchCalls.join(', '));
+  if (fetchCalls[6] !== '/v1/applies/apply_failed_123/preflight') throw new Error('expected apply preflight fetch after manual refresh, got ' + fetchCalls.join(', '));
   if (window.location.search !== bookmarkedPlanApplySearch) throw new Error('expected apply-preflight refresh to preserve plan/apply query, got ' + window.location.search);
   text = collectText(root).join(' | ');
   if (!text.includes('Apply preflight loaded')) throw new Error('expected preflight loaded heading');
@@ -11653,9 +11725,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   applyPreflightResponse = { ok: true, json: () => Promise.resolve(applyPreflightReady) };
   refreshPreflight = collectNodes(root, (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh apply preflight')[0];
   refreshPreflight.dispatch('click');
-  await waitForFetchCount(fetchCalls, 6);
+  await waitForFetchCount(fetchCalls, 8);
   await settle();
-  if (fetchCalls[5] !== '/v1/applies/apply_failed_123/preflight') throw new Error('expected apply preflight re-fetch for ready summary, got ' + fetchCalls.join(', '));
+  if (fetchCalls[7] !== '/v1/applies/apply_failed_123/preflight') throw new Error('expected apply preflight re-fetch for ready summary, got ' + fetchCalls.join(', '));
   if (window.location.search !== bookmarkedPlanApplySearch) throw new Error('expected ready preflight refresh to preserve plan/apply query, got ' + window.location.search);
   text = collectText(root).join(' | ');
   if (!text.includes('Execution readiness | Preflight ready')) throw new Error('expected ready preflight readiness label');
@@ -11665,9 +11737,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   applyPreflightResponse = { ok: false, status: 503, text: () => Promise.resolve('preflight temporarily unavailable') };
   refreshPreflight = collectNodes(root, (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh apply preflight')[0];
   refreshPreflight.dispatch('click');
-  await waitForFetchCount(fetchCalls, 7);
+  await waitForFetchCount(fetchCalls, 9);
   await settle();
-  if (fetchCalls[6] !== '/v1/applies/apply_failed_123/preflight') throw new Error('expected apply preflight re-fetch for unavailable summary, got ' + fetchCalls.join(', '));
+  if (fetchCalls[8] !== '/v1/applies/apply_failed_123/preflight') throw new Error('expected apply preflight re-fetch for unavailable summary, got ' + fetchCalls.join(', '));
   if (window.location.search !== bookmarkedPlanApplySearch) throw new Error('expected unavailable preflight refresh to preserve plan/apply query, got ' + window.location.search);
   text = collectText(root).join(' | ');
   if (!text.includes('Apply preflight unavailable')) throw new Error('expected unavailable preflight heading');
@@ -12209,7 +12281,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle();
   await settle();
   await settle();
-  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/apply_failed_123') throw new Error('expected deployment detail plus bookmarked plan/apply fetches, got ' + fetchCalls.join(', '));
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/apply_failed_123, /v1/applies/apply_failed_123/execution-preview') throw new Error('expected deployment detail plus bookmarked plan/apply fetches, got ' + fetchCalls.join(', '));
   if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123') throw new Error('expected bookmarked apply URL to stay stable, got ' + window.location.search);
   const root = document.getElementById('accounts');
   const text = collectText(root).join(' | ');
@@ -12421,7 +12493,7 @@ const fetch = (url) => {
   await settle();
   await settle();
   await settle();
-  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/apply_failed_123') throw new Error('expected bookmarked plan/apply hash route to load deployment detail plus stored plan/apply records');
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/apply_failed_123, /v1/applies/apply_failed_123/execution-preview') throw new Error('expected bookmarked plan/apply hash route to load deployment detail plus stored plan/apply records');
   if (window.location.pathname !== '/console') throw new Error('expected plan workspace pathname to stay stable, got ' + window.location.pathname);
   if (window.location.search !== initialSearch) throw new Error('expected plan workspace query to stay stable, got ' + window.location.search);
   if (window.location.hash !== '#plan-apply-operations') throw new Error('expected plan workspace hash to stay stable, got ' + window.location.hash);
@@ -12431,7 +12503,7 @@ const fetch = (url) => {
   const currentSectionChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current section: Apply operations');
   if (!currentSectionChip) throw new Error('expected bookmarked plan/apply hash route to render the current-section chip');
   const sectionIDs = collectNodes(accounts, (node) => typeof node.id === 'string' && node.id.startsWith('plan-')).map((node) => node.id).sort();
-  const expectedSectionIDs = ['plan-apply-actions', 'plan-apply-details', 'plan-apply-next-action', 'plan-apply-operations', 'plan-apply-readiness', 'plan-approval-guidance', 'plan-operations', 'plan-preview-actions', 'plan-rollout-execution', 'plan-runtime-signals', 'plan-stored-apply', 'plan-stored-preview'];
+  const expectedSectionIDs = ['plan-apply-actions', 'plan-apply-details', 'plan-apply-execution-preview', 'plan-apply-next-action', 'plan-apply-operations', 'plan-apply-readiness', 'plan-approval-guidance', 'plan-operations', 'plan-preview-actions', 'plan-rollout-execution', 'plan-runtime-signals', 'plan-stored-apply', 'plan-stored-preview'];
   if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected plan section ids: ' + JSON.stringify(sectionIDs));
   const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#plan-'));
   const expectedLinks = [
@@ -12444,6 +12516,7 @@ const fetch = (url) => {
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-next-action', 'Apply next safe action'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-apply', 'Stored apply request'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-readiness', 'Apply execution readiness'],
+    ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-execution-preview', 'Apply execution preview'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-details', 'Apply request details'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-operations', 'Plan operations'],
   ];
@@ -12686,7 +12759,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle();
   await settle();
   if (applyFetchCount !== 2) throw new Error('expected apply refresh to re-fetch stored apply record');
-  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/apply_refresh_123, /v1/plans/plan_ready_123, /v1/applies/apply_refresh_123') throw new Error('unexpected fetch sequence during refresh monitoring: ' + fetchCalls.join(', '));
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/apply_refresh_123, /v1/applies/apply_refresh_123/execution-preview, /v1/plans/plan_ready_123, /v1/applies/apply_refresh_123, /v1/applies/apply_refresh_123/execution-preview') throw new Error('unexpected fetch sequence during refresh monitoring: ' + fetchCalls.join(', '));
   if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_refresh_123') throw new Error('expected apply refresh to preserve workspace URL');
   text = collectText(root).join(' | ');
   if (!text.includes('Apply request running')) throw new Error('expected running apply heading after refresh');
