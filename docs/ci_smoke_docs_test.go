@@ -1341,6 +1341,7 @@ func TestRuntimeStateDocsDescribeConfigurableControllerHistoryRetention(t *testi
 
 func TestOverviewDashboardDocumentsRuntimeRetentionAndLatestRuntimeCueGuard(t *testing.T) {
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
+	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
 
 	applicationsSection := markdownSection(t, overviewText, "### Applications overview")
 	for _, fragment := range []string{
@@ -1349,6 +1350,14 @@ func TestOverviewDashboardDocumentsRuntimeRetentionAndLatestRuntimeCueGuard(t *t
 	} {
 		if !strings.Contains(applicationsSection, fragment) {
 			t.Fatalf("expected applications overview docs to include latest-runtime cue guard %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"The overview intentionally stays compact: rows show the app name, account/environment, project, sync, health, last update, and one dominant `Open application` action",
+	} {
+		if !strings.Contains(operatorContractsText, fragment) {
+			t.Fatalf("expected operator contracts docs to include applications-overview compact row contract %q", fragment)
 		}
 	}
 
