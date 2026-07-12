@@ -1516,6 +1516,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (freshnessMeta.getAttribute('aria-live') !== 'polite') throw new Error('expected applications overview freshness meta to announce politely');
   if (freshnessMeta.getAttribute('aria-atomic') !== 'true') throw new Error('expected applications overview freshness meta to announce atomically');
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected applications page row text');
+  const projectCoreItem = collectNodes(document.getElementById('accounts'), (node) => String(node.className || '').split(/\s+/).includes('application-core-item') && collectText(node).join(' | ') === 'Project | payments')[0];
+  if (!projectCoreItem) throw new Error('expected applications row to expose project ownership as a first-page core field, got ' + accountsText);
   if (!accountsText.includes('Last update') || !accountsText.includes('2026-04-16T07:10:00Z')) throw new Error('expected applications row to show row-local last update timestamp');
   if (!accountsText.includes('More actions for payments-api-staging')) throw new Error('expected applications page secondary actions disclosure to name the deployment');
   if (accountsText.includes('More actions |')) throw new Error('applications page secondary actions disclosure must not use a generic summary');
