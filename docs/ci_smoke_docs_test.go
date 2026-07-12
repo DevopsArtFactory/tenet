@@ -1341,6 +1341,7 @@ func TestRuntimeStateDocsDescribeConfigurableControllerHistoryRetention(t *testi
 
 func TestOverviewDashboardDocumentsRuntimeRetentionAndLatestRuntimeCueGuard(t *testing.T) {
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
+	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
 	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
 
 	applicationsSection := markdownSection(t, overviewText, "### Applications overview")
@@ -1359,6 +1360,19 @@ func TestOverviewDashboardDocumentsRuntimeRetentionAndLatestRuntimeCueGuard(t *t
 		if !strings.Contains(operatorContractsText, fragment) {
 			t.Fatalf("expected operator contracts docs to include applications-overview compact row contract %q", fragment)
 		}
+	}
+
+	overviewUISection := markdownSection(t, overviewUIText, "### 1. Applications overview")
+	for _, fragment := range []string{
+		"Individual rows now include compact row-local `Project` and `Last update` fields",
+		"operators can see ownership without turning the first page into a deep runtime dashboard",
+	} {
+		if !strings.Contains(overviewUISection, fragment) {
+			t.Fatalf("expected overview UI docs to include compact project cue contract %q", fragment)
+		}
+	}
+	if strings.Contains(overviewUISection, "project details remain omitted from the first page") {
+		t.Fatalf("expected overview UI docs not to claim project details are omitted from the applications overview")
 	}
 
 	runtimeEventsSection := markdownSection(t, overviewText, "### Deployment runtime events API")
