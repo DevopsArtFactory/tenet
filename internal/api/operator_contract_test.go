@@ -1712,6 +1712,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"the trusted authenticated identity path projects that identity into persisted plan/apply/audit actor fields",
 		"restarting `tenet-api`",
 		"The same trusted front-door read contract covers `GET /v1/overview/accounts/{awsAccountId}`",
+		"`GET /v1/applies/{applyId}/execution-preview`",
 		"`GET /v1/applies?status=active&claim=stale`",
 		"trusted `X-Tenet-Authenticated-Roles: viewer` deployment detail/status/events and immutable plan/apply reads succeed through matching `X-Tenet-Authorized-Projects` plus `X-Tenet-Authorized-Environments` scopes even when `X-Tenet-Authorized-Deployments` does not name the deployment",
 		"Operator troubleshooting checklist for guarded reads and writes",
