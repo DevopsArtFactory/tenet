@@ -1036,6 +1036,12 @@ assert isinstance(apply_execution_preview.get("operation"), dict) and apply_exec
 assert apply_execution_preview["operation"].get("target") == apply_record["operations"][0]["target"], (apply_execution_preview, apply_record)
 assert apply_execution_preview["operation"].get("action") == apply_preflight["operations"][0].get("requiredCapability"), (apply_execution_preview, apply_preflight)
 assert apply_execution_preview["operation"].get("capabilityChecks") == apply_preflight["operations"][0].get("capabilityChecks"), (apply_execution_preview, apply_preflight)
+assert isinstance(apply_execution_preview.get("operations"), list) and len(apply_execution_preview["operations"]) == len(apply_preflight["operations"]), (apply_execution_preview, apply_preflight)
+assert [row.get("operationId") for row in apply_execution_preview["operations"]] == [row.get("operationId") for row in apply_preflight["operations"]], (apply_execution_preview, apply_preflight)
+assert apply_execution_preview["operations"][0].get("action") == apply_execution_preview["operation"].get("action"), apply_execution_preview
+assert all(row.get("readOnly") is True and row.get("ready") is False and row.get("summary") for row in apply_execution_preview["operations"]), apply_execution_preview
+assert all((row.get("blocker") or {}).get("reason") == preflight_row.get("unavailableReason") for row, preflight_row in zip(apply_execution_preview["operations"], apply_preflight["operations"])), (apply_execution_preview, apply_preflight)
+assert all((row.get("handoffs") or {}).get("deploymentDetailRoute", "").startswith("/v1/overview/deployments/") for row in apply_execution_preview["operations"]), apply_execution_preview
 assert (apply_execution_preview.get("blocker") or {}).get("reason") == apply_preflight["operations"][0].get("unavailableReason"), (apply_execution_preview, apply_preflight)
 assert (apply_execution_preview.get("blocker") or {}).get("reason") in {"execution_disabled", "live_aws_mutation_not_implemented", "missing_deployer_role", "aws_unavailable"}, apply_execution_preview
 assert os.environ["INVALID_APPLY_TRANSITION_STATUS"] == "400", os.environ["INVALID_APPLY_TRANSITION_STATUS"]
