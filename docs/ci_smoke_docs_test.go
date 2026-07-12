@@ -1340,12 +1340,23 @@ func TestRuntimeStateDocsDescribeConfigurableControllerHistoryRetention(t *testi
 }
 
 func TestOverviewDashboardDocumentsRuntimeRetentionAndLatestRuntimeCueGuard(t *testing.T) {
+	readmeText := readTextFile(t, "../README.md")
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
 	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
 	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
 
+	for _, fragment := range []string{
+		"Each row keeps compact `Project` and `Last update` fields",
+		"falling back to `Latest runtime status` when no timestamp is present",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README to include compact project/latest-runtime row cue %q", fragment)
+		}
+	}
+
 	applicationsSection := markdownSection(t, overviewText, "### Applications overview")
 	for _, fragment := range []string{
+		"each row includes compact `Project` and `Last update` fields next to account/environment and health, using `appRef` for ownership",
 		"`Last update`, `Visible subset last update`, and the optional row-local `Runtime` line are latest controller-runtime cues, not UI read-freshness cues",
 		"`Applications read refreshed` is the only applications-overview cue for when the browser last fetched `GET /v1/overview/applications`",
 	} {
