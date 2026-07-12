@@ -8706,6 +8706,19 @@
             throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
           });
         });
+      const buildApplyExecutionPreviewRoute = (applyId) => `/v1/applies/${encodeURIComponent(applyId)}/execution-preview`;
+      const operatorApplyExecutionPreviewReadRoute = (applyId) => `GET /v1/applies/${applyId || 'applyId'}/execution-preview`;
+      const fetchApplyExecutionPreview = (applyId) => Promise.resolve()
+        .then(() => fetch(buildApplyExecutionPreviewRoute(applyId)))
+        .then((response) => {
+          if (response.ok) return response.json();
+          const fallback = response.status === 503
+            ? `apply execution preview route unavailable (${response.status})`
+            : `apply execution preview fetch failed (${response.status})`;
+          return responseErrorMessage(response, fallback).then((message) => {
+            throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
+          });
+        });
       const cloneJSONValue = (value) => {
         if (Array.isArray(value)) return value.map((entry) => cloneJSONValue(entry));
         if (!value || typeof value !== 'object') return value;
@@ -9679,6 +9692,86 @@
           section.append(links);
         }
         return section;
+      };
+      const applyExecutionPreviewStatusHeading = (state) => {
+        switch (state?.executionPreview?.status) {
+          case 'loading': return 'Loading apply execution preview';
+          case 'ready': return 'Apply execution preview loaded';
+          case 'unavailable': return 'Apply execution preview unavailable';
+          case 'fetch-error': return operatorFetchErrorPillLabel(state.executionPreview);
+          default: return 'Apply execution preview not loaded';
+        }
+      };
+      const applyExecutionPreviewStateClassName = (state) => {
+        const status = state?.executionPreview?.status;
+        return status === 'unavailable' || status === 'fetch-error' ? 'error' : '';
+      };
+      const applyExecutionPreviewStateMessage = (state) => {
+        const preview = state?.executionPreview || {};
+        const applyId = preview.applyId || state?.record?.id || state?.applyId || '';
+        const route = operatorApplyExecutionPreviewReadRoute(applyId);
+        switch (preview.status) {
+          case 'loading':
+            return `Loading non-mutating apply execution preview from ${route}.`;
+          case 'ready':
+            return `Read-only execution preview loaded from ${route}. It is derived from immutable apply/preflight metadata and does not perform AWS mutation or claim executor progress.`;
+          case 'unavailable':
+            return `${route} is temporarily unavailable. Keep using the immutable apply record and preflight fallback evidence; Tenet is not assuming execution readiness from a missing preview.`;
+          case 'fetch-error':
+            return operatorReadFailureHeading(preview.error)
+              ? operatorReadFailureMessage(route, preview.error)
+              : `Failed to load ${route}: ${preview.error?.message || 'unknown error'}`;
+          default:
+            return `Use Refresh execution preview to read ${route}.`;
+        }
+      };
+      const applyExecutionPreviewRows = (preview) => {
+        if (!preview || typeof preview !== 'object') return [];
+        const rows = [
+          ['Read-only preview', preview.readOnly === true ? 'Yes — metadata only, no AWS mutation' : 'Not reported', 'summary'],
+          ['Preview state', textOrDash(preview.state)],
+          ['Preview summary', textOrDash(preview.summary), 'summary'],
+        ];
+        if (preview.checkedAt) rows.push(['Preview checked', preview.checkedAt]);
+        if (preview.awsContext && typeof preview.awsContext === 'object') {
+          rows.push(
+            ['AWS account', metricValue(preview.awsContext.awsAccountId)],
+            ['AWS region', metricValue(preview.awsContext.region)],
+            ['Deployer role', metricValue(preview.awsContext.roleArn), 'summary'],
+            ['Role readiness', preview.awsContext.roleReady ? 'Ready' : (preview.awsContext.roleConfigured ? 'Configured but not ready' : 'Not configured')],
+            ['AWS identity probe', preview.awsContext.checkedWithAws ? 'Checked with AWS' : 'Not checked — local metadata only'],
+          );
+          if (preview.awsContext.unavailableReason) rows.push(['AWS context blocker', applyPreflightUnavailableReasonLabel(preview.awsContext.unavailableReason), 'summary']);
+        }
+        if (preview.blocker && typeof preview.blocker === 'object') {
+          rows.push(
+            ['Preview blocker', applyPreflightUnavailableReasonLabel(preview.blocker.reason), 'summary'],
+            ['Blocker summary', textOrDash(preview.blocker.summary), 'summary'],
+          );
+        }
+        return rows;
+      };
+      const applyExecutionPreviewOperations = (preview) => {
+        const operation = preview?.operation;
+        if (!operation || typeof operation !== 'object') return [];
+        const blocked = Boolean(preview?.blocker?.reason);
+        return [{
+          id: typeof operation.operationId === 'string' ? operation.operationId.trim() : '',
+          anchorID: operation.operationId ? `operation-execution-preview-${sectionIDSegment(operation.operationId, 'unknown')}` : '',
+          kind: operation.operationId || operation.action || 'Execution preview action',
+          status: blocked ? 'failed' : 'pending',
+          statusLabel: blocked ? 'Blocked' : 'Previewed',
+          phase: textOrDash(operation.phase),
+          target: textOrDash(operation.target),
+          summary: [
+            operation.action ? `Action · ${operation.action}` : '',
+            operation.resourceType || operation.resourceName ? `Resource · ${[operation.resourceType, operation.resourceName].filter(Boolean).join(' / ')}` : '',
+            operation.requiredCapability ? `Capability · ${operation.requiredCapability}` : '',
+            operation.requiredRole ? `Role · ${operation.requiredRole}` : '',
+            preview?.blocker?.reason ? `Blocker · ${applyPreflightUnavailableReasonLabel(preview.blocker.reason)}` : '',
+          ].filter(Boolean).join(' · ') || 'No execution action is available yet.',
+          links: applyPreflightHandoffLinks(preview),
+        }];
       };
       const createOperationsSection = ({ title, intro, operations, emptyMessage, shareURLForOperation = null }) => {
         const section = createDetailSection(title);
@@ -10845,7 +10938,9 @@
               createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activeApplyRecord.planId || activePlanRecord?.id || currentPageState.planId, applyId: activeApplyRecord.id }), 'Open bookmarked apply', '_self'),
               createNavLink(buildApplyRequestRoute(activeApplyRecord.id), 'Apply JSON'),
               createNavLink(buildApplyPreflightRoute(activeApplyRecord.id), 'Apply preflight JSON'),
+              createNavLink(buildApplyExecutionPreviewRoute(activeApplyRecord.id), 'Apply execution preview JSON'),
               createCopyReadRouteButton(operatorApplyPreflightReadRoute(activeApplyRecord.id), 'Copy apply preflight read route'),
+              createCopyReadRouteButton(operatorApplyExecutionPreviewReadRoute(activeApplyRecord.id), 'Copy execution preview read route'),
             );
             recordSection.append(recordGrid, readinessGrid, lifecycleSummaryGrid);
             if (lifecycleMetadataGrid.children.length) {
@@ -10899,6 +10994,45 @@
             });
             readinessSection.append(preflightHandoffSection);
             pushPlanSection(readinessSection, 'plan-apply-readiness', 'Apply execution readiness');
+
+            const executionPreviewRecord = applyState?.executionPreview?.record;
+            const executionPreviewSection = createDetailSection('Apply execution preview');
+            const executionPreviewActions = createElement('div', 'row-links');
+            executionPreviewActions.append(
+              createNavLink(buildApplyExecutionPreviewRoute(activeApplyRecord.id), 'Apply execution preview JSON'),
+              createCopyReadRouteButton(operatorApplyExecutionPreviewReadRoute(activeApplyRecord.id), 'Copy execution preview read route'),
+            );
+            const executionPreviewRefreshButton = createRefreshButton(
+              'Refresh execution preview',
+              applyState?.executionPreview?.status === 'loading' || !activeApplyRecord.id,
+              () => applyState?.onReloadExecutionPreview?.(activeApplyRecord.id)?.catch(() => {}),
+            );
+            executionPreviewActions.append(executionPreviewRefreshButton);
+            const executionPreviewState = createElement('div', applyExecutionPreviewStateClassName(applyState) ? 'detail-state error' : 'detail-state', applyExecutionPreviewStateMessage(applyState));
+            const executionPreviewGrid = createElement('div', 'detail-grid');
+            applyExecutionPreviewRows(executionPreviewRecord).forEach(([label, value, className]) => {
+              executionPreviewGrid.append(createMetric(label, value, className || ''));
+            });
+            executionPreviewSection.append(
+              createElement('div', 'workspace-callout-label', applyExecutionPreviewStatusHeading(applyState)),
+              executionPreviewActions,
+              createElement('div', 'detail-state', 'This preview surfaces the first concrete executor action Tenet would hand off from immutable apply/preflight metadata. It is read-only operator evidence, not a live executor claim and not AWS mutation.'),
+              executionPreviewState,
+              executionPreviewGrid,
+            );
+            const executionPreviewOperationsSection = createOperationsSection({
+              title: 'Apply execution preview action',
+              intro: 'The previewed action is copied from the stored apply/preflight read model so operators can see the likely first AWS-facing call without running it.',
+              operations: applyExecutionPreviewOperations(executionPreviewRecord),
+              emptyMessage: 'No read-only execution preview action is loaded yet. Refresh execution preview after loading an apply record to inspect the first executor action without mutating AWS.',
+              shareURLForOperation: (operation) => buildPageSectionURL('plan', operation.anchorID, {
+                deployment: detail.name || currentPageState.deployment || '',
+                planId: activePlanRecord?.id || currentPageState.planId || activeApplyRecord.planId || '',
+                applyId: activeApplyRecord.id || currentPageState.applyId || '',
+              }),
+            });
+            executionPreviewSection.append(executionPreviewOperationsSection);
+            pushPlanSection(executionPreviewSection, 'plan-apply-execution-preview', 'Apply execution preview');
           }
 
           if (activeApplyRecord?.error || activeApplyRecord?.details?.length) {
@@ -11545,6 +11679,13 @@
                     record: null,
                     error: null,
                   },
+                  executionPreview: {
+                    status: 'idle',
+                    request: 'idle',
+                    applyId: currentPageState.applyId,
+                    record: null,
+                    error: null,
+                  },
                 };
                 const syncPlanPageURL = (planId, applyId = '') => {
                   currentPageState = { ...currentPageState, planId: planId || '', applyId: applyId || '' };
@@ -11638,6 +11779,50 @@
                       throw error;
                     });
                 };
+                const loadApplyExecutionPreviewRecord = (applyId) => {
+                  if (!applyId) return Promise.resolve(null);
+                  applyState = {
+                    ...applyState,
+                    executionPreview: {
+                      ...(applyState.executionPreview || {}),
+                      status: 'loading',
+                      request: 'load',
+                      applyId,
+                      error: null,
+                    },
+                  };
+                  renderPlanWorkspace();
+                  return fetchApplyExecutionPreview(applyId)
+                    .then((record) => {
+                      applyState = {
+                        ...applyState,
+                        executionPreview: {
+                          ...(applyState.executionPreview || {}),
+                          status: 'ready',
+                          request: 'load',
+                          applyId,
+                          record,
+                          error: null,
+                        },
+                      };
+                      renderPlanWorkspace();
+                      return record;
+                    })
+                    .catch((error) => {
+                      applyState = {
+                        ...applyState,
+                        executionPreview: {
+                          ...(applyState.executionPreview || {}),
+                          status: error.kind === 'unavailable' ? 'unavailable' : 'fetch-error',
+                          request: 'load',
+                          applyId,
+                          error,
+                        },
+                      };
+                      renderPlanWorkspace();
+                      throw error;
+                    });
+                };
                 const loadApplyRequestRecord = (applyId) => {
                   if (!applyId) return Promise.resolve(null);
                   applyState = {
@@ -11666,6 +11851,7 @@
                       };
                       syncPlanPageURL(record.planId || currentPageState.planId, record.id);
                       renderPlanWorkspace();
+                      loadApplyExecutionPreviewRecord(record.id).catch(() => {});
                       return record;
                     })
                     .catch((error) => {
@@ -11700,6 +11886,7 @@
                         record: null,
                         error: null,
                         preflight: { status: 'idle', request: 'idle', applyId: '', record: null, error: null },
+                        executionPreview: { status: 'idle', request: 'idle', applyId: '', record: null, error: null },
                       };
                       renderPlanWorkspace();
                       const ifMatch = workspaceDetail.sourceFingerprint || await derivePlanSourceFingerprint(workspaceDetail).catch(() => '') || fallbackIfMatch;
@@ -11730,6 +11917,7 @@
                     ...applyState,
                     onReloadApply: (applyId) => loadApplyRequestRecord(applyId),
                     onReloadPreflight: (applyId) => loadApplyPreflightRecord(applyId),
+                    onReloadExecutionPreview: (applyId) => loadApplyExecutionPreviewRecord(applyId),
                     onApplyPlan: async () => {
                       const planID = planState.record?.id || planState.planId || '';
                       if (!planID || !planPreviewCanApply(planState)) return;
@@ -11741,6 +11929,7 @@
                         record: null,
                         error: null,
                         preflight: { status: 'idle', request: 'idle', applyId: '', record: null, error: null },
+                        executionPreview: { status: 'idle', request: 'idle', applyId: '', record: null, error: null },
                       };
                       renderPlanWorkspace();
                       createApplyRequest(planID)
@@ -11761,6 +11950,7 @@
                           };
                           syncPlanPageURL(record.planId || planID, record.id);
                           renderPlanWorkspace();
+                          loadApplyExecutionPreviewRecord(record.id).catch(() => {});
                         })
                         .catch((error) => {
                           applyState = {

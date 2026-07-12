@@ -3082,13 +3082,18 @@ assert 'const loadApplyRequestRecord = (applyId) => {' in ui, ui
 assert 'const buildPlanPreviewRoute = (planId) => `/v1/plans/${encodeURIComponent(planId)}`;' in ui, ui
 assert 'const buildApplyRequestRoute = (applyId) => `/v1/applies/${encodeURIComponent(applyId)}`;' in ui, ui
 assert 'const buildApplyPreflightRoute = (applyId) => `/v1/applies/${encodeURIComponent(applyId)}/preflight`;' in ui, ui
+assert 'const buildApplyExecutionPreviewRoute = (applyId) => `/v1/applies/${encodeURIComponent(applyId)}/execution-preview`;' in ui, ui
 assert "const operatorApplyPreflightReadRoute = (applyId) => `GET /v1/applies/${applyId || 'applyId'}/preflight`;" in ui, ui
+assert "const operatorApplyExecutionPreviewReadRoute = (applyId) => `GET /v1/applies/${applyId || 'applyId'}/execution-preview`;" in ui, ui
 assert "createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activePlanRecord.id, applyId: activeApplyRecord?.id || applyState?.applyId || '' }), 'Open bookmarked workspace', '_self')" in ui, ui
 assert "createNavLink(buildPlanPreviewRoute(activePlanRecord.id), 'Plan JSON')" in ui, ui
 assert "createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activeApplyRecord.planId || activePlanRecord?.id || currentPageState.planId, applyId: activeApplyRecord.id }), 'Open bookmarked apply', '_self')" in ui, ui
 assert "createNavLink(buildApplyRequestRoute(activeApplyRecord.id), 'Apply JSON')" in ui, ui
 assert "createNavLink(buildApplyPreflightRoute(activeApplyRecord.id), 'Apply preflight JSON')" in ui, ui
+assert "createNavLink(buildApplyExecutionPreviewRoute(activeApplyRecord.id), 'Apply execution preview JSON')" in ui, ui
 assert "createCopyReadRouteButton(operatorApplyPreflightReadRoute(activeApplyRecord.id), 'Copy apply preflight read route')" in ui, ui
+assert "createCopyReadRouteButton(operatorApplyExecutionPreviewReadRoute(activeApplyRecord.id), 'Copy execution preview read route')" in ui, ui
+assert 'This preview surfaces the first concrete executor action Tenet would hand off from immutable apply/preflight metadata. It is read-only operator evidence, not a live executor claim and not AWS mutation.' in ui, ui
 assert 'Server-authored plan preview loaded from GET /v1/plans/${activePlanRecord.id}.' in ui, ui
 assert 'Future immutable lifecycle states render here as queued, running, succeeded, cancelled, or failed.' in ui, ui
 assert 'Apply Plan activates only when a loaded persisted ready plan preview with a valid planId is present.' in ui, ui
