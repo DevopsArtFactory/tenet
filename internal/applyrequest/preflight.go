@@ -92,6 +92,7 @@ type ExecutionActionPreview struct {
 	CheckedAt      string                               `json:"checkedAt,omitempty"`
 	Summary        string                               `json:"summary"`
 	Operation      *ExecutionActionPreviewOperation     `json:"operation,omitempty"`
+	Operations     []ExecutionActionPreviewOperationRow `json:"operations,omitempty"`
 	AWSContext     ExecutionActionPreviewAWSContext     `json:"awsContext"`
 	Blocker        *ExecutionActionPreviewBlocker       `json:"blocker,omitempty"`
 	Handoffs       *OperationExecutionPreflightHandoffs `json:"handoffs,omitempty"`
@@ -109,6 +110,18 @@ type ExecutionActionPreviewOperation struct {
 	RequiredCapability string                              `json:"requiredCapability"`
 	RequiredRole       string                              `json:"requiredRole"`
 	CapabilityChecks   []OperationExecutionCapabilityCheck `json:"capabilityChecks,omitempty"`
+}
+
+// ExecutionActionPreviewOperationRow adds per-operation readiness/blocker and
+// handoff evidence to the read-only execution preview without changing the
+// compatibility first-action operation field.
+type ExecutionActionPreviewOperationRow struct {
+	ExecutionActionPreviewOperation
+	ReadOnly bool                                 `json:"readOnly"`
+	Ready    bool                                 `json:"ready"`
+	Summary  string                               `json:"summary"`
+	Blocker  *ExecutionActionPreviewBlocker       `json:"blocker,omitempty"`
+	Handoffs *OperationExecutionPreflightHandoffs `json:"handoffs,omitempty"`
 }
 
 // ExecutionActionPreviewAWSContext is the target AWS context for the action preview.
@@ -212,41 +225,62 @@ func deriveExecutionActionPreview(record Record, readiness ExecutionReadiness) E
 		}
 		return preview
 	}
-	operation := readiness.Operations[0]
-	action := strings.TrimSpace(operation.RequiredCapability)
-	if action == "" && len(operation.CapabilityChecks) > 0 {
-		action = operation.CapabilityChecks[len(operation.CapabilityChecks)-1].Action
-	}
-	if action == "" {
-		action = "future AWS mutation capability"
-	}
-	preview.Operation = &ExecutionActionPreviewOperation{
-		OperationID:        operation.OperationID,
-		Phase:              operation.Phase,
-		Target:             operation.Target,
-		Action:             action,
-		ResourceType:       operation.ResourceType,
-		ResourceName:       operation.ResourceName,
-		RequiredCapability: operation.RequiredCapability,
-		RequiredRole:       operation.RequiredRole,
-		CapabilityChecks:   operation.CapabilityChecks,
-	}
-	preview.Handoffs = operation.Handoffs
-	reason := strings.TrimSpace(operation.UnavailableReason)
-	if reason == "" && !operation.Ready {
-		reason = "live_aws_mutation_not_implemented"
-	}
-	if reason != "" {
-		preview.Blocker = &ExecutionActionPreviewBlocker{
-			Reason:  reason,
-			Summary: operation.Summary,
-		}
-	}
-	if operation.Ready {
+	preview.Operations = deriveExecutionActionPreviewOperationRows(readiness.Operations)
+	first := preview.Operations[0]
+	operation := first.ExecutionActionPreviewOperation
+	preview.Operation = &operation
+	preview.Handoffs = first.Handoffs
+	preview.Blocker = first.Blocker
+	if first.Ready {
 		preview.State = "ready"
 		preview.Summary = "Read-only preview identified the next executor action from immutable apply evidence; execution remains outside this route."
 	}
 	return preview
+}
+
+func deriveExecutionActionPreviewOperationRows(operations []OperationExecutionPreflight) []ExecutionActionPreviewOperationRow {
+	if len(operations) == 0 {
+		return nil
+	}
+	rows := make([]ExecutionActionPreviewOperationRow, 0, len(operations))
+	for _, operation := range operations {
+		action := strings.TrimSpace(operation.RequiredCapability)
+		if action == "" && len(operation.CapabilityChecks) > 0 {
+			action = operation.CapabilityChecks[len(operation.CapabilityChecks)-1].Action
+		}
+		if action == "" {
+			action = "future AWS mutation capability"
+		}
+		row := ExecutionActionPreviewOperationRow{
+			ExecutionActionPreviewOperation: ExecutionActionPreviewOperation{
+				OperationID:        operation.OperationID,
+				Phase:              operation.Phase,
+				Target:             operation.Target,
+				Action:             action,
+				ResourceType:       operation.ResourceType,
+				ResourceName:       operation.ResourceName,
+				RequiredCapability: operation.RequiredCapability,
+				RequiredRole:       operation.RequiredRole,
+				CapabilityChecks:   operation.CapabilityChecks,
+			},
+			ReadOnly: true,
+			Ready:    operation.Ready,
+			Summary:  operation.Summary,
+			Handoffs: operation.Handoffs,
+		}
+		reason := strings.TrimSpace(operation.UnavailableReason)
+		if reason == "" && !operation.Ready {
+			reason = "live_aws_mutation_not_implemented"
+		}
+		if reason != "" {
+			row.Blocker = &ExecutionActionPreviewBlocker{
+				Reason:  reason,
+				Summary: operation.Summary,
+			}
+		}
+		rows = append(rows, row)
+	}
+	return rows
 }
 
 func deriveExecutionReadiness(record Record) ExecutionReadiness {

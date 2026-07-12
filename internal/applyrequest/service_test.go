@@ -479,6 +479,9 @@ func TestServiceExecutionPreviewNamesNextCodeDeployActionAndAWSContext(t *testin
 	if preview.Operation.RequiredRole != "arn:aws:iam::123456789012:role/TenetDeployerRole" || len(preview.Operation.CapabilityChecks) != 2 || preview.Operation.CapabilityChecks[1].Action != "codedeploy:CreateDeployment" {
 		t.Fatalf("expected role-aware CodeDeploy capability checks, got %+v", preview.Operation)
 	}
+	if len(preview.Operations) != 1 || preview.Operations[0].OperationID != preview.Operation.OperationID || preview.Operations[0].Action != preview.Operation.Action || preview.Operations[0].Ready || !preview.Operations[0].ReadOnly || preview.Operations[0].Blocker == nil || preview.Operations[0].Handoffs == nil {
+		t.Fatalf("expected compatibility operation mirrored into ordered operations preview, got operation=%+v operations=%+v", preview.Operation, preview.Operations)
+	}
 	if preview.AWSContext.AWSAccountID != "123456789012" || preview.AWSContext.Region != "ap-northeast-2" || !preview.AWSContext.RoleConfigured || !preview.AWSContext.RoleReady || !preview.AWSContext.CheckedWithAWS {
 		t.Fatalf("expected target AWS context, got %+v", preview.AWSContext)
 	}
@@ -510,6 +513,48 @@ func TestServiceExecutionPreviewNamesNextASGActionWithMissingRoleBlocker(t *test
 	}
 	if preview.Blocker == nil || preview.Blocker.Reason != "missing_deployer_role" || !strings.Contains(preview.Blocker.Summary, "No deployer role") {
 		t.Fatalf("expected missing deployer role blocker, got %+v", preview.Blocker)
+	}
+}
+
+func TestServiceExecutionPreviewIncludesOrderedOperationRows(t *testing.T) {
+	store := &memoryStore{records: map[string]Record{
+		"apply_multi": {
+			ID:             "apply_multi",
+			PlanID:         "plan_multi",
+			DeploymentName: "web-prod",
+			Status:         StatusQueued,
+			CreatedAt:      "2026-04-18T08:05:00Z",
+			Operations: []Operation{
+				{ID: "op-traffic", Phase: "Promoting", Target: "web-prod traffic shift (trafficShiftPlan)", Summary: "Shift production listener rule traffic."},
+				{ID: "op-asg", Phase: "Provisioning", Target: "web-prod-candidate (candidateAutoScalingGroup)", Summary: "Scale the candidate ASG."},
+			},
+			Source: SourceContext{PlanID: "plan_multi", Route: "/v1/plans/plan_multi", PlanStatus: "ready"},
+		},
+	}}
+	service := Service{Store: store}
+
+	preview, err := service.ExecutionPreview(context.Background(), "apply_multi")
+	if err != nil {
+		t.Fatalf("ExecutionPreview returned error: %v", err)
+	}
+	if preview.Operation == nil || preview.Operation.OperationID != "op-traffic" || preview.Operation.Action != "elasticloadbalancing:ModifyListener or elasticloadbalancing:ModifyRule" {
+		t.Fatalf("expected compatibility first action to remain first reviewed operation, got %+v", preview.Operation)
+	}
+	if len(preview.Operations) != 2 {
+		t.Fatalf("expected ordered execution preview rows for every apply operation, got %+v", preview.Operations)
+	}
+	gotIDs := []string{preview.Operations[0].OperationID, preview.Operations[1].OperationID}
+	if want := []string{"op-traffic", "op-asg"}; !reflect.DeepEqual(gotIDs, want) {
+		t.Fatalf("expected preview operations to preserve immutable operation order: got %+v want %+v", gotIDs, want)
+	}
+	if preview.Operations[0].Summary != "Operation has reviewed apply intent, but live AWS mutation is not implemented for this local-safe executor boundary." || preview.Operations[0].Blocker == nil || preview.Operations[0].Blocker.Reason != "live_aws_mutation_not_implemented" {
+		t.Fatalf("expected first operation row to include read-only blocker evidence, got %+v", preview.Operations[0])
+	}
+	if preview.Operations[0].Handoffs == nil || preview.Operations[0].Handoffs.ResourceInspectionRoute != "/v1/overview/deployments/web-prod/resource-inspection?resourceName=web-prod+traffic+shift&resourceType=trafficShiftPlan" {
+		t.Fatalf("expected per-operation troubleshooting handoff evidence, got %+v", preview.Operations[0].Handoffs)
+	}
+	if preview.Operations[1].Action != "autoscaling:UpdateAutoScalingGroup" || preview.Operations[1].ResourceType != "candidateAutoScalingGroup" || preview.Operations[1].Ready {
+		t.Fatalf("expected second operation to expose its own derived ASG action/readiness, got %+v", preview.Operations[1])
 	}
 }
 
