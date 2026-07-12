@@ -4057,7 +4057,7 @@ def assert_operator_context_common(payload):
     assert access_verdicts.get('operatorWrite', {}).get('acceptedRoleNames') == write_roles, payload
     assert access_verdicts.get('deploymentScopedRead', {}).get('requiresExactDeploymentAllowlistMatch') is True, payload
     assert access_verdicts.get('deploymentScopedRead', {}).get('acceptsProjectEnvironmentScopes') is True, payload
-    assert access_verdicts.get('deploymentScopedRead', {}).get('exampleRoutes') == ['GET /v1/overview/deployments/{deploymentName}', 'GET /v1/status/deployments/{deploymentName}', 'GET /v1/applies/{applyId}/preflight', 'GET /v1/audit-logs?deployment={deploymentName}'], payload
+    assert access_verdicts.get('deploymentScopedRead', {}).get('exampleRoutes') == ['GET /v1/overview/deployments/{deploymentName}', 'GET /v1/status/deployments/{deploymentName}', 'GET /v1/applies/{applyId}/preflight', 'GET /v1/applies/{applyId}/execution-preview', 'GET /v1/audit-logs?deployment={deploymentName}'], payload
     assert access_verdicts.get('deploymentScopedRead', {}).get('requiredTrustedHeaders') == identity_headers + role_headers + access_headers, payload
     assert access_verdicts.get('deploymentScopedRead', {}).get('acceptedRoleNames') == read_roles, payload
     assert access_verdicts.get('deploymentScopedWrite', {}).get('requiresExactDeploymentAllowlistMatch') is True, payload

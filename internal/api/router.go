@@ -741,6 +741,7 @@ var (
 		"GET /v1/overview/deployments/{deploymentName}",
 		"GET /v1/status/deployments/{deploymentName}",
 		"GET /v1/applies/{applyId}/preflight",
+		"GET /v1/applies/{applyId}/execution-preview",
 		"GET /v1/audit-logs?deployment={deploymentName}",
 	}
 	operatorContextDeploymentScopedWriteExampleRoutes = []string{

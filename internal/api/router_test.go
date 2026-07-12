@@ -1055,7 +1055,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if deploymentScopedRead["allowed"] != true || deploymentScopedRead["requiresExactDeploymentAllowlistMatch"] != true || deploymentScopedRead["acceptsProjectEnvironmentScopes"] != true || deploymentScopedRead["reason"] != "deployment-scoped reads can pass for deployments named in X-Tenet-Authorized-Deployments or matched by X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments" {
 		t.Fatalf("expected conditional deployment read verdict, got %#v", deploymentScopedRead)
 	}
-	if !reflect.DeepEqual(deploymentScopedRead["exampleRoutes"], []any{"GET /v1/overview/deployments/{deploymentName}", "GET /v1/status/deployments/{deploymentName}", "GET /v1/applies/{applyId}/preflight", "GET /v1/audit-logs?deployment={deploymentName}"}) {
+	if !reflect.DeepEqual(deploymentScopedRead["exampleRoutes"], []any{"GET /v1/overview/deployments/{deploymentName}", "GET /v1/status/deployments/{deploymentName}", "GET /v1/applies/{applyId}/preflight", "GET /v1/applies/{applyId}/execution-preview", "GET /v1/audit-logs?deployment={deploymentName}"}) {
 		t.Fatalf("expected deployment-scoped read route examples, got %#v", deploymentScopedRead["exampleRoutes"])
 	}
 	if !reflect.DeepEqual(deploymentScopedRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments", "X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"}) {
