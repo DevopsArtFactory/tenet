@@ -3107,7 +3107,9 @@ assert "createNavLink(buildApplyPreflightRoute(activeApplyRecord.id), 'Apply pre
 assert "createNavLink(buildApplyExecutionPreviewRoute(activeApplyRecord.id), 'Apply execution preview JSON')" in ui, ui
 assert "createCopyReadRouteButton(operatorApplyPreflightReadRoute(activeApplyRecord.id), 'Copy apply preflight read route')" in ui, ui
 assert "createCopyReadRouteButton(operatorApplyExecutionPreviewReadRoute(activeApplyRecord.id), 'Copy execution preview read route')" in ui, ui
-assert 'This preview surfaces the first concrete executor action Tenet would hand off from immutable apply/preflight metadata. It is read-only operator evidence, not a live executor claim and not AWS mutation.' in ui, ui
+assert 'This preview surfaces the ordered executor handoff inventory Tenet would derive from immutable apply/preflight metadata. It is read-only operator evidence, not a live executor claim and not AWS mutation.' in ui, ui
+assert 'Apply execution preview inventory' in ui, ui
+assert 'The ordered preview inventory is copied from the stored apply/preflight read model so operators can see each likely AWS-facing handoff without running it.' in ui, ui
 assert 'Server-authored plan preview loaded from GET /v1/plans/${activePlanRecord.id}.' in ui, ui
 assert 'Future immutable lifecycle states render here as queued, running, succeeded, cancelled, or failed.' in ui, ui
 assert 'Apply Plan activates only when a loaded persisted ready plan preview with a valid planId is present.' in ui, ui

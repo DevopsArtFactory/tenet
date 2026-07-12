@@ -10946,6 +10946,31 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 			"requiredCapability": "codedeploy:CreateDeployment",
 			"requiredRole":       "arn:aws:iam::123456789012:role/tenet-deployer",
 		},
+		"operations": []map[string]any{{
+			"operationId":        "operation-shift-canary",
+			"phase":              "Promoting",
+			"target":             "api-prod-codedeploy-group (codeDeployDeploymentGroup)",
+			"summary":            "Create the CodeDeploy deployment for the queued handoff.",
+			"action":             "codedeploy:CreateDeployment",
+			"resourceType":       "codeDeployDeploymentGroup",
+			"resourceName":       "api-prod-codedeploy-group",
+			"requiredCapability": "codedeploy:CreateDeployment",
+			"requiredRole":       "arn:aws:iam::123456789012:role/tenet-deployer",
+			"blocker": map[string]any{
+				"reason":  "missing_deployer_role",
+				"summary": "No deployer role is configured for this target account and region.",
+			},
+		}, {
+			"operationId":        "operation-watch-stability",
+			"phase":              "Verifying",
+			"target":             "api-prod-service (ecsService)",
+			"summary":            "Watch ECS service stability after the deployment starts.",
+			"action":             "ecs:DescribeServices",
+			"resourceType":       "ecsService",
+			"resourceName":       "api-prod-service",
+			"requiredCapability": "ecs:DescribeServices",
+			"ready":              true,
+		}},
 		"awsContext": map[string]any{
 			"awsAccountId":      "123456789012",
 			"region":            "us-west-2",
@@ -11676,7 +11701,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Copy execution preview read route')) throw new Error('expected copy execution preview read route handoff after create');
   if (!text.includes('Apply execution preview loaded')) throw new Error('expected execution preview loaded state after create');
   if (!text.includes('Read-only execution preview loaded from GET /v1/applies/apply_failed_123/execution-preview. It is derived from immutable apply/preflight metadata and does not perform AWS mutation or claim executor progress.')) throw new Error('expected execution preview loaded route copy after create');
-  if (!text.includes('This preview surfaces the first concrete executor action Tenet would hand off from immutable apply/preflight metadata. It is read-only operator evidence, not a live executor claim and not AWS mutation.')) throw new Error('expected execution preview non-mutating callout');
+  if (!text.includes('This preview surfaces the ordered executor handoff inventory Tenet would derive from immutable apply/preflight metadata. It is read-only operator evidence, not a live executor claim and not AWS mutation.')) throw new Error('expected execution preview non-mutating callout');
   if (!text.includes('Apply lifecycle summary')) throw new Error('expected apply lifecycle summary after create');
   if (!text.includes('0/1 terminal · 0 running · 1 queued')) throw new Error('expected queued lifecycle progress summary after create');
   if (text.includes('Apply lifecycle metadata')) throw new Error('expected failed/default apply record to omit lifecycle metadata section when lifecycle fields are missing');
@@ -11752,9 +11777,14 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Read-only execution preview loaded from GET /v1/applies/apply_failed_123/execution-preview. It is derived from immutable apply/preflight metadata and does not perform AWS mutation or claim executor progress.')) throw new Error('expected read-only execution preview route copy after refresh');
   if (!text.includes('Read-only preview | Yes — metadata only, no AWS mutation')) throw new Error('expected execution preview read-only metric');
   if (!text.includes('Preview summary | Execution preview confirms the next handoff would create a CodeDeploy deployment, but no AWS mutation is performed by this read route.')) throw new Error('expected execution preview summary metric');
-  if (!text.includes('Apply execution preview action')) throw new Error('expected execution preview action section');
+  if (!text.includes('Apply execution preview inventory')) throw new Error('expected execution preview inventory section');
+  if (!text.includes('The ordered preview inventory is copied from the stored apply/preflight read model so operators can see each likely AWS-facing handoff without running it.')) throw new Error('expected execution preview inventory intro');
+  if (!text.includes('Create the CodeDeploy deployment for the queued handoff.')) throw new Error('expected execution preview operation summary');
   if (!text.includes('Action · codedeploy:CreateDeployment')) throw new Error('expected execution preview operation action');
   if (!text.includes('Capability · codedeploy:CreateDeployment')) throw new Error('expected execution preview required capability');
+  if (!text.includes('operation-watch-stability')) throw new Error('expected second execution preview operation row');
+  if (!text.includes('Watch ECS service stability after the deployment starts.')) throw new Error('expected second execution preview operation summary');
+  if (!text.includes('Action · ecs:DescribeServices')) throw new Error('expected second execution preview operation action');
   if (!text.includes('AWS identity probe | Not checked — local metadata only')) throw new Error('expected execution preview AWS probe status');
   refreshPreflight.dispatch('click');
   text = collectText(root).join(' | ');

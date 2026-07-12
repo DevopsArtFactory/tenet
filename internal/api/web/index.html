@@ -9818,28 +9818,40 @@
         }
         return rows;
       };
-      const applyExecutionPreviewOperations = (preview) => {
-        const operation = preview?.operation;
-        if (!operation || typeof operation !== 'object') return [];
-        const blocked = Boolean(preview?.blocker?.reason);
-        return [{
-          id: typeof operation.operationId === 'string' ? operation.operationId.trim() : '',
-          anchorID: operation.operationId ? `operation-execution-preview-${sectionIDSegment(operation.operationId, 'unknown')}` : '',
-          kind: operation.operationId || operation.action || 'Execution preview action',
-          status: blocked ? 'failed' : 'pending',
-          statusLabel: blocked ? 'Blocked' : 'Previewed',
+      const applyExecutionPreviewOperationRows = (preview) => {
+        const operations = Array.isArray(preview?.operations) && preview.operations.length ? preview.operations : (preview?.operation ? [preview.operation] : []);
+        return operations.filter((operation) => operation && typeof operation === 'object');
+      };
+      const applyExecutionPreviewOperationID = (operation, index) => {
+        const operationID = typeof operation?.operationId === 'string' ? operation.operationId.trim() : '';
+        if (operationID) return operationID;
+        const legacyID = typeof operation?.id === 'string' ? operation.id.trim() : '';
+        return legacyID || `execution-preview-step-${index + 1}`;
+      };
+      const applyExecutionPreviewOperations = (preview) => applyExecutionPreviewOperationRows(preview).map((operation, index) => {
+        const operationID = applyExecutionPreviewOperationID(operation, index);
+        const blocker = operation?.blocker && typeof operation.blocker === 'object' ? operation.blocker : preview?.blocker;
+        const blockerReason = blocker?.reason || operation?.unavailableReason || '';
+        const ready = operation?.ready === true;
+        return {
+          id: operationID,
+          anchorID: `operation-execution-preview-${sectionIDSegment(operationID, 'unknown')}`,
+          kind: operationID || operation.action || 'Execution preview action',
+          status: blockerReason ? 'failed' : (ready ? 'succeeded' : 'pending'),
+          statusLabel: blockerReason ? 'Blocked' : (ready ? 'Ready' : 'Previewed'),
           phase: textOrDash(operation.phase),
           target: textOrDash(operation.target),
           summary: [
+            operation.summary ? textOrDash(operation.summary) : '',
             operation.action ? `Action · ${operation.action}` : '',
             operation.resourceType || operation.resourceName ? `Resource · ${[operation.resourceType, operation.resourceName].filter(Boolean).join(' / ')}` : '',
             operation.requiredCapability ? `Capability · ${operation.requiredCapability}` : '',
             operation.requiredRole ? `Role · ${operation.requiredRole}` : '',
-            preview?.blocker?.reason ? `Blocker · ${applyPreflightUnavailableReasonLabel(preview.blocker.reason)}` : '',
+            blockerReason ? `Blocker · ${applyPreflightUnavailableReasonLabel(blockerReason)}` : '',
           ].filter(Boolean).join(' · ') || 'No execution action is available yet.',
-          links: applyPreflightHandoffLinks(preview),
-        }];
-      };
+          links: applyPreflightHandoffLinks({ handoffs: operation.handoffs || preview?.handoffs || {} }),
+        };
+      });
       const createOperationsSection = ({ title, intro, operations, emptyMessage, shareURLForOperation = null }) => {
         const section = createDetailSection(title);
         if (!operations.length) {
@@ -11083,15 +11095,15 @@
             executionPreviewSection.append(
               createElement('div', 'workspace-callout-label', applyExecutionPreviewStatusHeading(applyState)),
               executionPreviewActions,
-              createElement('div', 'detail-state', 'This preview surfaces the first concrete executor action Tenet would hand off from immutable apply/preflight metadata. It is read-only operator evidence, not a live executor claim and not AWS mutation.'),
+              createElement('div', 'detail-state', 'This preview surfaces the ordered executor handoff inventory Tenet would derive from immutable apply/preflight metadata. It is read-only operator evidence, not a live executor claim and not AWS mutation.'),
               executionPreviewState,
               executionPreviewGrid,
             );
             const executionPreviewOperationsSection = createOperationsSection({
-              title: 'Apply execution preview action',
-              intro: 'The previewed action is copied from the stored apply/preflight read model so operators can see the likely first AWS-facing call without running it.',
+              title: 'Apply execution preview inventory',
+              intro: 'The ordered preview inventory is copied from the stored apply/preflight read model so operators can see each likely AWS-facing handoff without running it.',
               operations: applyExecutionPreviewOperations(executionPreviewRecord),
-              emptyMessage: 'No read-only execution preview action is loaded yet. Refresh execution preview after loading an apply record to inspect the first executor action without mutating AWS.',
+              emptyMessage: 'No read-only execution preview inventory is loaded yet. Refresh execution preview after loading an apply record to inspect the executor handoff sequence without mutating AWS.',
               shareURLForOperation: (operation) => buildPageSectionURL('plan', operation.anchorID, {
                 deployment: detail.name || currentPageState.deployment || '',
                 planId: activePlanRecord?.id || currentPageState.planId || activeApplyRecord.planId || '',
