@@ -1044,6 +1044,8 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 			"(`GET /v1/applies?status=active&claim=stale`)",
 			"queued exact subset",
 			"(`GET /v1/applies?status=queued`)",
+			"running exact subset",
+			"(`GET /v1/applies?status=running`)",
 			"terminal exact subsets (`GET /v1/applies?status=failed`, `GET /v1/applies?status=succeeded`, and `GET /v1/applies?status=cancelled`)",
 			"stored apply read",
 			"(`GET /v1/applies/{applyId}`)",
@@ -1079,7 +1081,7 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 		"local runtime": docs["local runtime"],
 	} {
 		for _, fragment := range []string{
-			"Local and Docker smoke cover the active-vs-queued apply collection split, stale-claim refinement, and terminal exact subsets",
+			"Local and Docker smoke cover the active-vs-queued/running apply collection split, stale-claim refinement, and terminal exact subsets",
 			"`GET /v1/applies?status=succeeded` / `GET /v1/applies?status=cancelled` return only matching terminal records",
 		} {
 			if !strings.Contains(text, fragment) {
@@ -1096,7 +1098,7 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 			"PAYLOAD_DIR=$(mktemp -d)",
 			"write_payload()",
 			"Path(sys.argv[1]).read_text",
-			"Verified active/queued apply collection split and claim freshness",
+			"Verified active/queued/running apply collection split and claim freshness",
 		} {
 			if !strings.Contains(text, fragment) {
 				t.Fatalf("expected %s to keep apply release-guard payloads file-backed via %q", name, fragment)
@@ -1107,6 +1109,7 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 	for name, fragments := range map[string][]string{
 		"smoke-local": {
 			"active_apply_records=$(curl -fsS \"http://$HOST:$PORT/v1/applies?status=active\")",
+			"running_apply_records=$(curl -fsS \"http://$HOST:$PORT/v1/applies?status=running\")",
 			"stale_active_apply_records=$(curl -fsS \"http://$HOST:$PORT/v1/applies?status=active&claim=stale\")",
 			"failed_apply_records=$(curl -fsS \"http://$HOST:$PORT/v1/applies?status=failed\")",
 			"succeeded_apply_records=$(curl -fsS \"http://$HOST:$PORT/v1/applies?status=succeeded\")",
@@ -1118,6 +1121,7 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 			"SUCCEEDED_APPLY_RECORDS_PATH",
 			"CANCELLED_APPLY_RECORDS_PATH",
 			"assert active_apply_records[0]['claim']['expiresAt'] == claimed_apply_heartbeat['claim']['expiresAt']",
+			"assert running_apply_records[0]['id'] == claimed_apply_heartbeat['id']",
 			"assert stale_active_apply_records[0]['id'] == os.environ['STALE_CLAIM_RECOVERY_APPLY_ID']",
 			"No active apply handoffs are visible right now. GET /v1/applies?status=active returned an empty collection.",
 			"No stale active apply claims are visible right now. GET /v1/applies?status=active&claim=stale returned an empty collection.",
@@ -1125,6 +1129,7 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 		},
 		"smoke-docker": {
 			"file_backed_active_apply_records_before_claim=$(curl -fsS \"$API_BASE_URL/v1/applies?status=active\")",
+			"file_backed_running_apply_records_after_heartbeat=$(curl -fsS \"$API_BASE_URL/v1/applies?status=running\")",
 			"file_backed_queued_apply_records_after_heartbeat=$(curl -fsS \"$API_BASE_URL/v1/applies?status=queued\")",
 			"file_backed_succeeded_apply_records=$(curl -fsS \"$API_BASE_URL/v1/applies?status=succeeded\")",
 			"file_backed_cancelled_apply_records=$(curl -fsS \"$API_BASE_URL/v1/applies?status=cancelled\")",

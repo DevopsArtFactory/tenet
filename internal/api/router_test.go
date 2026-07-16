@@ -1075,7 +1075,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if collectionRead["allowed"] != true || collectionRead["filtersCollectionsByDeploymentAccess"] != true {
 		t.Fatalf("expected collection read verdict, got %#v", collectionRead)
 	}
-	if !reflect.DeepEqual(collectionRead["exampleRoutes"], []any{"GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/catalog/deployments", "GET /v1/overview/accounts", "GET /v1/applies?status=active", "GET /v1/applies?status=active&claim=stale", "GET /v1/applies?status=queued", "GET /v1/audit-logs"}) {
+	if !reflect.DeepEqual(collectionRead["exampleRoutes"], []any{"GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/catalog/deployments", "GET /v1/overview/accounts", "GET /v1/applies?status=active", "GET /v1/applies?status=active&claim=stale", "GET /v1/applies?status=queued", "GET /v1/applies?status=running", "GET /v1/audit-logs"}) {
 		t.Fatalf("expected collection read route examples, got %#v", collectionRead["exampleRoutes"])
 	}
 	if !reflect.DeepEqual(collectionRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments", "X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"}) {
@@ -12530,6 +12530,36 @@ func TestRouterApplyRequestCollection(t *testing.T) {
 		}
 	})
 
+	t.Run("running payload filters exact in-flight apply records", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			ApplyRequests: func(_ context.Context, query applyrequest.ListQuery) ([]applyrequest.Record, error) {
+				if query.Status != applyrequest.StatusRunning || query.Claim != "" {
+					t.Fatalf("expected running list query without claim filter, got %+v", query)
+				}
+				return records, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/applies?status=running", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var got []applyrequest.Record
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode running applies payload: %v", err)
+		}
+		if len(got) != 1 || got[0].ID != "apply_running_api" || got[0].Status != applyrequest.StatusRunning {
+			t.Fatalf("expected only running apply record, got %+v", got)
+		}
+		if got[0].Claim == nil || got[0].Claim.WorkerID != "worker-a" {
+			t.Fatalf("expected running apply payload to preserve claim fields, got %+v", got[0].Claim)
+		}
+	})
+
 	t.Run("stale active claim payload passes active status and stale claim filters", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
@@ -12612,7 +12642,7 @@ func TestRouterApplyRequestCollection(t *testing.T) {
 		assertInternalServerErrorResponse(t, resp, upstreamErr)
 	})
 
-	for _, path := range []string{"/v1/applies", "/v1/applies?status=running", "/v1/applies?status=active&deployment=api-prod", "/v1/applies?status=queued&workerId=worker-a", "/v1/applies?status=queued&claim=stale", "/v1/applies?status=failed&claim=stale", "/v1/applies?status=active&claim=fresh"} {
+	for _, path := range []string{"/v1/applies", "/v1/applies?status=active&deployment=api-prod", "/v1/applies?status=queued&workerId=worker-a", "/v1/applies?status=queued&claim=stale", "/v1/applies?status=failed&claim=stale", "/v1/applies?status=active&claim=fresh"} {
 		t.Run("unsupported query "+path, func(t *testing.T) {
 			router := NewRouter(Options{
 				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
