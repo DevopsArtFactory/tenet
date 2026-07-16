@@ -735,6 +735,70 @@ func TestServiceListFiltersActiveApplyRequestsNewestFirst(t *testing.T) {
 	}
 }
 
+func TestServiceListFiltersRunningApplyRequests(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_queued": {
+				ID:             "apply_queued",
+				PlanID:         "plan_queued",
+				DeploymentName: "api-prod",
+				Status:         StatusQueued,
+				CreatedAt:      "2026-04-18T08:08:00Z",
+			},
+			"apply_running_new": {
+				ID:             "apply_running_new",
+				PlanID:         "plan_running_new",
+				DeploymentName: "worker-prod",
+				Status:         StatusRunning,
+				CreatedAt:      "2026-04-18T08:07:00Z",
+				Claim:          &Claim{WorkerID: "worker-new", ClaimedAt: "2026-04-18T08:07:00Z", LastHeartbeatAt: "2026-04-18T08:08:00Z", ExpiresAt: "2026-04-18T08:13:00Z"},
+				Operations: []Operation{{
+					Status:  OperationStatusRunning,
+					Phase:   "Promoting",
+					Target:  "worker-prod listener",
+					Summary: "Shift production traffic.",
+				}},
+			},
+			"apply_failed": {
+				ID:             "apply_failed",
+				PlanID:         "plan_failed",
+				DeploymentName: "api-prod",
+				Status:         StatusFailed,
+				CreatedAt:      "2026-04-18T08:06:00Z",
+			},
+			"apply_running_old": {
+				ID:             "apply_running_old",
+				PlanID:         "plan_running_old",
+				DeploymentName: "api-prod",
+				Status:         StatusRunning,
+				CreatedAt:      "2026-04-18T08:05:00Z",
+			},
+		},
+	}
+	service := Service{Store: store}
+
+	records, err := service.List(context.Background(), ListQuery{Status: StatusRunning})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	got := make([]string, 0, len(records))
+	for _, record := range records {
+		got = append(got, record.ID)
+		if record.Status != StatusRunning {
+			t.Fatalf("expected only running records, got %+v", records)
+		}
+	}
+	if want := []string{"apply_running_new", "apply_running_old"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected running apply records: got %+v want %+v", got, want)
+	}
+	if records[0].Claim == nil || records[0].Claim.WorkerID != "worker-new" {
+		t.Fatalf("expected listed running record to preserve claim metadata, got %+v", records[0].Claim)
+	}
+	if len(records[0].Operations) != 1 || records[0].Operations[0].ID == "" {
+		t.Fatalf("expected running listed records to normalize additive operation ids, got %+v", records[0].Operations)
+	}
+}
+
 func TestServiceListFiltersStaleActiveApplyClaimsNewestFirst(t *testing.T) {
 	store := &memoryStore{
 		records: map[string]Record{

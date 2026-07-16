@@ -3203,7 +3203,7 @@ def assert_operator_context_common(payload):
     assert access_verdicts.get("deploymentScopedWrite", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers + project_environment_scope_headers, payload
     assert access_verdicts.get("deploymentScopedWrite", {}).get("acceptedRoleNames") == write_roles, payload
     assert access_verdicts.get("collectionRead", {}).get("filtersCollectionsByDeploymentAccess") is True, payload
-    assert access_verdicts.get("collectionRead", {}).get("exampleRoutes") == ["GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/catalog/deployments", "GET /v1/overview/accounts", "GET /v1/applies?status=active", "GET /v1/applies?status=active&claim=stale", "GET /v1/applies?status=queued", "GET /v1/audit-logs"], payload
+    assert access_verdicts.get("collectionRead", {}).get("exampleRoutes") == ["GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/catalog/deployments", "GET /v1/overview/accounts", "GET /v1/applies?status=active", "GET /v1/applies?status=active&claim=stale", "GET /v1/applies?status=queued", "GET /v1/applies?status=running", "GET /v1/audit-logs"], payload
     assert access_verdicts.get("collectionRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers + project_environment_scope_headers, payload
     assert access_verdicts.get("collectionRead", {}).get("acceptedRoleNames") == read_roles, payload
     assert access_verdicts.get("catalogRead", {}).get("filtersCollectionsByDeploymentAccess") is True, payload
@@ -3674,6 +3674,7 @@ file_backed_claimed_apply_heartbeat=$(curl -fsS \
   --data '{"workerId":"docker-smoke-worker"}' \
   "$API_BASE_URL/v1/applies/$file_backed_claim_apply_id/heartbeat")
 file_backed_active_apply_records_after_heartbeat=$(curl -fsS "$API_BASE_URL/v1/applies?status=active")
+file_backed_running_apply_records_after_heartbeat=$(curl -fsS "$API_BASE_URL/v1/applies?status=running")
 file_backed_queued_apply_records_after_heartbeat=$(curl -fsS "$API_BASE_URL/v1/applies?status=queued")
 file_backed_succeeded_apply_records=$(curl -fsS "$API_BASE_URL/v1/applies?status=succeeded")
 file_backed_cancelled_apply_records=$(curl -fsS "$API_BASE_URL/v1/applies?status=cancelled")
@@ -3681,6 +3682,7 @@ file_backed_active_apply_records_before_claim_path=$(write_payload file-backed-a
 file_backed_claimed_apply_record_path=$(write_payload file-backed-claimed-apply-record.json "$file_backed_claimed_apply_record")
 file_backed_claimed_apply_heartbeat_path=$(write_payload file-backed-claimed-apply-heartbeat.json "$file_backed_claimed_apply_heartbeat")
 file_backed_active_apply_records_after_heartbeat_path=$(write_payload file-backed-active-apply-records-after-heartbeat.json "$file_backed_active_apply_records_after_heartbeat")
+file_backed_running_apply_records_after_heartbeat_path=$(write_payload file-backed-running-apply-records-after-heartbeat.json "$file_backed_running_apply_records_after_heartbeat")
 file_backed_queued_apply_records_after_heartbeat_path=$(write_payload file-backed-queued-apply-records-after-heartbeat.json "$file_backed_queued_apply_records_after_heartbeat")
 file_backed_succeeded_apply_records_path=$(write_payload file-backed-succeeded-apply-records.json "$file_backed_succeeded_apply_records")
 file_backed_cancelled_apply_records_path=$(write_payload file-backed-cancelled-apply-records.json "$file_backed_cancelled_apply_records")
@@ -3693,6 +3695,7 @@ FILE_BACKED_ACTIVE_BEFORE_CLAIM_PATH="$file_backed_active_apply_records_before_c
 FILE_BACKED_CLAIMED_APPLY_RECORD_PATH="$file_backed_claimed_apply_record_path" \
 FILE_BACKED_CLAIMED_APPLY_HEARTBEAT_PATH="$file_backed_claimed_apply_heartbeat_path" \
 FILE_BACKED_ACTIVE_AFTER_HEARTBEAT_PATH="$file_backed_active_apply_records_after_heartbeat_path" \
+FILE_BACKED_RUNNING_AFTER_HEARTBEAT_PATH="$file_backed_running_apply_records_after_heartbeat_path" \
 FILE_BACKED_QUEUED_AFTER_HEARTBEAT_PATH="$file_backed_queued_apply_records_after_heartbeat_path" \
 FILE_BACKED_SUCCEEDED_APPLY_RECORDS_PATH="$file_backed_succeeded_apply_records_path" \
 FILE_BACKED_CANCELLED_APPLY_RECORDS_PATH="$file_backed_cancelled_apply_records_path" \
@@ -3720,6 +3723,8 @@ with open(os.environ["FILE_BACKED_CLAIMED_APPLY_HEARTBEAT_PATH"], encoding="utf-
     file_backed_claimed_apply_heartbeat = json.load(fh)
 with open(os.environ["FILE_BACKED_ACTIVE_AFTER_HEARTBEAT_PATH"], encoding="utf-8") as fh:
     file_backed_active_after_heartbeat = json.load(fh)
+with open(os.environ["FILE_BACKED_RUNNING_AFTER_HEARTBEAT_PATH"], encoding="utf-8") as fh:
+    file_backed_running_after_heartbeat = json.load(fh)
 with open(os.environ["FILE_BACKED_QUEUED_AFTER_HEARTBEAT_PATH"], encoding="utf-8") as fh:
     file_backed_queued_after_heartbeat = json.load(fh)
 with open(os.environ["FILE_BACKED_SUCCEEDED_APPLY_RECORDS_PATH"], encoding="utf-8") as fh:
@@ -3816,13 +3821,19 @@ active_after_heartbeat_by_id = {record.get("id"): record for record in file_back
 # The compose stack may have the local-safe executor enabled for this phase, so
 # it can claim or advance seeded queued records between read requests. Keep the
 # release guard focused on the stable contract: direct claim/heartbeat responses
-# preserve freshness metadata, and active/queued collection reads stay scoped to
+# preserve freshness metadata, and active/queued/running collection reads stay scoped to
 # non-terminal and queued-only subsets respectively.
 assert file_backed_claimed_apply_heartbeat["status"] == "running", file_backed_claimed_apply_heartbeat
 assert file_backed_claimed_apply_heartbeat["claim"]["workerId"] == "docker-smoke-worker", file_backed_claimed_apply_heartbeat
 assert file_backed_claimed_apply_heartbeat["claim"]["claimedAt"] == file_backed_claimed_apply_record["claim"]["claimedAt"], (file_backed_claimed_apply_heartbeat, file_backed_claimed_apply_record)
 assert file_backed_claimed_apply_heartbeat["claim"]["lastHeartbeatAt"] >= file_backed_claimed_apply_record["claim"]["lastHeartbeatAt"], (file_backed_claimed_apply_heartbeat, file_backed_claimed_apply_record)
 assert file_backed_claimed_apply_heartbeat["claim"]["expiresAt"], file_backed_claimed_apply_heartbeat
+
+assert isinstance(file_backed_running_after_heartbeat, list), file_backed_running_after_heartbeat
+assert all(record.get("status") == "running" for record in file_backed_running_after_heartbeat), file_backed_running_after_heartbeat
+running_after_heartbeat_ids = {record.get("id") for record in file_backed_running_after_heartbeat}
+assert file_backed_claim_apply_id in running_after_heartbeat_ids, file_backed_running_after_heartbeat
+assert running_after_heartbeat_ids.issubset(set(active_after_heartbeat_by_id)), (file_backed_running_after_heartbeat, file_backed_active_after_heartbeat)
 
 assert isinstance(file_backed_queued_after_heartbeat, list), file_backed_queued_after_heartbeat
 assert all(record.get("status") == "queued" for record in file_backed_queued_after_heartbeat), file_backed_queued_after_heartbeat
@@ -3843,6 +3854,6 @@ assert cancelled_record_by_id[file_backed_cancelled_apply_id]["operations"], fil
 assert all(operation.get("status") == "cancelled" for operation in cancelled_record_by_id[file_backed_cancelled_apply_id]["operations"]), cancelled_record_by_id[file_backed_cancelled_apply_id]
 PY
 
-echo "Verified active/queued apply collection split and claim freshness"
+echo "Verified active/queued/running apply collection split and claim freshness"
 echo "Verified active/queued and terminal apply collection filters plus claim freshness"
 echo "smoke-docker: compose stack path ok"

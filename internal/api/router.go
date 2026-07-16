@@ -234,9 +234,9 @@ func parseApplyRequestListQuery(w http.ResponseWriter, r *http.Request) (applyre
 	status := strings.TrimSpace(queryValues.Get("status"))
 	claim := strings.TrimSpace(queryValues.Get("claim"))
 	switch status {
-	case string(applyrequest.StatusQueued):
+	case string(applyrequest.StatusQueued), string(applyrequest.StatusRunning):
 		if claim == "" {
-			return applyrequest.ListQuery{Status: applyrequest.StatusQueued}, true
+			return applyrequest.ListQuery{Status: applyrequest.Status(status)}, true
 		}
 	case string(applyrequest.StatusSucceeded), string(applyrequest.StatusFailed), string(applyrequest.StatusCancelled):
 		if claim == "" {
@@ -250,7 +250,7 @@ func parseApplyRequestListQuery(w http.ResponseWriter, r *http.Request) (applyre
 			return applyrequest.ListQuery{Status: applyrequest.ListStatusActive, Claim: applyrequest.ListClaimStale}, true
 		}
 	}
-	http.Error(w, "status=queued, status=active, status=active&claim=stale, or terminal status=succeeded|failed|cancelled is required", http.StatusBadRequest)
+	http.Error(w, "status=queued, status=running, status=active, status=active&claim=stale, or terminal status=succeeded|failed|cancelled is required", http.StatusBadRequest)
 	return applyrequest.ListQuery{}, false
 }
 
@@ -759,6 +759,7 @@ var (
 		"GET /v1/applies?status=active",
 		"GET /v1/applies?status=active&claim=stale",
 		"GET /v1/applies?status=queued",
+		"GET /v1/applies?status=running",
 		"GET /v1/audit-logs",
 	}
 	operatorContextCatalogReadExampleRoutes = []string{
