@@ -3580,6 +3580,11 @@ file_backed_claim_apply_id=apply_smoke_docker_claim_heartbeat
 file_backed_queued_apply_id=apply_smoke_docker_queued_subset
 file_backed_succeeded_apply_id=apply_smoke_docker_succeeded_subset
 file_backed_cancelled_apply_id=apply_smoke_docker_cancelled_subset
+# The collection/filter release guard below seeds deterministic file-backed
+# apply records and then calls the explicit claim/heartbeat routes. Disable the
+# background executor for this phase so it cannot race the manual claim request
+# on faster local or hosted runners.
+restart_api_with_apply_mode false
 docker_apply_store_before_claim=$("${COMPOSE[@]}" exec -T api sh -c 'cat /tmp/tenet/apply-requests.json 2>/dev/null || printf "[]\n"')
 docker_apply_store_before_claim_path=$(write_payload docker-apply-store-before-claim.json "$docker_apply_store_before_claim")
 docker_apply_store_seeded_path="$PAYLOAD_DIR/docker-apply-store-seeded.json"
@@ -3787,7 +3792,23 @@ assert file_backed_claimed_apply_heartbeat["claim"]["claimedAt"] == file_backed_
 assert file_backed_claimed_apply_heartbeat["claim"]["lastHeartbeatAt"] >= file_backed_claimed_apply_record["claim"]["lastHeartbeatAt"], (file_backed_claimed_apply_heartbeat, file_backed_claimed_apply_record)
 assert isinstance(file_backed_claimed_apply_heartbeat["claim"].get("expiresAt"), str) and file_backed_claimed_apply_heartbeat["claim"]["expiresAt"], file_backed_claimed_apply_heartbeat
 assert file_backed_claimed_apply_heartbeat["lifecycle"] == file_backed_claimed_apply_record["lifecycle"], (file_backed_claimed_apply_heartbeat, file_backed_claimed_apply_record)
-assert file_backed_claimed_apply_heartbeat["operations"] == file_backed_claimed_apply_record["operations"], (file_backed_claimed_apply_heartbeat, file_backed_claimed_apply_record)
+claimed_operations = file_backed_claimed_apply_record["operations"]
+heartbeat_operations = file_backed_claimed_apply_heartbeat["operations"]
+assert len(heartbeat_operations) == len(claimed_operations), (file_backed_claimed_apply_heartbeat, file_backed_claimed_apply_record)
+for heartbeat_operation, claimed_operation in zip(heartbeat_operations, claimed_operations):
+    # Heartbeats intentionally refresh the current operation's executionAttempt
+    # freshness fields without changing the row identity or operation status.
+    for stable_key in ("id", "status", "phase", "target", "summary"):
+        assert heartbeat_operation.get(stable_key) == claimed_operation.get(stable_key), (heartbeat_operation, claimed_operation)
+first_heartbeat_attempt = heartbeat_operations[0].get("executionAttempt") or {}
+first_claim_attempt = claimed_operations[0].get("executionAttempt") or {}
+assert first_heartbeat_attempt.get("workerId") == first_claim_attempt.get("workerId") == "docker-smoke-worker", (first_heartbeat_attempt, first_claim_attempt)
+assert first_heartbeat_attempt.get("status") == first_claim_attempt.get("status") == "running", (first_heartbeat_attempt, first_claim_attempt)
+assert first_heartbeat_attempt.get("startedAt") == first_claim_attempt.get("startedAt"), (first_heartbeat_attempt, first_claim_attempt)
+assert first_heartbeat_attempt.get("lastHeartbeatAt") >= first_claim_attempt.get("lastHeartbeatAt"), (first_heartbeat_attempt, first_claim_attempt)
+assert "refreshed this operation heartbeat" in first_heartbeat_attempt.get("summary", ""), first_heartbeat_attempt
+for operation in heartbeat_operations[1:]:
+    assert "executionAttempt" not in operation, operation
 
 assert isinstance(file_backed_active_after_heartbeat, list), file_backed_active_after_heartbeat
 assert all(record.get("status") in {"queued", "running"} for record in file_backed_active_after_heartbeat), file_backed_active_after_heartbeat
