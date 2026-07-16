@@ -272,6 +272,13 @@ func (s Service) claimRecord(ctx context.Context, request ClaimRequest) func(Rec
 		record.Details = []string{"Executor " + workerID + " claimed this queued apply request for local-safe handoff; no live AWS mutation has been attempted by the claim route."}
 		step := firstRunnableStep(record)
 		record.Operations = transitionOperations(record.Operations, StatusRunning, step)
+		record.Operations = recordOperationAttempt(record.Operations, operationAttemptEvent{
+			Status:    StatusRunning,
+			Step:      step,
+			WorkerID:  workerID,
+			Timestamp: claimedAt,
+			Summary:   "Local-safe executor " + workerID + " claimed this operation for handoff; no live AWS mutation has been attempted.",
+		})
 		record.Lifecycle = transitionLifecycle(record.Lifecycle, len(record.Operations), TransitionRequest{Status: StatusRunning, Step: step}, now)
 		readiness := deriveExecutionReadiness(record)
 		record.ExecutionReadiness = &readiness
@@ -308,6 +315,13 @@ func recoverExpiredClaim(ctx context.Context, record Record, workerID string, pr
 	record.Details = []string{detail}
 	step := recoveryStep(record)
 	record.Operations = transitionOperations(record.Operations, StatusRunning, step)
+	record.Operations = recordOperationAttempt(record.Operations, operationAttemptEvent{
+		Status:    StatusRunning,
+		Step:      step,
+		WorkerID:  workerID,
+		Timestamp: claimedAt,
+		Summary:   "Local-safe executor " + workerID + " recovered this operation from an expired claim; no live AWS mutation has been attempted.",
+	})
 	record.Lifecycle = transitionLifecycle(record.Lifecycle, len(record.Operations), TransitionRequest{Status: StatusRunning, Step: step}, now)
 	readiness := deriveExecutionReadiness(record)
 	record.ExecutionReadiness = &readiness
@@ -471,9 +485,18 @@ func (s Service) heartbeatRecord(request HeartbeatRequest) func(Record) (Record,
 			return Record{}, fmt.Errorf("%w: %s", ErrInvalidState, detail)
 		}
 		claim := *record.Claim
-		claim.LastHeartbeatAt = now.Format(time.RFC3339)
+		heartbeatAt := now.Format(time.RFC3339)
+		claim.LastHeartbeatAt = heartbeatAt
 		claim.ExpiresAt = now.Add(claimFreshnessTTL).Format(time.RFC3339)
 		record.Claim = &claim
+		record.Operations = recordOperationAttempt(record.Operations, operationAttemptEvent{
+			Status:        StatusRunning,
+			Step:          currentOperationStep(record),
+			WorkerID:      workerID,
+			Timestamp:     heartbeatAt,
+			HeartbeatOnly: true,
+			Summary:       "Local-safe executor " + workerID + " refreshed this operation heartbeat; no live AWS mutation has been attempted.",
+		})
 		readiness := deriveExecutionReadiness(record)
 		record.ExecutionReadiness = &readiness
 		return record, nil
@@ -509,6 +532,14 @@ func (s Service) Transition(ctx context.Context, id string, request TransitionRe
 		record.Details = append([]string(nil), request.Details...)
 	}
 	record.Operations = transitionOperations(record.Operations, request.Status, request.Step)
+	record.Operations = recordOperationAttempt(record.Operations, operationAttemptEvent{
+		Status:    request.Status,
+		Step:      request.Step,
+		WorkerID:  transitionWorkerID(record),
+		Timestamp: now.UTC().Format(time.RFC3339),
+		Reason:    transitionAttemptReason(request),
+		Summary:   transitionAttemptSummary(record, request),
+	})
 	record.Lifecycle = transitionLifecycle(record.Lifecycle, len(record.Operations), request, now)
 	readiness := deriveExecutionReadiness(record)
 	record.ExecutionReadiness = &readiness
@@ -738,7 +769,7 @@ func transitionOperations(existing []Operation, status Status, step int) []Opera
 		return nil
 	}
 
-	updated := append([]Operation(nil), existing...)
+	updated := cloneOperations(existing)
 	waiting := waitingOperationStatus(existing)
 	switch status {
 	case StatusRunning:
@@ -770,6 +801,163 @@ func transitionOperations(existing []Operation, status Status, step int) []Opera
 		}
 	}
 	return updated
+}
+
+type operationAttemptEvent struct {
+	Status        Status
+	Step          int
+	WorkerID      string
+	Timestamp     string
+	Reason        string
+	Summary       string
+	HeartbeatOnly bool
+}
+
+func cloneOperations(existing []Operation) []Operation {
+	if len(existing) == 0 {
+		return nil
+	}
+	updated := append([]Operation(nil), existing...)
+	for i := range updated {
+		if updated[i].ExecutionAttempt != nil {
+			attempt := *updated[i].ExecutionAttempt
+			updated[i].ExecutionAttempt = &attempt
+		}
+	}
+	return updated
+}
+
+func recordOperationAttempt(existing []Operation, event operationAttemptEvent) []Operation {
+	if len(existing) == 0 || strings.TrimSpace(event.Timestamp) == "" {
+		return cloneOperations(existing)
+	}
+	updated := cloneOperations(existing)
+	switch event.Status {
+	case StatusRunning:
+		if event.Step < 1 || event.Step > len(updated) {
+			return updated
+		}
+		attempt := ensureOperationAttempt(updated[event.Step-1].ExecutionAttempt)
+		applyAttemptWorker(attempt, event.WorkerID)
+		attempt.Status = OperationStatusRunning
+		if attempt.StartedAt == "" && !event.HeartbeatOnly {
+			attempt.StartedAt = event.Timestamp
+		}
+		if attempt.StartedAt == "" {
+			attempt.StartedAt = event.Timestamp
+		}
+		attempt.LastHeartbeatAt = event.Timestamp
+		attempt.FinishedAt = ""
+		attempt.Reason = ""
+		attempt.Summary = event.Summary
+		updated[event.Step-1].ExecutionAttempt = attempt
+	case StatusFailed, StatusCancelled:
+		if event.Step < 1 || event.Step > len(updated) {
+			return updated
+		}
+		attempt := ensureOperationAttempt(updated[event.Step-1].ExecutionAttempt)
+		applyAttemptWorker(attempt, event.WorkerID)
+		if event.Status == StatusFailed {
+			attempt.Status = OperationStatusFailed
+		} else {
+			attempt.Status = OperationStatusCancelled
+		}
+		if attempt.StartedAt == "" {
+			attempt.StartedAt = event.Timestamp
+		}
+		attempt.LastHeartbeatAt = event.Timestamp
+		attempt.FinishedAt = event.Timestamp
+		attempt.Reason = event.Reason
+		attempt.Summary = event.Summary
+		updated[event.Step-1].ExecutionAttempt = attempt
+	case StatusSucceeded:
+		for i := range updated {
+			if updated[i].ExecutionAttempt == nil {
+				continue
+			}
+			attempt := ensureOperationAttempt(updated[i].ExecutionAttempt)
+			applyAttemptWorker(attempt, event.WorkerID)
+			attempt.Status = OperationStatusSucceeded
+			if attempt.StartedAt == "" {
+				attempt.StartedAt = event.Timestamp
+			}
+			attempt.LastHeartbeatAt = event.Timestamp
+			attempt.FinishedAt = event.Timestamp
+			attempt.Reason = event.Reason
+			attempt.Summary = event.Summary
+			updated[i].ExecutionAttempt = attempt
+		}
+	}
+	return updated
+}
+
+func ensureOperationAttempt(existing *OperationExecutionAttempt) *OperationExecutionAttempt {
+	if existing == nil {
+		return &OperationExecutionAttempt{}
+	}
+	attempt := *existing
+	return &attempt
+}
+
+func applyAttemptWorker(attempt *OperationExecutionAttempt, workerID string) {
+	workerID = strings.TrimSpace(workerID)
+	if workerID != "" {
+		attempt.WorkerID = workerID
+	}
+}
+
+func currentOperationStep(record Record) int {
+	if record.Lifecycle.CurrentStep >= 1 && record.Lifecycle.CurrentStep <= len(record.Operations) {
+		return record.Lifecycle.CurrentStep
+	}
+	for i, operation := range record.Operations {
+		if operation.Status == OperationStatusRunning {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+func transitionWorkerID(record Record) string {
+	if record.Claim != nil && strings.TrimSpace(record.Claim.WorkerID) != "" {
+		return record.Claim.WorkerID
+	}
+	return "transition-route"
+}
+
+func transitionAttemptReason(request TransitionRequest) string {
+	if strings.TrimSpace(request.Error) != "" {
+		return strings.TrimSpace(request.Error)
+	}
+	switch request.Status {
+	case StatusSucceeded:
+		return "apply request marked succeeded"
+	case StatusFailed:
+		return "apply request marked failed"
+	case StatusCancelled:
+		return "apply request marked cancelled"
+	default:
+		return ""
+	}
+}
+
+func transitionAttemptSummary(record Record, request TransitionRequest) string {
+	workerID := transitionWorkerID(record)
+	switch request.Status {
+	case StatusRunning:
+		return "Apply transition marked this operation running for local-safe executor " + workerID + "; no live AWS mutation has been attempted."
+	case StatusSucceeded:
+		return "Apply transition marked attempted operations succeeded for local-safe executor " + workerID + "; this metadata is not proof of live AWS mutation."
+	case StatusFailed:
+		if strings.TrimSpace(request.Error) != "" {
+			return "Apply transition marked this operation failed for local-safe executor " + workerID + ": " + strings.TrimSpace(request.Error)
+		}
+		return "Apply transition marked this operation failed for local-safe executor " + workerID + "; no live AWS mutation success is claimed."
+	case StatusCancelled:
+		return "Apply transition marked this operation cancelled for local-safe executor " + workerID + "; no live AWS mutation success is claimed."
+	default:
+		return ""
+	}
 }
 
 func waitingOperationStatus(existing []Operation) OperationStatus {

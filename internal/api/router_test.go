@@ -12225,7 +12225,23 @@ func TestRouterApplyRequest(t *testing.T) {
 		Details:        []string{"Tenet persisted this immutable apply request in read-only mode and did not contact AWS."},
 		Lifecycle:      applyrequest.Lifecycle{UpdatedAt: "2026-04-18T08:05:00Z", FinishedAt: "2026-04-18T08:05:00Z", TotalSteps: 1},
 		Operations: []applyrequest.Operation{
-			{Status: applyrequest.OperationStatusPending, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+			{
+				ID:      "op_provision",
+				Status:  applyrequest.OperationStatusFailed,
+				Phase:   "Provisioning",
+				Target:  "api-prod deployment",
+				Summary: "Create replacement capacity for api-prod.",
+				ExecutionAttempt: &applyrequest.OperationExecutionAttempt{
+					WorkerID:        "worker-a",
+					Status:          applyrequest.OperationStatusFailed,
+					StartedAt:       "2026-04-18T08:05:30Z",
+					LastHeartbeatAt: "2026-04-18T08:06:00Z",
+					FinishedAt:      "2026-04-18T08:06:00Z",
+					Reason:          "local-safe handoff stopped",
+					Summary:         "Local-safe executor evidence; this metadata is not proof of live AWS mutation.",
+				},
+			},
+			{ID: "op_promote", Status: applyrequest.OperationStatusPending, Phase: "Promoting", Target: "api-prod listener", Summary: "Shift traffic."},
 		},
 		Source: applyrequest.SourceContext{PlanID: "plan_1234abcd", Route: "/v1/plans/plan_1234abcd", PlanStatus: "ready", Fingerprint: "plan_input"},
 	}
@@ -12261,6 +12277,30 @@ func TestRouterApplyRequest(t *testing.T) {
 			if _, ok := raw[key]; !ok {
 				t.Fatalf("expected apply request payload to include %q, got %#v", key, raw)
 			}
+		}
+		rawOperations, ok := raw["operations"].([]any)
+		if !ok || len(rawOperations) != 2 {
+			t.Fatalf("expected raw apply operations array, got %#v", raw["operations"])
+		}
+		rawAttempt, ok := rawOperations[0].(map[string]any)["executionAttempt"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected first operation to expose executionAttempt, got %#v", rawOperations[0])
+		}
+		for key, want := range map[string]any{
+			"workerId":        "worker-a",
+			"status":          "failed",
+			"startedAt":       "2026-04-18T08:05:30Z",
+			"lastHeartbeatAt": "2026-04-18T08:06:00Z",
+			"finishedAt":      "2026-04-18T08:06:00Z",
+			"reason":          "local-safe handoff stopped",
+			"summary":         "Local-safe executor evidence; this metadata is not proof of live AWS mutation.",
+		} {
+			if rawAttempt[key] != want {
+				t.Fatalf("expected executionAttempt.%s=%#v, got %#v in %#v", key, want, rawAttempt[key], rawAttempt)
+			}
+		}
+		if _, ok := rawOperations[1].(map[string]any)["executionAttempt"]; ok {
+			t.Fatalf("expected legacy operation to omit executionAttempt, got %#v", rawOperations[1])
 		}
 	})
 

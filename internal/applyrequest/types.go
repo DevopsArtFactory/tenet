@@ -100,13 +100,26 @@ type SourceContext struct {
 	Fingerprint   string `json:"fingerprint,omitempty"`
 }
 
+// OperationExecutionAttempt captures local-safe executor evidence for one apply operation.
+// It is Tenet-owned control-plane metadata only; it does not prove live AWS mutation.
+type OperationExecutionAttempt struct {
+	WorkerID        string          `json:"workerId,omitempty"`
+	Status          OperationStatus `json:"status,omitempty"`
+	StartedAt       string          `json:"startedAt,omitempty"`
+	LastHeartbeatAt string          `json:"lastHeartbeatAt,omitempty"`
+	FinishedAt      string          `json:"finishedAt,omitempty"`
+	Reason          string          `json:"reason,omitempty"`
+	Summary         string          `json:"summary,omitempty"`
+}
+
 // Operation is one additive operator-facing execution row projected from a ready plan preview.
 type Operation struct {
-	ID      string          `json:"id,omitempty"`
-	Status  OperationStatus `json:"status"`
-	Phase   string          `json:"phase"`
-	Target  string          `json:"target"`
-	Summary string          `json:"summary"`
+	ID               string                     `json:"id,omitempty"`
+	Status           OperationStatus            `json:"status"`
+	Phase            string                     `json:"phase"`
+	Target           string                     `json:"target"`
+	Summary          string                     `json:"summary"`
+	ExecutionAttempt *OperationExecutionAttempt `json:"executionAttempt,omitempty"`
 }
 
 // Lifecycle captures additive operator-facing progress metadata for one apply request.

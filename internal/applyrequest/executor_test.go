@@ -54,6 +54,12 @@ func TestExecutorRunOnceAdvancesQueuedApplyToRunningThenFailed(t *testing.T) {
 	if running.Claim == nil || running.Claim.WorkerID != "tenet-local-executor" {
 		t.Fatalf("expected executor claim metadata, got %+v", running.Claim)
 	}
+	if attempt := running.Operations[0].ExecutionAttempt; attempt == nil || attempt.WorkerID != "tenet-local-executor" || attempt.Status != OperationStatusRunning || attempt.StartedAt != "2026-04-18T08:06:00Z" || attempt.LastHeartbeatAt != "2026-04-18T08:06:00Z" || !strings.Contains(attempt.Summary, "no live AWS mutation") {
+		t.Fatalf("expected executor claim to persist operation attempt evidence, got %+v", attempt)
+	}
+	if running.Operations[1].ExecutionAttempt != nil {
+		t.Fatalf("expected queued executor operation to omit attempt evidence, got %+v", running.Operations[1].ExecutionAttempt)
+	}
 
 	now = now.Add(30 * time.Second)
 	if err := executor.RunOnce(context.Background()); err != nil {
@@ -71,6 +77,9 @@ func TestExecutorRunOnceAdvancesQueuedApplyToRunningThenFailed(t *testing.T) {
 	}
 	if statuses := []OperationStatus{failed.Operations[0].Status, failed.Operations[1].Status}; statuses[0] != OperationStatusFailed || statuses[1] != OperationStatusQueued {
 		t.Fatalf("unexpected failed operation statuses: %+v", failed.Operations)
+	}
+	if attempt := failed.Operations[0].ExecutionAttempt; attempt == nil || attempt.WorkerID != "tenet-local-executor" || attempt.Status != OperationStatusFailed || attempt.FinishedAt != "2026-04-18T08:06:30Z" || attempt.Reason != executorFailedError || !strings.Contains(attempt.Summary, executorFailedError) {
+		t.Fatalf("expected executor failure to finish operation attempt evidence, got %+v", attempt)
 	}
 }
 

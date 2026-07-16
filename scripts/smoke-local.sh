@@ -1308,7 +1308,20 @@ assert claimed_apply_heartbeat['claim']['claimedAt'] == claimed_apply_record['cl
 assert claimed_apply_heartbeat['claim']['lastHeartbeatAt'] >= claimed_apply_record['claim']['lastHeartbeatAt'], (claimed_apply_heartbeat, claimed_apply_record)
 assert isinstance(claimed_apply_heartbeat['claim'].get('expiresAt'), str) and claimed_apply_heartbeat['claim']['expiresAt'], claimed_apply_heartbeat
 assert claimed_apply_heartbeat['lifecycle'] == claimed_apply_record['lifecycle'], (claimed_apply_heartbeat, claimed_apply_record)
-assert claimed_apply_heartbeat['operations'] == claimed_apply_record['operations'], (claimed_apply_heartbeat, claimed_apply_record)
+claimed_operation_attempt = claimed_apply_record['operations'][claim_transition_step - 1].get('executionAttempt')
+assert claimed_operation_attempt['workerId'] == 'worker-a', claimed_apply_record
+assert claimed_operation_attempt['status'] == 'running', claimed_apply_record
+assert claimed_operation_attempt['startedAt'] == claimed_apply_record['claim']['claimedAt'], claimed_apply_record
+assert claimed_operation_attempt['lastHeartbeatAt'] == claimed_apply_record['claim']['lastHeartbeatAt'], claimed_apply_record
+assert 'no live AWS mutation' in claimed_operation_attempt['summary'], claimed_apply_record
+heartbeat_operation_attempt = claimed_apply_heartbeat['operations'][claim_transition_step - 1].get('executionAttempt')
+assert heartbeat_operation_attempt['workerId'] == 'worker-a', claimed_apply_heartbeat
+assert heartbeat_operation_attempt['status'] == 'running', claimed_apply_heartbeat
+assert heartbeat_operation_attempt['startedAt'] == claimed_operation_attempt['startedAt'], (claimed_apply_heartbeat, claimed_apply_record)
+assert heartbeat_operation_attempt['lastHeartbeatAt'] == claimed_apply_heartbeat['claim']['lastHeartbeatAt'], claimed_apply_heartbeat
+assert 'refreshed this operation heartbeat' in heartbeat_operation_attempt['summary'], claimed_apply_heartbeat
+assert claimed_apply_heartbeat['operations'][:claim_transition_step - 1] == claimed_apply_record['operations'][:claim_transition_step - 1], (claimed_apply_heartbeat, claimed_apply_record)
+assert claimed_apply_heartbeat['operations'][claim_transition_step:] == claimed_apply_record['operations'][claim_transition_step:], (claimed_apply_heartbeat, claimed_apply_record)
 assert claimed_apply_heartbeat['transitions'] == claimed_apply_record['transitions'], (claimed_apply_heartbeat, claimed_apply_record)
 assert stale_claim_recovery_record['id'] == os.environ['STALE_CLAIM_RECOVERY_APPLY_ID'], stale_claim_recovery_record
 assert stale_claim_recovery_record['status'] == 'running', stale_claim_recovery_record
