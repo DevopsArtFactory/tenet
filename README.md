@@ -25,7 +25,7 @@ Tenet helps operators:
 - troubleshoot front-door auth, deployment access, desired-state refresh
   readiness, and runtime evidence with explicit diagnostics
 
-The primary UI flow is intentionally simple:
+The primary UI flow is intentionally simple, and the embedded shell's initial loading copy now names that Applications overview entry point:
 
 1. Applications overview
 2. Application detail
