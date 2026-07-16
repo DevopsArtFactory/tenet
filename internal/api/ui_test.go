@@ -4972,6 +4972,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"Tenet does not treat raw browser-supplied `X-User-*` headers as a login session",
 			"The same trusted front-door read contract covers `GET /v1/overview/accounts/{awsAccountId}`",
 			"`GET /v1/applies?status=active&claim=stale`",
+			"`GET /v1/applies?status=running`",
 			"additive `identityProvenance` source metadata",
 			"roles.provenance.source",
 			"whether the request used canonical `X-Tenet-Authenticated-*` fields, compatibility `X-User-*` aliases, or the Tenet-managed `managed_session_cookie` source",
