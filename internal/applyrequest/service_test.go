@@ -851,6 +851,12 @@ func TestServiceClaimQueuedApplyRequest(t *testing.T) {
 	if statuses := []OperationStatus{claimed.Operations[0].Status, claimed.Operations[1].Status}; !reflect.DeepEqual(statuses, []OperationStatus{OperationStatusRunning, OperationStatusQueued}) {
 		t.Fatalf("unexpected claimed operation statuses: %+v", claimed.Operations)
 	}
+	if attempt := claimed.Operations[0].ExecutionAttempt; attempt == nil || attempt.WorkerID != "worker-a" || attempt.Status != OperationStatusRunning || attempt.StartedAt != "2026-04-18T08:10:00Z" || attempt.LastHeartbeatAt != "2026-04-18T08:10:00Z" || attempt.FinishedAt != "" || !strings.Contains(attempt.Summary, "no live AWS mutation") {
+		t.Fatalf("expected claim to persist current operation attempt metadata, got %+v", attempt)
+	}
+	if claimed.Operations[1].ExecutionAttempt != nil {
+		t.Fatalf("expected queued operation to omit attempt metadata, got %+v", claimed.Operations[1].ExecutionAttempt)
+	}
 	if len(claimed.Transitions) != 1 || claimed.Transitions[0].PreviousStatus != StatusQueued || claimed.Transitions[0].Status != StatusRunning || claimed.Transitions[0].Step != 1 {
 		t.Fatalf("expected claim to append running transition history, got %+v", claimed.Transitions)
 	}
@@ -990,6 +996,9 @@ func TestServiceClaimAllowsExplicitExpiredClaimTakeover(t *testing.T) {
 	}
 	if statuses := []OperationStatus{claimed.Operations[0].Status, claimed.Operations[1].Status}; !reflect.DeepEqual(statuses, []OperationStatus{OperationStatusSucceeded, OperationStatusRunning}) {
 		t.Fatalf("expected takeover to preserve current operation progress, got %+v", claimed.Operations)
+	}
+	if attempt := claimed.Operations[1].ExecutionAttempt; attempt == nil || attempt.WorkerID != "worker-b" || attempt.StartedAt != "2026-04-18T08:16:00Z" || attempt.LastHeartbeatAt != "2026-04-18T08:16:00Z" || !strings.Contains(attempt.Summary, "recovered") {
+		t.Fatalf("expected takeover to persist replacement worker attempt metadata, got %+v", attempt)
 	}
 	if len(claimed.Transitions) != 2 || claimed.Transitions[1].PreviousStatus != StatusRunning || claimed.Transitions[1].Status != StatusRunning || claimed.Transitions[1].Step != 2 {
 		t.Fatalf("expected takeover to append running recovery transition, got %+v", claimed.Transitions)
@@ -1165,6 +1174,9 @@ func TestServiceHeartbeatRefreshesCurrentWorkerClaimOnly(t *testing.T) {
 	}
 	if statuses := []OperationStatus{heartbeat.Operations[0].Status, heartbeat.Operations[1].Status}; !reflect.DeepEqual(statuses, []OperationStatus{OperationStatusRunning, OperationStatusQueued}) {
 		t.Fatalf("heartbeat must preserve operation state, got %+v", heartbeat.Operations)
+	}
+	if attempt := heartbeat.Operations[0].ExecutionAttempt; attempt == nil || attempt.WorkerID != "worker-a" || attempt.LastHeartbeatAt != "2026-04-18T08:12:30Z" || !strings.Contains(attempt.Summary, "refreshed") {
+		t.Fatalf("expected heartbeat to update current operation attempt evidence, got %+v", attempt)
 	}
 	if len(heartbeat.Transitions) != 1 {
 		t.Fatalf("heartbeat must not append lifecycle transitions, got %+v", heartbeat.Transitions)
@@ -1478,6 +1490,9 @@ func TestServiceTransitionAdvancesQueuedApplyRequestToRunningAndSucceeded(t *tes
 	if statuses := []OperationStatus{running.Operations[0].Status, running.Operations[1].Status}; !reflect.DeepEqual(statuses, []OperationStatus{OperationStatusRunning, OperationStatusQueued}) {
 		t.Fatalf("unexpected running operations: %+v", running.Operations)
 	}
+	if attempt := running.Operations[0].ExecutionAttempt; attempt == nil || attempt.WorkerID != "transition-route" || attempt.Status != OperationStatusRunning || attempt.StartedAt != "2026-04-18T08:06:00Z" || attempt.LastHeartbeatAt != "2026-04-18T08:06:00Z" || !strings.Contains(attempt.Summary, "no live AWS mutation") {
+		t.Fatalf("expected running transition to persist operation attempt metadata, got %+v", attempt)
+	}
 
 	service.Now = func() time.Time { return time.Date(2026, 4, 18, 8, 7, 0, 0, time.UTC) }
 	succeeded, err := service.Transition(context.Background(), "apply_1234abcd", TransitionRequest{
@@ -1494,6 +1509,12 @@ func TestServiceTransitionAdvancesQueuedApplyRequestToRunningAndSucceeded(t *tes
 	}
 	if statuses := []OperationStatus{succeeded.Operations[0].Status, succeeded.Operations[1].Status}; !reflect.DeepEqual(statuses, []OperationStatus{OperationStatusSucceeded, OperationStatusSucceeded}) {
 		t.Fatalf("unexpected succeeded operations: %+v", succeeded.Operations)
+	}
+	if attempt := succeeded.Operations[0].ExecutionAttempt; attempt == nil || attempt.Status != OperationStatusSucceeded || attempt.FinishedAt != "2026-04-18T08:07:00Z" || !strings.Contains(attempt.Summary, "not proof of live AWS mutation") {
+		t.Fatalf("expected succeeded transition to finish existing attempt metadata, got %+v", attempt)
+	}
+	if succeeded.Operations[1].ExecutionAttempt != nil {
+		t.Fatalf("expected never-started operation to omit attempt metadata, got %+v", succeeded.Operations[1].ExecutionAttempt)
 	}
 	if len(succeeded.Transitions) != 2 {
 		t.Fatalf("expected each successful transition to append audit history, got %+v", succeeded.Transitions)
@@ -1593,6 +1614,9 @@ func TestServiceTransitionMarksRunningStepAsFailed(t *testing.T) {
 	}
 	if statuses := []OperationStatus{result.Operations[0].Status, result.Operations[1].Status, result.Operations[2].Status}; !reflect.DeepEqual(statuses, []OperationStatus{OperationStatusSucceeded, OperationStatusFailed, OperationStatusQueued}) {
 		t.Fatalf("unexpected failed operations: %+v", result.Operations)
+	}
+	if attempt := result.Operations[1].ExecutionAttempt; attempt == nil || attempt.Status != OperationStatusFailed || attempt.Reason != "promotion failed" || attempt.FinishedAt != "2026-04-18T08:08:00Z" || !strings.Contains(attempt.Summary, "promotion failed") {
+		t.Fatalf("expected failed transition to persist terminal operation attempt metadata, got %+v", attempt)
 	}
 }
 
@@ -1772,6 +1796,46 @@ func TestNormalizeOperationIDsBackfillsLegacyApplyDuplicateRows(t *testing.T) {
 	}
 	if !strings.Contains(string(encoded), `"id":"op_`) {
 		t.Fatalf("expected raw JSON operation id field, got %s", string(encoded))
+	}
+}
+
+func TestApplyOperationAttemptJSONIsAdditiveAndOmittedWhenLegacy(t *testing.T) {
+	legacy := Record{
+		ID:             "apply_legacy",
+		PlanID:         "plan_legacy",
+		DeploymentName: "api-prod",
+		Status:         StatusRunning,
+		Operations: []Operation{{
+			ID:      "op-legacy",
+			Status:  OperationStatusRunning,
+			Phase:   "Promoting",
+			Target:  "listener",
+			Summary: "Shift traffic.",
+		}},
+	}
+	legacyJSON, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatalf("Marshal legacy returned error: %v", err)
+	}
+	if strings.Contains(string(legacyJSON), "executionAttempt") {
+		t.Fatalf("legacy apply operations must omit absent executionAttempt, got %s", string(legacyJSON))
+	}
+
+	legacy.Operations[0].ExecutionAttempt = &OperationExecutionAttempt{
+		WorkerID:        "worker-a",
+		Status:          OperationStatusRunning,
+		StartedAt:       "2026-04-18T08:10:00Z",
+		LastHeartbeatAt: "2026-04-18T08:12:00Z",
+		Summary:         "Local-safe executor evidence; no live AWS mutation has been attempted.",
+	}
+	attemptJSON, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatalf("Marshal attempt returned error: %v", err)
+	}
+	for _, fragment := range []string{`"executionAttempt"`, `"workerId":"worker-a"`, `"lastHeartbeatAt":"2026-04-18T08:12:00Z"`, `"summary":"Local-safe executor evidence; no live AWS mutation has been attempted."`} {
+		if !strings.Contains(string(attemptJSON), fragment) {
+			t.Fatalf("expected raw JSON fragment %s in %s", fragment, string(attemptJSON))
+		}
 	}
 }
 
