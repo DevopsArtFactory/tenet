@@ -2511,6 +2511,7 @@ assert "pushPlanSection(runtimeSignalsSection, 'plan-runtime-signals', 'Runtime 
 assert "pushPlanSection(executionSection, 'plan-rollout-execution', 'Rollout execution');" in ui, ui
 assert "pushPlanSection(actionsSection, 'plan-preview-actions', 'Plan preview actions');" in ui, ui
 assert "pushPlanSection(applySection, 'plan-apply-actions', 'Apply request actions');" in ui, ui
+assert "pushPlanSection(transitionTimelineSection, 'plan-apply-transition-timeline', 'Apply transition timeline');" in ui, ui
 assert "pushPlanSection(createApplyNextSafeActionSection(activeApplyRecord, activeApplyReadiness), 'plan-apply-next-action', 'Apply next safe action');" in ui, ui
 assert "pushPlanSection(planOperationsSection, 'plan-operations', 'Plan operations');" in ui, ui
 assert "const operationAnchorID = (prefix, operation) => {" in ui, ui
