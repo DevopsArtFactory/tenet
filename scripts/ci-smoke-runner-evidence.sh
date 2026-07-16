@@ -92,14 +92,20 @@ print_runner_start_verdict() {
   local sha="$2"
   local blocker_lines
   local check_runs
+  local job_count
 
   section "Runner-start verdict"
 
+  job_count=$(gh api "repos/:owner/:repo/actions/runs/${run_id}/jobs" --jq '(.jobs // []) | length')
+  if [[ "$job_count" == "0" ]]; then
+    echo "- Likely pre-runner blocker: Actions jobs API returned jobs: [] (startup_failure/no runner records), so no repository commands ran."
+  fi
+
   blocker_lines=$(gh api "repos/:owner/:repo/actions/runs/${run_id}/jobs" \
     --jq '.jobs[] | select((.name == "Fast smoke" or .name == "Docker smoke scope") and (((.runner_id // 0) == 0) or ((.runner_name // "") == "")) and (((.steps // []) | length) == 0)) | "- Likely pre-runner blocker: \(.name) has runner_id=\(.runner_id // 0), runner_name=\((.runner_name // "") | if . == "" then "<empty>" else . end), and steps=[] before repository commands ran."')
-  if [[ -z "$blocker_lines" ]]; then
+  if [[ -z "$blocker_lines" && "$job_count" != "0" ]]; then
     echo "No likely pre-runner blocker found for Fast smoke or Docker smoke scope from runner assignment evidence."
-  else
+  elif [[ -n "$blocker_lines" ]]; then
     printf '%s\n' "$blocker_lines"
   fi
 
@@ -138,6 +144,8 @@ print_markdown_summary() {
     --jq '.jobs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope") | "| \(.name) | \(.status // "") | \(.conclusion // "") | \(.runner_id // 0) | \((.runner_name // "") | if . == "" then "<empty>" else . end) | \((.steps // []) | length) |"')
   if [[ -z "$jobs" ]]; then
     echo '| Fast smoke / Docker smoke scope | unavailable | unavailable | unavailable | unavailable | unavailable |'
+    printf '\n'
+    printf -- '- Actions jobs API returned `jobs: []` (`startup_failure`/no runner records), so no repository commands ran.\n'
   else
     printf '%s\n' "$jobs"
   fi
@@ -174,8 +182,13 @@ SHA=$(gh run view "$RUN_ID" --json headSha --jq .headSha)
 print_runner_start_verdict "$RUN_ID" "$SHA"
 
 section "Actions jobs API runner assignment evidence"
-gh api "repos/:owner/:repo/actions/runs/${RUN_ID}/jobs" \
-  --jq '.jobs[] | {name,status,conclusion,runner_id,runner_name,steps}'
+ACTIONS_JOBS_OUTPUT=$(gh api "repos/:owner/:repo/actions/runs/${RUN_ID}/jobs" \
+  --jq '.jobs[] | {name,status,conclusion,runner_id,runner_name,steps}')
+if [[ -z "$ACTIONS_JOBS_OUTPUT" ]]; then
+  echo "Actions jobs API returned jobs: [] (startup_failure/no runner records), so no repository commands ran."
+else
+  printf '%s\n' "$ACTIONS_JOBS_OUTPUT"
+fi
 
 section "Failed workflow logs"
 if ! gh run view "$RUN_ID" --log-failed; then
