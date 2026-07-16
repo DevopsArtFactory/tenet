@@ -946,6 +946,8 @@ func TestLocalRuntimeDocsSeparateShippedWriteRoutesFromDeferredAWSMutation(t *te
 
 func TestClaimedApplyTransitionGuardDocsAndSmoke(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
+	overviewDashboardText := readTextFile(t, "features/overview-dashboard.md")
+	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
 	smokeLocalText := readTextFile(t, "../scripts/smoke-local.sh")
 
 	for _, fragment := range []string{
@@ -957,6 +959,23 @@ func TestClaimedApplyTransitionGuardDocsAndSmoke(t *testing.T) {
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README to document claimed apply transition guard %q", fragment)
+		}
+	}
+
+	for name, text := range map[string]string{
+		"README":             readmeText,
+		"overview dashboard": overviewDashboardText,
+		"overview UI":        overviewUIText,
+	} {
+		for _, fragment := range []string{
+			"Apply transition timeline",
+			"transitions[]",
+			"actor availability",
+			"error/details",
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s docs to describe apply transition timeline evidence via %q", name, fragment)
+			}
 		}
 	}
 
