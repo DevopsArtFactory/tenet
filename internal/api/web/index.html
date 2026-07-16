@@ -9130,6 +9130,72 @@
         }
         return parts.length ? parts.join(' · ') : 'Lifecycle metadata is not available yet';
       };
+      const applyTransitionTimeline = (record) => Array.isArray(record?.transitions) ? record.transitions : [];
+      const applyTransitionStepLabel = (transition) => Number.isFinite(transition?.step) && transition.step > 0
+        ? `Step ${transition.step}`
+        : 'Step —';
+      const applyTransitionStatusSummary = (transition) => {
+        const previous = applyRecordStatusLabel(transition?.previousStatus);
+        const next = applyRecordStatusLabel(transition?.status).toLowerCase();
+        return `${previous} → ${next}`;
+      };
+      const applyTransitionActorSummary = (transition) => {
+        const actor = transition?.actor && typeof transition.actor === 'object' ? transition.actor : null;
+        if (!actor || actor.available === false) {
+          const reason = typeof actor?.unavailableReason === 'string' && actor.unavailableReason.trim()
+            ? actor.unavailableReason.trim()
+            : 'no authenticated request context was available for this local request';
+          return `Actor unavailable — ${reason}`;
+        }
+        const identity = [actor.name, actor.email, actor.id]
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .find(Boolean);
+        return identity ? `Actor ${identity}` : 'Actor recorded';
+      };
+      const applyTransitionLifecycleSummary = (transition) => {
+        const lifecycle = transition?.lifecycle;
+        const currentStep = applyLifecycleStepValue(lifecycle, 'currentStep');
+        const completedSteps = applyLifecycleStepValue(lifecycle, 'completedSteps');
+        const totalSteps = applyLifecycleStepValue(lifecycle, 'totalSteps');
+        const parts = [];
+        if (currentStep !== '—') parts.push(`Current step ${currentStep}`);
+        if (completedSteps !== '—' || totalSteps !== '—') parts.push(`Completed ${completedSteps} of ${totalSteps}`);
+        return parts.join(' · ');
+      };
+      const createApplyTransitionTimelineSection = (record) => {
+        const section = createDetailSection('Apply transition timeline');
+        const intro = createElement('div', 'detail-state', 'Immutable apply lifecycle transitions are read-only executor/audit evidence. They explain how this stored apply moved over time without implying live AWS mutation.');
+        section.append(intro);
+        const transitions = applyTransitionTimeline(record);
+        if (!transitions.length) {
+          section.append(createElement('div', 'empty', 'No lifecycle transitions have been recorded for this immutable apply yet. Older or local-safe failed apply records may only include the current status until an executor advances them.'));
+          return section;
+        }
+        const list = createElement('ol', 'detail-list apply-transition-timeline');
+        transitions.forEach((transition) => {
+          const item = createElement('li');
+          const head = createElement('div', 'workspace-callout-head');
+          head.append(
+            createElement('strong', '', applyTransitionStatusSummary(transition)),
+            createElement('span', applyStatusPillClassName(normalizeApplyRecordStatus(transition?.status)), applyRecordStatusLabel(transition?.status)),
+          );
+          item.append(
+            head,
+            createElement('span', 'detail-condition-meta', `Transitioned at · ${textOrDash(transition?.transitionedAt)}`),
+            createElement('span', 'detail-condition-meta', applyTransitionStepLabel(transition)),
+            createElement('span', 'detail-condition-meta', applyTransitionActorSummary(transition)),
+          );
+          const lifecycleSummary = applyTransitionLifecycleSummary(transition);
+          if (lifecycleSummary) item.append(createElement('span', 'detail-condition-meta', `Lifecycle · ${lifecycleSummary}`));
+          if (transition?.error) item.append(createElement('span', 'detail-condition-meta', `Error · ${transition.error}`));
+          if (Array.isArray(transition?.details) && transition.details.length) {
+            item.append(createElement('span', 'detail-condition-meta', `Details · ${transition.details.filter(Boolean).join('; ')}`));
+          }
+          list.append(item);
+        });
+        section.append(list);
+        return section;
+      };
       const queuedApplyRecords = (result) => {
         if (Array.isArray(result)) return result;
         if (Array.isArray(result?.records)) return result.records;
@@ -11030,6 +11096,9 @@
             }
             recordSection.append(recordLinks);
             pushPlanSection(recordSection, 'plan-stored-apply', 'Stored apply request');
+
+            const transitionTimelineSection = createApplyTransitionTimelineSection(activeApplyRecord);
+            pushPlanSection(transitionTimelineSection, 'plan-apply-transition-timeline', 'Apply transition timeline');
 
             const readinessSection = createDetailSection('Apply execution readiness');
             const preflightActions = createElement('div', 'row-links');

@@ -11025,6 +11025,53 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 		t.Fatalf("marshal failed apply record: %v", err)
 	}
 
+	applyRecordWithTransitionsJSON, err := json.Marshal(map[string]any{
+		"id":             "apply_failed_123",
+		"planId":         "plan_ready_123",
+		"deploymentName": "api-prod",
+		"status":         "failed",
+		"createdAt":      "2026-04-18T08:00:00Z",
+		"error":          "promotion failed",
+		"details":        []string{"Executor stopped after the canary alarm tripped."},
+		"transitions": []map[string]any{{
+			"transitionedAt": "2026-04-18T08:06:00Z",
+			"previousStatus": "queued",
+			"status":         "running",
+			"step":           1,
+			"actor":          map[string]any{"available": true, "name": "Ops Runner", "email": "ops@example.com", "id": "runner-1"},
+			"lifecycle":      map[string]any{"updatedAt": "2026-04-18T08:06:00Z", "startedAt": "2026-04-18T08:06:00Z", "currentStep": 1, "completedSteps": 0, "totalSteps": 2},
+		}, {
+			"transitionedAt": "2026-04-18T08:11:00Z",
+			"previousStatus": "running",
+			"status":         "failed",
+			"step":           2,
+			"actor": map[string]any{
+				"available":         false,
+				"unavailableReason": "actor information is unavailable because no authenticated request context was available for this local request",
+			},
+			"error":     "canary alarm tripped",
+			"details":   []string{"Rollback required before retrying."},
+			"lifecycle": map[string]any{"updatedAt": "2026-04-18T08:11:00Z", "startedAt": "2026-04-18T08:06:00Z", "finishedAt": "2026-04-18T08:11:00Z", "currentStep": 2, "completedSteps": 1, "totalSteps": 2},
+		}},
+		"operations": []map[string]any{{
+			"id":      "operation-shift-canary",
+			"status":  "failed",
+			"phase":   "Promoting",
+			"target":  "server-preview-target",
+			"summary": "Server-authored preview summary",
+		}},
+		"source": map[string]any{
+			"planId":        "plan_ready_123",
+			"route":         "/v1/plans/plan_ready_123",
+			"planStatus":    "ready",
+			"planCreatedAt": "2026-04-17T09:00:00Z",
+			"fingerprint":   "fp_plan_ready",
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal apply record with transitions: %v", err)
+	}
+
 	domHarness := `
 class Element {
   constructor(tagName, ownerDocument) {
@@ -11686,6 +11733,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Apply request failed')) throw new Error('expected apply failed heading after create');
   if (!text.includes('Immutable apply request apply_failed_123 was created and recorded as failed.')) throw new Error('expected apply failed create message');
   if (!text.includes('Stored apply request')) throw new Error('expected stored apply request section');
+  if (!text.includes('Apply transition timeline')) throw new Error('expected apply transition timeline section after create');
+  if (!text.includes('No lifecycle transitions have been recorded for this immutable apply yet.')) throw new Error('expected legacy apply transition empty state after create');
   if (!text.includes('Apply next safe action')) throw new Error('expected apply next-safe-action section');
   if (!text.includes('Next safe action | Review local-safe disabled result')) throw new Error('expected disabled apply next-safe-action cue after create');
   if (!text.includes('Operator note | This failed record is the expected disabled-by-default local-safe outcome; review details, then create a fresh plan/apply only when execution should be retried.')) throw new Error('expected disabled apply next-safe-action detail after create');
@@ -11727,6 +11776,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-actions', 'Apply request actions'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-next-action', 'Apply next safe action'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-apply', 'Stored apply request'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-transition-timeline', 'Apply transition timeline'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-readiness', 'Apply execution readiness'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-execution-preview', 'Apply execution preview'],
     ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-details', 'Apply request details'],
@@ -12349,12 +12399,12 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 		runNodeHarness(t, nodeProgram)
 	})
 
-	t.Run("bookmarked apply id loads stored immutable apply record", func(t *testing.T) {
+	t.Run("bookmarked apply id renders stored immutable apply transition timeline", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
 const detailBody = ` + string(detailJSON) + `;
 const planPreview = ` + string(planPreviewReadyJSON) + `;
-const applyRecord = ` + string(applyRecordFailedJSON) + `;
+const applyRecord = ` + string(applyRecordWithTransitionsJSON) + `;
 ` + domHarness + `
 const document = new Document();
 document.byID.set('toolbar', document.createElement('section'));
@@ -12383,19 +12433,29 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Apply request failed')) throw new Error('expected failed apply heading on bookmarked apply');
   if (!text.includes('Immutable apply request apply_failed_123 is loaded and recorded as failed.')) throw new Error('expected loaded failed apply message');
   if (!text.includes('Stored apply request')) throw new Error('expected stored apply request section');
+  if (!text.includes('Apply transition timeline')) throw new Error('expected apply transition timeline section on bookmarked apply');
+  if (!text.includes('Queued → running')) throw new Error('expected queued to running transition summary');
+  if (!text.includes('Running → failed')) throw new Error('expected running to failed transition summary');
+  if (!text.includes('Transitioned at · 2026-04-18T08:06:00Z')) throw new Error('expected first transition timestamp');
+  if (!text.includes('Step 2')) throw new Error('expected failed transition step label');
+  if (!text.includes('Actor Ops Runner')) throw new Error('expected recorded transition actor label');
+  if (!text.includes('Actor unavailable — actor information is unavailable because no authenticated request context was available for this local request')) throw new Error('expected actor-unavailable guidance');
+  if (!text.includes('Error · canary alarm tripped')) throw new Error('expected transition error copy');
+  if (!text.includes('Details · Rollback required before retrying.')) throw new Error('expected transition detail copy');
+  if (text.includes('No lifecycle transitions have been recorded for this immutable apply yet.')) throw new Error('did not expect transition empty state when transitions exist');
   if (!text.includes('Apply lifecycle summary')) throw new Error('expected apply lifecycle summary on bookmarked apply');
-  if (!text.includes('0/1 terminal · 0 running · 1 queued')) throw new Error('expected queued lifecycle progress summary on bookmarked apply');
+  if (!text.includes('1/1 terminal · 0 running · 0 queued')) throw new Error('expected failed lifecycle progress summary on bookmarked apply');
   if (text.includes('Apply lifecycle metadata')) throw new Error('expected bookmarked failed/default apply record to omit lifecycle metadata section when lifecycle fields are missing');
   if (text.includes('Executor claim')) throw new Error('expected bookmarked failed/default apply record without claim metadata to omit executor claim section');
   if (!text.includes('Apply operations')) throw new Error('expected apply operations section on bookmarked apply');
   if (!text.includes('Immutable apply request loaded from GET /v1/applies/apply_failed_123.')) throw new Error('expected apply operations intro on bookmarked apply');
   if (!text.includes('Apply step 1')) throw new Error('expected synthetic apply-step label on bookmarked apply');
-  if (!text.includes('Queued apply operation')) throw new Error('expected queued apply-operation label on bookmarked apply');
+  if (!text.includes('Failed apply operation')) throw new Error('expected failed apply-operation label on bookmarked apply');
   if (!text.includes('server-preview-target')) throw new Error('expected apply operations target on bookmarked apply');
   if (!text.includes('Server-authored preview summary')) throw new Error('expected apply operations summary on bookmarked apply');
   if (!text.includes('Apply request details')) throw new Error('expected apply request details section');
-  if (!text.includes('apply execution is disabled')) throw new Error('expected stored apply error');
-  if (!text.includes('Tenet persisted this immutable apply request in read-only mode and did not contact AWS.')) throw new Error('expected immutable apply detail on bookmarked apply');
+  if (!text.includes('promotion failed')) throw new Error('expected stored apply error');
+  if (!text.includes('Executor stopped after the canary alarm tripped.')) throw new Error('expected immutable apply detail on bookmarked apply');
   const links = collectNodes(root, (node) => node.tagName === 'A');
   const workspaceLink = links.find((node) => node.href === '/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open bookmarked workspace');
   if (!workspaceLink || workspaceLink.target !== '_self' || workspaceLink.rel) throw new Error('expected bookmarked workspace self link to retain applyId');
@@ -12597,7 +12657,7 @@ const fetch = (url) => {
   const currentSectionChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current section: Apply operations');
   if (!currentSectionChip) throw new Error('expected bookmarked plan/apply hash route to render the current-section chip');
   const sectionIDs = collectNodes(accounts, (node) => typeof node.id === 'string' && node.id.startsWith('plan-')).map((node) => node.id).sort();
-  const expectedSectionIDs = ['plan-apply-actions', 'plan-apply-details', 'plan-apply-execution-preview', 'plan-apply-next-action', 'plan-apply-operations', 'plan-apply-readiness', 'plan-approval-guidance', 'plan-operations', 'plan-preview-actions', 'plan-rollout-execution', 'plan-runtime-signals', 'plan-stored-apply', 'plan-stored-preview'];
+  const expectedSectionIDs = ['plan-apply-actions', 'plan-apply-details', 'plan-apply-execution-preview', 'plan-apply-next-action', 'plan-apply-operations', 'plan-apply-readiness', 'plan-apply-transition-timeline', 'plan-approval-guidance', 'plan-operations', 'plan-preview-actions', 'plan-rollout-execution', 'plan-runtime-signals', 'plan-stored-apply', 'plan-stored-preview'];
   if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected plan section ids: ' + JSON.stringify(sectionIDs));
   const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#plan-'));
   const expectedLinks = [
@@ -12609,6 +12669,7 @@ const fetch = (url) => {
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-actions', 'Apply request actions'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-next-action', 'Apply next safe action'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-apply', 'Stored apply request'],
+    ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-transition-timeline', 'Apply transition timeline'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-readiness', 'Apply execution readiness'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-execution-preview', 'Apply execution preview'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-details', 'Apply request details'],
