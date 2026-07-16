@@ -302,8 +302,8 @@ evidence with:
 scripts/ci-smoke-runner-evidence.sh --summary <run-id>
 ```
 
-The detailed runner-start evidence bundle remains available by omitting
-`--summary`; see `docs/runbooks/ci-smoke-runner-start.md`.
+The detailed runner-start evidence bundle remains available by omitting `--summary`; see
+`docs/runbooks/ci-smoke-runner-start.md`, including newer `startup_failure` runs where the Actions jobs API returns `jobs: []` before per-job runner records exist.
 
 ## Documentation Map
 

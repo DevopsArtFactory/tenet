@@ -4,10 +4,11 @@ Use this runbook when a GitHub Actions `CI Smoke` run fails before Tenet reposit
 
 ## Recognize the pattern
 
-A runner-start failure typically has all of these signals:
+A runner-start failure typically has one of these evidence shapes:
 
 - the failing jobs show `runner_id=0`
 - the failing jobs have `steps=[]`
+- the Actions jobs API returns `jobs: []` for a completed `startup_failure` run before GitHub creates per-job runner records
 - `gh run view <run-id> --log-failed` returns no repository logs, often `log not found`
 - check-run annotations mention an account-level condition, for example: `The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings`
 
@@ -23,7 +24,7 @@ scripts/ci-smoke-runner-evidence.sh <run-id>
 
 Keep `scripts/ci-smoke-runner-evidence.sh` directly executable because operators copy and run the path from this runbook during runner-start incidents.
 
-The helper also prints a compact `Runner-start verdict` section before the raw evidence. Treat a line as a likely pre-runner blocker when `Fast smoke` or `Docker smoke scope` has `runner_id=0` or an empty `runner_name`, and `steps=[]`; that means the lane did not reach repository commands. The same verdict section calls out any billing/spending-limit annotation found on the CI Smoke check-runs so reviewers do not have to infer the account-level blocker from raw JSON alone.
+The helper also prints a compact `Runner-start verdict` section before the raw evidence. Treat a line as a likely pre-runner blocker when `Fast smoke` or `Docker smoke scope` has `runner_id=0` or an empty `runner_name`, and `steps=[]`; that means the lane did not reach repository commands. If the Actions jobs API returns `jobs: []` for a completed `startup_failure` run, treat that as the newer no-runner-record variant of the same blocker rather than as missing helper evidence. The same verdict section calls out any billing/spending-limit annotation found on the CI Smoke check-runs so reviewers do not have to infer the account-level blocker from raw JSON alone.
 
 For a pasteable PR or issue comment, use the concise Markdown mode:
 
