@@ -2852,9 +2852,12 @@ assert 'Live evidence available' in application_ui, application_ui
 assert 'Recent logs supported' in application_ui, application_ui
 assert "const runtimeEventMatchesApplicationResource = (event, resource) => Boolean(resource?.type && resource?.name)" in application_ui, application_ui
 assert "const createApplicationResourceRelatedEventsCue = (deploymentName, resource, result) => {" in application_ui, application_ui
+assert "const createApplicationResourceRelatedEventsSummaryCue = (deploymentName, resource, detail) => {" in application_ui, application_ui
+assert "resourceRelatedSummaryForResource(detail, resource)" in application_ui, application_ui
+assert "Retained summary" in application_ui, application_ui
 assert "const refreshApplicationResourceRelatedEventCues = (deploymentName, result) => {" in application_ui, application_ui
 assert "buildPageSectionURL('resource', 'resource-related-runtime-events', routeParams)" in application_ui, application_ui
-assert "`Related events · ${relatedEvents.length}`" in application_ui, application_ui
+assert "`Related events · ${count}`" in application_ui, application_ui
 assert "row.dataset.applicationResourceRow = 'true';" in application_ui, application_ui
 assert 'Application resources' in application_ui, application_ui
 assert 'Grouped linked resources for the selected application. Open drift, plan/apply, or audit log from here before the final resource page.' in application_ui, application_ui
