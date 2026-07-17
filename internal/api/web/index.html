@@ -8040,7 +8040,7 @@
       const resourceRelatedEventsEmptyStateText = (resource, result, selectedLimit, selectedSource = '') => {
         const source = normalizeDeploymentEventsSource(selectedSource || result?.resultScope?.sourceFilter || '');
         if (source) {
-          return `No controller runtime events from source "${source}" mention ${textOrDash(resource?.name)} in the latest ${selectedLimit}-event resource-filtered window. Clear Related event source or refresh before treating controller history as absent.`;
+          return `No controller runtime events from source "${source}" mention ${textOrDash(resource?.name)} in the latest ${selectedLimit}-event resource-filtered window. Show all related event sources or refresh before treating controller history as absent.`;
         }
         const scope = result?.resultScope || {};
         const retainedCount = Number(scope.retainedEventCount ?? result?.retention?.retainedEventCount);
@@ -8048,6 +8048,16 @@
           return `No retained runtime events are available for this deployment yet, so none can mention ${textOrDash(resource?.name)}.`;
         }
         return `No retained runtime events mention ${textOrDash(resource?.name)} in the latest ${selectedLimit}-event resource-filtered window. Refresh related events or inspect the application-level runtime events before treating controller history as absent.`;
+      };
+      const createResourceRelatedEventsSourceRecovery = (section, deploymentName, resource, selectedLimit, selectedSource = '') => {
+        if (!normalizeDeploymentEventsSource(selectedSource)) return null;
+        const actions = createElement('div', 'toolbar-actions');
+        actions.append(createRefreshButton(
+          'Show all related event sources',
+          !deploymentName || !resource?.type || !resource?.name,
+          () => renderResourceRelatedEventsSection(section, deploymentName, resource, { force: true, limit: selectedLimit, source: '' }),
+        ));
+        return actions;
       };
       const renderResourceRelatedEventsPayload = (section, deploymentName, resource, result, limit = defaultDeploymentEventsLimit, source = '') => {
         const selectedLimit = normalizeDeploymentEventsLimit(limit);
@@ -8060,7 +8070,8 @@
         if (!events.length) {
           const stateNode = createElement('div', 'detail-state', resourceRelatedEventsEmptyStateText(resource, result, selectedLimit, selectedSource));
           markPoliteStatusNode(stateNode);
-          section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), stateNode);
+          const sourceRecovery = createResourceRelatedEventsSourceRecovery(section, deploymentName, resource, selectedLimit, selectedSource);
+          section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), stateNode, ...(sourceRecovery ? [sourceRecovery] : []));
           return;
         }
         const ordering = createElement('div', 'detail-condition-meta', `${events.length} related runtime event${events.length === 1 ? '' : 's'} in latest ${selectedLimit}-event resource-filtered window · newest controller event first`);
