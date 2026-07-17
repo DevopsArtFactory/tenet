@@ -3831,6 +3831,37 @@
         if (Number.isFinite(count) && count >= 0) return `${count} runtime event${count === 1 ? '' : 's'}`;
         return 'No runtime events reported';
       };
+      const applicationSummaryArtifactText = (detail) => {
+        const deployed = artifact(detail?.deployedArtifact);
+        if (deployed !== '—') return `deployed ${deployed}`;
+        const desired = artifact(detail?.desiredArtifact);
+        return desired !== '—' ? `desired ${desired}` : 'No artifact reported';
+      };
+      const applicationSummaryGenerationText = (detail) => {
+        const desired = Number.isFinite(detail?.desiredGeneration) ? detail.desiredGeneration : detail?.runtimeSummary?.desiredGeneration;
+        const observed = Number.isFinite(detail?.observedGeneration) ? detail.observedGeneration : detail?.runtimeSummary?.observedGeneration;
+        return `desired ${generationValue(desired)} · observed ${generationValue(observed)}`;
+      };
+      const createApplicationStatusOverview = (detail) => {
+        const overview = createElement('div', 'metrics application-current-status-overview');
+        const sync = detail?.sync?.state || detail?.runtimeSummary?.sync?.state || 'Unknown';
+        const syncReason = detail?.sync?.reason || detail?.runtimeSummary?.sync?.reason || '';
+        const health = detail?.health?.overall ? detail.health : detail?.runtimeSummary?.health;
+        const rolloutContext = rolloutContextText(effectiveRolloutContext(detail || {})) || '—';
+        const rolloutProgress = [detail?.runtimeSummary?.rolloutPhase, detail?.runtimeSummary?.currentStep].filter(Boolean).join(' · ') || 'No rollout step reported';
+        [
+          ['Sync', `${sync}${syncReason ? ` · ${syncReason}` : ''}`],
+          ['Health', `${healthLabel(health)}${health?.summary ? ` · ${health.summary}` : ''}`],
+          ['Rollout context', rolloutContext],
+          ['Rollout progress', rolloutProgress],
+          ['Artifact', applicationSummaryArtifactText(detail || {})],
+          ['Generations', applicationSummaryGenerationText(detail || {})],
+          ['Latest runtime', runtimeSummaryText(detail?.runtimeSummary)],
+        ].forEach(([label, value]) => {
+          overview.append(createMetric(label, value));
+        });
+        return overview;
+      };
       const applicationDetailFetchedAtText = (detail) => {
         const fetchedAt = detail?.tenetFetchedAt;
         if (!fetchedAt) return '';
@@ -4552,7 +4583,8 @@
         detailSummary.append(
           createElement('h2', 'account-name', detail.name || currentPageState.deployment || 'Application'),
           createElement('div', 'account-meta', [detail.accountName, detail.awsAccountId, detail.region].filter(Boolean).join(' · ') || '—'),
-          createElement('div', 'account-topology', 'Application detail page: show only application-linked resources before the final resource-detail page.'),
+          createElement('div', 'account-topology', 'Current application status summarizes the selected deployment before resource drill-downs.'),
+          createApplicationStatusOverview(detail),
           createElement('div', 'account-topology application-detail-read-route', `Current application read: ${applicationDetailReadRoute(deploymentName)}`),
           createApplicationDetailFreshnessMeta(applicationState, detail),
         );
@@ -4569,7 +4601,7 @@
         }
         page.append(
           createElement('h2', 'account-name', 'Application resources'),
-          createElement('div', 'account-meta', 'Grouped linked resources for the selected application. Open drift, plan/apply, or audit log from here before the final resource page.'),
+          createElement('div', 'account-meta', 'Grouped linked resources for the selected application. Open a resource for focused rollout, log, and inspection evidence.'),
         );
         if (resourceFilter && totalResourceCount > 0) {
           const filterSummary = createElement('div', 'account-topology resource-filter-summary');
