@@ -1756,9 +1756,9 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 	for _, fragment := range []string{
 		"The bookmarkable resource page (`/?page=resource...`)",
 		"compact `Troubleshooting summary`",
-		"before lazy Recent logs or Live inspection panels load",
+		"before lazy Related runtime events, Recent logs, or Live inspection panels load",
 		"selected lookup scope (`containerName`, `clusterArn`, or `instanceId`)",
-		"latest lazy Recent logs and Live inspection panel states",
+		"latest lazy Related runtime events, Recent logs, and Live inspection panel states",
 		"empty-log and unavailable-provider next-step guidance",
 		"Unsupported for this resource type",
 		"points operators back to the current resource read",
@@ -1771,10 +1771,10 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
 	for _, fragment := range []string{
 		"The resource-detail Troubleshooting summary is a derived UI contract, not a separate API read.",
-		"latest completed Live inspection state and the latest completed Recent logs panel state",
+		"latest completed Related runtime events, Live inspection, and Recent logs panel states",
 		"selected lookup scope (`containerName`, `clusterArn`, or `instanceId`)",
 		"Current resource read: GET /v1/overview/deployments/{deploymentName}",
-		"keeps `Current resource read: GET /v1/overview/deployments/{deploymentName}` visible before lazy Recent logs or Live inspection reads resolve",
+		"keeps `Current resource read: GET /v1/overview/deployments/{deploymentName}` visible before lazy Related runtime events, Recent logs, or Live inspection reads resolve",
 		"keeps the selected resource's `Linked-resource source` cue visible beside it",
 		"controller-authored-versus-fallback resource provenance remain clear",
 		"unsupported focused-evidence states",

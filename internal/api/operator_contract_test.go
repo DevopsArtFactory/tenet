@@ -2736,7 +2736,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 	uiDoc := readRepoFile(t, "docs/architecture/tenet-v1-overview-ui.md")
 	for _, fragment := range []string{
 		"resource-detail Troubleshooting summary",
-		"derived from the selected resource identity plus the latest completed Live inspection state and the latest completed Recent logs panel state",
+		"latest completed Related runtime events, Live inspection, and Recent logs panel states",
 		"covers loading, empty, unavailable, fetch-error, and unsupported focused-evidence states without hiding the selected resource",
 		"Unsupported for this resource type",
 		"keeps `Current resource read: GET /v1/overview/deployments/{deploymentName}` visible",
