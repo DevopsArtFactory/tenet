@@ -2912,6 +2912,26 @@
         const execution = detail.rollout?.execution || [];
         return execution.length ? execution : canonicalRolloutExecutionFallback(detail);
       };
+      const overviewFallbackLinkedResourceCount = (deployment) => {
+        switch (effectiveRolloutContext(deployment).executionMode) {
+          case 'ecsCodeDeploy': return 7;
+          case 'ecsRolling': return 1;
+          case 'asgWeightedTargetGroups': return 6;
+          case 'asgInstanceRefresh': return 2;
+          default: return 0;
+        }
+      };
+      const overviewLinkedResourceCue = (deployment) => {
+        const execution = Array.isArray(deployment?.rollout?.execution) ? deployment.rollout.execution : [];
+        if (execution.length) {
+          return `${execution.length} linked resource${execution.length === 1 ? '' : 's'} · controller-authored`;
+        }
+        const fallbackCount = overviewFallbackLinkedResourceCount(deployment);
+        if (fallbackCount > 0) {
+          return `${fallbackCount} linked resource${fallbackCount === 1 ? '' : 's'} · fallback inventory`;
+        }
+        return 'No linked resources advertised yet';
+      };
       const normalizedRolloutResources = (detail) => rolloutExecutionResources(detail).map((resource) => normalizeResource(resource));
       const trafficRoutingIdentifierTokens = (value) => {
         const raw = String(value || '').trim();
@@ -3787,6 +3807,7 @@
             ['Account / environment', [textOrDash(deployment.accountName), textOrDash(deployment.environmentRef)].filter((part) => part !== '—').join(' · ') || '—'],
             ['Project', textOrDash(deployment.appRef)],
             ['Health', `${healthLabel(deployment.health)}${deployment.health?.summary ? ` · ${deployment.health.summary}` : ''}`],
+            ['Linked resources', overviewLinkedResourceCue(deployment)],
             ['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)],
           ].forEach(([label, value]) => {
             const item = createElement('div', 'application-core-item');

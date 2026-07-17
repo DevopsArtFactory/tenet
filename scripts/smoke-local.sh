@@ -2289,6 +2289,9 @@ assert "return 'GET /v1/overview/applications';" in ui, ui
 assert "return `GET /v1/overview/accounts/${accountID}`;" in ui, ui
 assert 'Open account' in ui, ui
 assert 'Open application' in ui, ui
+assert "['Linked resources', overviewLinkedResourceCue(deployment)]" in ui, ui
+assert 'controller-authored' in ui, ui
+assert 'fallback inventory' in ui, ui
 assert "More actions for ${deployment.name || 'deployment'}" in ui, ui
 assert "secondaryActions.setAttribute('aria-label', `Secondary actions for ${deployment.name || 'deployment'}`);" in ui, ui
 assert 'row-primary-action' in ui, ui

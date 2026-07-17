@@ -1267,6 +1267,10 @@ func TestApplicationsOverviewPageWithNodeHarness(t *testing.T) {
 					"message": "green task set is now serving traffic",
 				}},
 			},
+			"rollout": map[string]any{"execution": []map[string]any{
+				{"resource": "ecsService", "name": "payments-api-staging-service", "description": "ECS service Tenet updates during CodeDeploy traffic shifting"},
+				{"resource": "codeDeployDeploymentGroup", "name": "payments-api-staging-codedeploy-group", "description": "CodeDeploy deployment group Tenet targets for ECS rollout"},
+			}},
 		},
 	})
 	if err != nil {
@@ -1518,6 +1522,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected applications page row text');
   const projectCoreItem = collectNodes(document.getElementById('accounts'), (node) => String(node.className || '').split(/\s+/).includes('application-core-item') && collectText(node).join(' | ') === 'Project | payments')[0];
   if (!projectCoreItem) throw new Error('expected applications row to expose project ownership as a first-page core field, got ' + accountsText);
+  const linkedResourcesCoreItem = collectNodes(document.getElementById('accounts'), (node) => String(node.className || '').split(/\s+/).includes('application-core-item') && collectText(node).join(' | ') === 'Linked resources | 2 linked resources · controller-authored')[0];
+  if (!linkedResourcesCoreItem) throw new Error('expected applications row to expose linked-resource availability from rollout execution, got ' + accountsText);
+  if (accountsText.includes('fallback inventory')) throw new Error('expected controller-authored linked-resource cue to avoid fallback copy for populated rollout execution');
   if (!accountsText.includes('Last update') || !accountsText.includes('2026-04-16T07:10:00Z')) throw new Error('expected applications row to show row-local last update timestamp');
   if (!accountsText.includes('More actions for payments-api-staging')) throw new Error('expected applications page secondary actions disclosure to name the deployment');
   if (accountsText.includes('More actions |')) throw new Error('applications page secondary actions disclosure must not use a generic summary');
