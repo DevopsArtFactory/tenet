@@ -2086,7 +2086,19 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"badge: 'Derived fallback heuristics',",
 		"summary: 'Current source: derived fallback read-model heuristics.',",
 		"factors: 'managedDrift is absent in the deployment detail payload, so Tenet is deriving field-level drift from artifact, generation, runtime-context, and unhealthy-condition read-model signals.',",
+		"const driftSourceCoverageEntries = (detail) => (Array.isArray(detail?.managedDriftSourceCoverage) ? detail.managedDriftSourceCoverage : [])",
+		"const driftSourceCoverageLabel = (coverage) => {",
+		"case 'rows_reported':",
+		"return 'Rows reported';",
+		"case 'checked_no_rows':",
+		"return 'Checked, no rows';",
+		"No drift source coverage entries are currently reported by this deployment detail.",
+		"Coverage context appears only when the backend reports which drift sources were checked; field-level rows below still render from the active drift source.",
+		"const createDriftSourceCoveragePanel = (detail, workspaceState = null) => {",
+		"Drift source coverage",
+		"driftSection.append(driftSourceCallout, createDriftSourceCoveragePanel(detail, workspaceState));",
 		"const rolloutPhaseForStepKind = (stepKind) => {",
+
 		"const effectiveRolloutContext = (detail) => ({",
 		"detail.runtimeSummary?.executionMode || detail.executionMode || ''",
 		"const derivePlanOperations = (detail) => {",
@@ -4740,8 +4752,8 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Runtime change details' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Runtime change details")
 	}
-	if !strings.Contains(text, "assert 'Current source: controller-authored managedDrift rows.' in ui, ui") || !strings.Contains(text, "assert 'Current source: derived fallback read-model heuristics.' in ui, ui") {
-		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift-source callout copy")
+	if !strings.Contains(text, "assert 'Current source: controller-authored managedDrift rows.' in ui, ui") || !strings.Contains(text, "assert 'Current source: derived fallback read-model heuristics.' in ui, ui") || !strings.Contains(text, "assert 'Drift source coverage' in ui, ui") || !strings.Contains(text, "assert \"const createDriftSourceCoveragePanel = (detail, workspaceState = null) => {\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift-source callout and coverage copy")
 	}
 	if !strings.Contains(text, "assert \"const linkedResources = (mode === 'drift' || mode === 'plan') ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert drift workspace resource-link contract")
