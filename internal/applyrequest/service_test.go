@@ -433,6 +433,94 @@ func TestServicePreflightIncludesConfiguredDeployerRoleProbeEvidence(t *testing.
 	}
 }
 
+func TestServicePreflightEnrichesCapabilityChecksWithPermissionSimulation(t *testing.T) {
+	store := &memoryStore{records: map[string]Record{
+		"apply_queued": {
+			ID:             "apply_queued",
+			PlanID:         "plan_1234",
+			DeploymentName: "api-prod",
+			Status:         StatusQueued,
+			CreatedAt:      "2026-04-18T08:05:00Z",
+			Operations: []Operation{{
+				ID:      "op-codedeploy",
+				Phase:   "Promoting",
+				Target:  "api-prod-codedeploy-group (codeDeployDeploymentGroup)",
+				Summary: "Create CodeDeploy deployment.",
+			}},
+		},
+	}}
+	service := Service{
+		Store: store,
+		DeployerRoleReadiness: func(ctx context.Context, target DeployerRoleTarget) (DeployerRoleReadiness, error) {
+			return DeployerRoleReadiness{AWSAccountID: "123456789012", Region: "ap-northeast-2", RoleARN: "arn:aws:iam::123456789012:role/TenetDeployerRole", Configured: true, Ready: true, CheckedWithAWS: true, Summary: "role ready"}, nil
+		},
+		PermissionSimulation: func(ctx context.Context, target PermissionSimulationTarget) ([]OperationExecutionCapabilityCheck, error) {
+			if target.DeploymentName != "api-prod" || target.AWSAccountID != "123456789012" || target.Region != "ap-northeast-2" || target.RoleARN == "" {
+				t.Fatalf("unexpected permission simulation target: %+v", target)
+			}
+			checks := make([]OperationExecutionCapabilityCheck, len(target.Checks))
+			copy(checks, target.Checks)
+			for i := range checks {
+				allowed := checks[i].Action == "codedeploy:GetDeploymentGroup"
+				checks[i].CheckedWithAWS = true
+				checks[i].Allowed = &allowed
+				if allowed {
+					checks[i].State = "allowed"
+					checks[i].Reason = ""
+					checks[i].Summary = "IAM simulation allowed read readiness."
+				} else {
+					checks[i].State = "denied"
+					checks[i].Reason = "permission_denied"
+					checks[i].Summary = "IAM simulation denied mutation readiness."
+				}
+			}
+			return checks, nil
+		},
+	}
+
+	readiness, err := service.Preflight(context.Background(), "apply_queued")
+	if err != nil {
+		t.Fatalf("Preflight returned error: %v", err)
+	}
+	checks := readiness.Operations[0].CapabilityChecks
+	if len(checks) != 2 {
+		t.Fatalf("expected CodeDeploy checks, got %+v", checks)
+	}
+	if !checks[0].CheckedWithAWS || checks[0].Allowed == nil || !*checks[0].Allowed || checks[0].State != "allowed" || checks[0].Reason != "" {
+		t.Fatalf("expected allowed simulated read check, got %+v", checks[0])
+	}
+	if !checks[1].CheckedWithAWS || checks[1].Allowed == nil || *checks[1].Allowed || checks[1].State != "denied" || checks[1].Reason != "permission_denied" {
+		t.Fatalf("expected denied simulated mutation check, got %+v", checks[1])
+	}
+	if readiness.Operations[0].Ready || readiness.Operations[0].UnavailableReason != "live_aws_mutation_not_implemented" {
+		t.Fatalf("permission simulation must not make local-safe preflight executable, got %+v", readiness.Operations[0])
+	}
+}
+
+func TestServicePreflightMarksPermissionSimulationUnavailableWithoutFailingRoute(t *testing.T) {
+	store := &memoryStore{records: map[string]Record{
+		"apply_queued": {ID: "apply_queued", PlanID: "plan_1234", DeploymentName: "api-prod", Status: StatusQueued, Operations: []Operation{{Target: "api-prod-listener (productionListener)"}}},
+	}}
+	service := Service{
+		Store: store,
+		DeployerRoleReadiness: func(ctx context.Context, target DeployerRoleTarget) (DeployerRoleReadiness, error) {
+			return DeployerRoleReadiness{AWSAccountID: "123456789012", Region: "ap-northeast-2", RoleARN: "arn:aws:iam::123456789012:role/TenetDeployerRole", Configured: true, Ready: true, CheckedWithAWS: true, Summary: "role ready"}, nil
+		},
+		PermissionSimulation: func(ctx context.Context, target PermissionSimulationTarget) ([]OperationExecutionCapabilityCheck, error) {
+			return nil, errors.New("simulate principal policy: failed to refresh cached credentials")
+		},
+	}
+
+	readiness, err := service.Preflight(context.Background(), "apply_queued")
+	if err != nil {
+		t.Fatalf("Preflight should degrade permission simulation failures into readiness evidence, got %v", err)
+	}
+	checks := readiness.Operations[0].CapabilityChecks
+	if len(checks) == 0 || checks[0].State != "unavailable" || checks[0].Reason != "aws_unavailable" || !checks[0].CheckedWithAWS || checks[0].Allowed == nil || *checks[0].Allowed {
+		t.Fatalf("expected AWS-unavailable simulated permission checks, got %+v", checks)
+	}
+}
+
 func TestServiceExecutionPreviewNamesNextCodeDeployActionAndAWSContext(t *testing.T) {
 	store := &memoryStore{records: map[string]Record{
 		"apply_queued": {

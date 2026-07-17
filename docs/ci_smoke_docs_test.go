@@ -1229,6 +1229,8 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 		"read-only STS identity probe",
 		"it never performs CodeDeploy, ECS, ALB, or ASG mutation",
 		"executionReadiness and preflight evidence are readiness context, not proof that live AWS mutation ran or succeeded",
+		"read-only IAM `SimulatePrincipalPolicy` evidence",
+		"local or no-AWS environments still return `200 OK` with explicit `aws_unavailable`",
 		"queued/running apply records are local-safe executor handoffs until a future live executor exists",
 		"disabled/default apply records are expected local-safe evidence, not a product failure",
 	} {
