@@ -4674,10 +4674,13 @@ resource_scope = resource_events_payload.get('resultScope') or {}
 assert resource_scope.get('resourceFilter') == {'resourceType': 'candidateAutoScalingGroup', 'resourceName': 'payments-api-prod-candidate'}, resource_events_payload
 assert isinstance(resource_events_payload.get('events'), list), resource_events_payload
 resource_event_drift = [item for event in resource_events_payload['events'] for item in event.get('managedDrift', [])]
+resource_event_refs = [ref for event in resource_events_payload['events'] for ref in event.get('resourceRefs', [])]
+assert any(ref.get('resourceType') == 'candidateAutoScalingGroup' and ref.get('resourceName') == 'payments-api-prod-candidate' and ref.get('source') == 'rollout_execution' for ref in resource_event_refs), resource_events_payload
 for item in resource_event_drift:
     ref = item.get('resourceRef') or {}
-    assert ref.get('resourceType') == 'candidateAutoScalingGroup', item
-    assert ref.get('resourceName') == 'payments-api-prod-candidate', item
+    if ref:
+        assert ref.get('resourceType') == 'candidateAutoScalingGroup', item
+        assert ref.get('resourceName') == 'payments-api-prod-candidate', item
 resource_summary = resource_events_payload.get('managedDriftSummary') or {}
 assert resource_summary.get('total') == len(resource_event_drift), (resource_summary, resource_event_drift)
 assert resource_scope.get('returnedEventCount') == len(resource_events_payload['events']), resource_events_payload

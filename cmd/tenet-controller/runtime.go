@@ -295,6 +295,11 @@ func normalizeRuntimeHistoryEntryContext(entry domain.StatusHistoryEntry, fallba
 	} else {
 		entry.ManagedDrift = normalizeManagedDriftItems(entry.ManagedDrift)
 	}
+	if len(entry.ResourceRefs) == 0 && len(fallback.ResourceRefs) > 0 {
+		entry.ResourceRefs = normalizeRuntimeEventResourceRefs(fallback.ResourceRefs)
+	} else {
+		entry.ResourceRefs = normalizeRuntimeEventResourceRefs(entry.ResourceRefs)
+	}
 	if entry.TargetType == "" {
 		entry.TargetType = fallback.TargetType
 	}
@@ -1189,8 +1194,60 @@ func deriveRuntimeHistoryEntry(status domain.DeploymentStatus) domain.StatusHist
 		entry.TargetType = status.Rollout.TargetType
 		entry.Strategy = status.Rollout.Strategy
 		entry.ExecutionMode = status.Rollout.ExecutionMode
+		entry.ResourceRefs = runtimeEventResourceRefsFromRollout(status.Rollout)
 	}
 	return entry
+}
+
+func runtimeEventResourceRefsFromRollout(rollout *domain.RolloutSummary) []domain.RuntimeEventResourceRef {
+	if rollout == nil || len(rollout.Execution) == 0 {
+		return nil
+	}
+	refs := make([]domain.RuntimeEventResourceRef, 0, len(rollout.Execution))
+	seen := make(map[string]struct{}, len(rollout.Execution))
+	for _, resource := range rollout.Execution {
+		resourceType := strings.TrimSpace(resource.Resource)
+		resourceName := strings.TrimSpace(resource.Name)
+		if resourceType == "" || resourceName == "" {
+			continue
+		}
+		key := resourceType + "\x00" + resourceName
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		refs = append(refs, domain.RuntimeEventResourceRef{
+			ResourceType: resourceType,
+			ResourceName: resourceName,
+			Source:       "rollout_execution",
+			Context:      strings.TrimSpace(resource.Description),
+		})
+	}
+	return refs
+}
+
+func normalizeRuntimeEventResourceRefs(refs []domain.RuntimeEventResourceRef) []domain.RuntimeEventResourceRef {
+	if len(refs) == 0 {
+		return nil
+	}
+	normalized := make([]domain.RuntimeEventResourceRef, 0, len(refs))
+	seen := make(map[string]struct{}, len(refs))
+	for _, ref := range refs {
+		resourceType := strings.TrimSpace(ref.ResourceType)
+		resourceName := strings.TrimSpace(ref.ResourceName)
+		if resourceType == "" || resourceName == "" {
+			continue
+		}
+		source := strings.TrimSpace(ref.Source)
+		context := strings.TrimSpace(ref.Context)
+		key := resourceType + "\x00" + resourceName + "\x00" + source + "\x00" + context
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, domain.RuntimeEventResourceRef{ResourceType: resourceType, ResourceName: resourceName, Source: source, Context: context})
+	}
+	return normalized
 }
 
 func runtimeHistoryMeaningfullyChanged(previous domain.StatusHistoryEntry, current domain.StatusHistoryEntry) bool {
@@ -1198,6 +1255,7 @@ func runtimeHistoryMeaningfullyChanged(previous domain.StatusHistoryEntry, curre
 		previous.Summary != current.Summary ||
 		previous.DeployedArtifact != current.DeployedArtifact ||
 		!reflect.DeepEqual(previous.ManagedDrift, current.ManagedDrift) ||
+		!reflect.DeepEqual(previous.ResourceRefs, current.ResourceRefs) ||
 		!runtimeHistoryConditionsEqual(previous.Conditions, current.Conditions) ||
 		previous.Sync != current.Sync ||
 		previous.Health != current.Health ||

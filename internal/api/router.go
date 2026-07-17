@@ -381,6 +381,11 @@ func deploymentEventMatchesResourceFilter(event domain.StatusHistoryEntry, filte
 	if resourceType == "" || resourceName == "" {
 		return false
 	}
+	for _, ref := range event.ResourceRefs {
+		if strings.TrimSpace(ref.ResourceType) == resourceType && strings.TrimSpace(ref.ResourceName) == resourceName {
+			return true
+		}
+	}
 	for _, item := range event.ManagedDrift {
 		if item.ResourceRef != nil && strings.TrimSpace(item.ResourceRef.ResourceType) == resourceType && strings.TrimSpace(item.ResourceRef.ResourceName) == resourceName {
 			return true
