@@ -14246,6 +14246,13 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!applyEntryLink || applyEntryLink.target !== '_self' || applyEntryLink.rel) throw new Error('expected apply audit row anchor link to preserve filters');
   const planEntryLink = auditEntryLinks.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-plan-plan-ready-123');
   if (!planEntryLink || planEntryLink.target !== '_self' || planEntryLink.rel) throw new Error('expected plan audit row anchor link to preserve filters');
+  const auditEntryCopyButtons = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Copy audit entry link');
+  if (auditEntryCopyButtons.length !== 2) throw new Error('expected one copy audit entry button per audit row, got ' + auditEntryCopyButtons.length);
+  const applyEntryCopyButton = auditEntryCopyButtons.find((node) => node.getAttribute('aria-label') === 'Copy audit entry share link');
+  if (!applyEntryCopyButton) throw new Error('expected copy audit entry button with explicit aria label');
+  applyEntryCopyButton.dispatch('click');
+  await settle();
+  if (copiedText !== '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-apply-apply-failed-123') throw new Error('expected audit entry copy button to preserve filters and row anchor, got ' + copiedText);
   const sourceRecordLinks = links.filter((node) => node.textContent === 'Open source record');
   if (sourceRecordLinks.length !== 2) throw new Error('expected audit source record links, got ' + sourceRecordLinks.length);
   const applyRecordLink = sourceRecordLinks.find((node) => node.href === '/v1/applies/apply_failed_123');

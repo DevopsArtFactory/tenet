@@ -9216,7 +9216,10 @@
           }
 
           const links = createElement('div', 'row-links row-links-shell');
-          links.append(createNavLink(auditEntryAnchorURL(entry, rowAnchorID), 'Share audit entry', '_self'));
+          const auditEntryURL = auditEntryAnchorURL(entry, rowAnchorID);
+          links.append(createNavLink(auditEntryURL, 'Share audit entry', '_self'));
+          const copyAuditEntryButton = createCopyLinkButton(auditEntryURL, 'Copy audit entry link', 'Copy audit entry share link');
+          if (copyAuditEntryButton) links.append(copyAuditEntryButton);
           if (entry.deploymentName) {
             links.append(createNavLink(buildPageURL('application', { deployment: entry.deploymentName }), 'Open application drill-down', '_self'));
             links.append(createNavLink(buildPageURL('drift', { deployment: entry.deploymentName }), 'Open drift view', '_self'));
