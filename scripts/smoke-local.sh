@@ -2599,7 +2599,7 @@ assert "routeContainerName: String(currentPageState.containerName || resource.co
 assert "containerName: params.get('containerName') || ''" in ui, ui
 assert "buildPageSectionURL('resource', 'resource-recent-logs'" in ui, ui
 assert "const renderResourceTroubleshootingSummary = (section, detail, resource) => {" in ui, ui
-assert "Derived from selected deployment/resource context plus the latest Live inspection and Recent logs panel results." in ui, ui
+assert "Derived from selected deployment/resource context plus the latest Related runtime events, Live inspection, and Recent logs panel results." in ui, ui
 assert "const selectedLookupScope = selectedResourceScopeText(resource);" in ui, ui
 assert "...(selectedLookupScope ? [['Selected lookup scope', selectedLookupScope]] : [])," in ui, ui
 assert "refreshResourceTroubleshootingSummary(deploymentName, resource);" in ui, ui

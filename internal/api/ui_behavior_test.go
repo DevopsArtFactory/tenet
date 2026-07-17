@@ -5599,6 +5599,7 @@ const fetch = (url) => {
   if (url === '/v1/overview/deployments/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
   if (String(url).includes('/resource-inspection?resourceType=legacyHook')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, unavailableReason: 'unsupported_resource_type' }) });
   if (String(url).includes('/resource-logs?resourceType=legacyHook')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, unavailableReason: 'unsupported_resource_type', entries: [] }) });
+  if (String(url).includes('/events?resourceType=legacyHook')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-prod', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -5632,7 +5633,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const pageText = collectText(accounts).join(' | ');
   if (!pageText.includes('Recent logs | Unsupported for this resource type')) throw new Error('expected troubleshooting summary to mark Recent logs unsupported: ' + pageText);
   if (!pageText.includes('Live inspection | Unsupported for this resource type')) throw new Error('expected troubleshooting summary to mark Live inspection unsupported: ' + pageText);
-  if (!pageText.includes('Evidence freshness | Recent logs unsupported for this resource type · Live inspection unsupported for this resource type')) throw new Error('expected freshness row to avoid stale not-refreshed guidance: ' + pageText);
+  if (!pageText.includes('Evidence freshness | Related runtime events refreshed ')) throw new Error('expected related-events freshness in unsupported summary: ' + pageText);
+  if (!pageText.includes('Recent logs unsupported for this resource type · Live inspection unsupported for this resource type')) throw new Error('expected freshness row to avoid stale unsupported evidence guidance: ' + pageText);
   if (!pageText.includes('Next check | Focused evidence panels are not supported for this resource type yet; use the current resource read, rollout context, status conditions, and related runtime events before escalating.')) throw new Error('expected unsupported next-check guidance: ' + pageText);
   if (pageText.includes('Open or refresh Live inspection and Recent logs')) throw new Error('unsupported troubleshooting summary should not ask operators to refresh hidden panels: ' + pageText);
   if (fetchCalls.find((url) => String(url).includes('/resource-inspection') || String(url).includes('/resource-logs'))) throw new Error('unsupported resource should not lazy-fetch hidden panels: ' + fetchCalls.join(', '));
@@ -8916,7 +8918,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Failed to load live inspection: resource inspection request failed (503)')) throw new Error('expected initial live inspection error state before refresh');
   const failedInspectionStatus = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('detail-state')).find((node) => node.textContent === 'Failed to load live inspection: resource inspection request failed (503)');
   assertStatusRegion(failedInspectionStatus, 'Live inspection error state');
-  if (!text.match(/Evidence freshness \| Recent logs refreshed .+ · Live inspection not refreshed yet/)) throw new Error('expected troubleshooting summary to surface only completed evidence freshness after initial reads: ' + text);
+  if (!text.match(/Related runtime events \| Available · 1 event · newest 2026-04-18T00:14:00Z/)) throw new Error('expected troubleshooting summary to surface related runtime-events state after initial read: ' + text);
+  if (!text.match(/Evidence freshness \| Related runtime events refreshed .+ · Recent logs refreshed .+ · Live inspection not refreshed yet/)) throw new Error('expected troubleshooting summary to surface related-events freshness before completed sibling evidence: ' + text);
 
   const selectByField = (label) => collectNodes(root, (node) => node.tagName === 'SELECT' && node.dataset.toolbarField === label)[0];
   let relatedEventWindow = selectByField('Related event window');
@@ -9038,7 +9041,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   text = collectText(root).join(' | ');
   if (!text.includes('Updated recent log line')) throw new Error('expected recent-logs refresh to render fresh payload');
   if (text.includes('Initial recent log line')) throw new Error('expected recent-logs refresh to replace stale payload');
-  if (!text.match(/Evidence freshness \| Recent logs refreshed .+ · Live inspection not refreshed yet/)) throw new Error('expected recent-logs refresh to update summary freshness without inventing failed inspection freshness: ' + text);
+  if (!text.match(/Evidence freshness \| Related runtime events refreshed .+ · Recent logs refreshed .+ · Live inspection not refreshed yet/)) throw new Error('expected recent-logs refresh to retain related-events freshness while updating logs without inventing failed inspection freshness: ' + text);
 
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   refreshLogs = buttons.find((node) => node.textContent === 'Refresh recent logs');
@@ -9081,7 +9084,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Service name')) throw new Error('expected refreshed live inspection payload to render supported fields');
   if (!text.includes('payments-api-staging-service')) throw new Error('expected refreshed live inspection payload to render service name');
   if (!text.includes('Service reached steady state again')) throw new Error('expected refreshed live inspection payload to render fresh event text');
-  if (!text.match(/Evidence freshness \| Recent logs refreshed .+ · Live inspection refreshed .+/)) throw new Error('expected troubleshooting summary to show both completed evidence freshness values after live inspection refresh: ' + text);
+  if (!text.match(/Evidence freshness \| Related runtime events refreshed .+ · Recent logs refreshed .+ · Live inspection refreshed .+/)) throw new Error('expected troubleshooting summary to show related-events plus both completed sibling evidence freshness values after live inspection refresh: ' + text);
   if (collectText(root).filter((value) => value === 'Provider lookup context').length !== 2) throw new Error('expected recent logs and live inspection to label returned provider lookup context');
   if (!text.includes('Inspection path · ap-northeast-2 · account 210987654321 · same-account lookup · observer role configured')) throw new Error('expected live inspection provider lookup context summary');
   if (text.includes('Failed to load live inspection: resource inspection request failed (503)')) throw new Error('expected refreshed live inspection payload to replace stale error state');
@@ -9239,7 +9242,7 @@ class Document {
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
 async function settle(count = 1) { for (let i = 0; i < count; i += 1) { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); } }
-async function renderResource(logPayload, inspectionPayload) {
+async function renderResource(logPayload, inspectionPayload, eventsPayload = { deploymentName: 'payments-api-staging', events: [{ timestamp: '2026-04-18T00:12:00Z', source: 'controller', summary: 'Service stability verified' }] }) {
   const document = new Document();
   document.byID.set('toolbar', document.createElement('section'));
   document.byID.set('summary', document.createElement('section'));
@@ -9254,6 +9257,7 @@ async function renderResource(logPayload, inspectionPayload) {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&containerName=app&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(logPayload) });
     if (url === '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve(inspectionPayload) });
+    if (url === '/v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve(eventsPayload) });
     throw new Error('unexpected fetch url: ' + url);
   };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -9282,11 +9286,12 @@ async function renderResource(logPayload, inspectionPayload) {
   const emptyText = emptyRun.accountsText;
   const emptySummaryText = emptyRun.summaryText;
   if (!emptyText.includes('Troubleshooting summary')) throw new Error('expected resource troubleshooting summary heading');
-  if (!emptyText.includes('Derived from selected deployment/resource context plus the latest Live inspection and Recent logs panel results.')) throw new Error('expected derived-summary explanation');
+  if (!emptyText.includes('Derived from selected deployment/resource context plus the latest Related runtime events, Live inspection, and Recent logs panel results.')) throw new Error('expected derived-summary explanation');
   if (!emptySummaryText.includes('Selected lookup scope | Selected instance · i-0abc123def4567890 · Selected container · app · Selected cluster · arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-prod')) throw new Error('expected selected lookup scope in resource troubleshooting summary: ' + emptySummaryText);
   if (!emptyText.includes('Recent logs | Empty · no log rows · CloudWatch Logs')) throw new Error('expected successful empty recent-log summary state with friendly source label: ' + emptyText);
   if (emptyText.includes('Recent logs | Empty · no log rows · cloudwatch')) throw new Error('expected successful empty recent-log summary to hide raw source token: ' + emptyText);
-  if (!emptyText.match(/Evidence freshness \| Recent logs refreshed .+ · Live inspection refreshed .+/)) throw new Error('expected successful empty evidence reads to surface freshness in summary: ' + emptyText);
+  if (!emptyText.includes('Related runtime events | Available · 1 event · newest 2026-04-18T00:12:00Z')) throw new Error('expected related-runtime-events summary state: ' + emptyText);
+  if (!emptyText.match(/Evidence freshness \| Related runtime events refreshed .+ · Recent logs refreshed .+ · Live inspection refreshed .+/)) throw new Error('expected successful empty evidence reads to surface freshness in summary: ' + emptyText);
   if (emptyText.includes('Recent logs | Empty · no_recent_events')) throw new Error('expected summary to hide raw empty recent-log reason code: ' + emptyText);
   if (!emptyText.includes('Live inspection | Available · AWS ECS')) throw new Error('expected available live-inspection summary state with friendly source label: ' + emptyText);
   if (emptyText.includes('Live inspection | Available · ecs_service')) throw new Error('expected available live-inspection summary to hide raw source token: ' + emptyText);
@@ -9310,7 +9315,7 @@ async function renderResource(logPayload, inspectionPayload) {
   const unavailableText = unavailableRun.accountsText;
   if (!unavailableText.includes('Recent logs | Unavailable · Cross-account observer role missing')) throw new Error('expected cross-account unavailable recent-log summary state: ' + unavailableText);
   if (!unavailableText.includes('Live inspection | Unavailable · AWS access unavailable')) throw new Error('expected AWS-unavailable inspection summary state: ' + unavailableText);
-  if (!unavailableText.match(/Evidence freshness \| Recent logs refreshed .+ · Live inspection refreshed .+/)) throw new Error('expected completed unavailable evidence reads to still surface freshness in summary: ' + unavailableText);
+  if (!unavailableText.match(/Evidence freshness \| Related runtime events refreshed .+ · Recent logs refreshed .+ · Live inspection refreshed .+/)) throw new Error('expected completed unavailable evidence reads to still surface freshness in summary: ' + unavailableText);
   if (!unavailableText.includes('Next check | Cross-account observer role wiring is missing for this resource evidence lookup; configure the observer role, then refresh Recent logs and Live inspection.')) throw new Error('expected cross-account next-step guidance: ' + unavailableText);
 })();
 `

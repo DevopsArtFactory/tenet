@@ -4385,6 +4385,7 @@
         return fetchedAt ? `${label} refreshed ${fetchedAt}` : `${label} not refreshed yet`;
       };
       const resourceTroubleshootingFreshness = (states) => [
+        resourceTroubleshootingFreshnessPart('Related runtime events', states.relatedEventsState, states.supportsRelatedEvents),
         resourceTroubleshootingFreshnessPart('Recent logs', states.logsState, states.supportsLogs),
         resourceTroubleshootingFreshnessPart('Live inspection', states.inspectionState, states.supportsInspection),
       ].join(' · ');
@@ -4424,14 +4425,22 @@
         }
         return `Available${source !== '—' ? ` · ${source}` : ''}`;
       };
+      const resourceTroubleshootingRelatedEventsLabel = (result) => {
+        const events = sortTimelineEvents(Array.isArray(result?.events) ? result.events : []);
+        if (!events.length) return 'Empty · no related events';
+        const newestTimestamp = String(events[0]?.timestamp || '').trim();
+        return `Available · ${events.length} ${events.length === 1 ? 'event' : 'events'}${newestTimestamp ? ` · newest ${newestTimestamp}` : ''}`;
+      };
       const resourceTroubleshootingPanelStates = (deploymentName, resource) => {
+        const supportsRelatedEvents = resourceSupportsRelatedRuntimeEvents(resource);
         const supportsLogs = resourceSupportsRecentLogs(resource);
         const supportsInspection = resourceSupportsLiveInspection(resource);
         const logsLimit = selectedResourceLogsLimit(deploymentName, resource);
         const inspectionLimit = supportsBoundedResourceInspection(resource) ? selectedResourceInspectionLimit(deploymentName, resource) : 0;
+        const relatedEventsState = supportsRelatedEvents ? resourceEventsStateByResource.get(resourceEventsCacheKey(deploymentName, resource, defaultDeploymentEventsLimit, currentPageState.eventSource || '')) : null;
         const logsState = supportsLogs ? resourceLogStateByKey.get(resourceLogRequestCacheKey(deploymentName, resource, logsLimit)) : null;
         const inspectionState = supportsInspection ? resourceInspectionStateByKey.get(resourceInspectionRequestCacheKey(deploymentName, resource, inspectionLimit)) : null;
-        return { logsState, inspectionState, supportsLogs, supportsInspection };
+        return { relatedEventsState, logsState, inspectionState, supportsRelatedEvents, supportsLogs, supportsInspection };
       };
       const resourceTroubleshootingUnavailableReasons = (states) => [
         states.logsState?.status === 'ready' && states.logsState.result?.available === false ? states.logsState.result?.unavailableReason : '',
@@ -4480,6 +4489,7 @@
           ...(selectedLookupScope ? [['Selected lookup scope', selectedLookupScope]] : []),
           ['Deployment state', `${detail?.sync?.state || 'Unknown'} · ${healthLabel(detail?.health)} · ${metricValue(detail?.rollout?.phase)}`],
           ['Current step', metricValue(detail?.rollout?.currentStep || detail?.runtimeSummary?.currentStep)],
+          ['Related runtime events', resourceTroubleshootingState(states.relatedEventsState, resourceTroubleshootingRelatedEventsLabel, states.supportsRelatedEvents)],
           ['Recent logs', resourceTroubleshootingState(states.logsState, resourceTroubleshootingLogsLabel, states.supportsLogs)],
           ['Live inspection', resourceTroubleshootingState(states.inspectionState, resourceTroubleshootingInspectionLabel, states.supportsInspection)],
           ['Evidence freshness', resourceTroubleshootingFreshness(states)],
@@ -4488,7 +4498,7 @@
         summaryRows.forEach(([label, value]) => summaryGrid.append(createMetric(label, value, label === 'Next check' ? 'summary' : '')));
         section.replaceChildren(
           createDetailSectionHeader('Troubleshooting summary'),
-          createElement('p', 'detail-section-copy', 'Derived from selected deployment/resource context plus the latest Live inspection and Recent logs panel results.'),
+          createElement('p', 'detail-section-copy', 'Derived from selected deployment/resource context plus the latest Related runtime events, Live inspection, and Recent logs panel results.'),
           summaryGrid,
         );
         decorateResourceDetailSection(section);
@@ -8350,11 +8360,13 @@
         }
         if (!force && cached?.status === 'ready') {
           renderResourceRelatedEventsPayload(section, deploymentName, resource, cached.result, limit, source);
+          refreshResourceTroubleshootingSummary(deploymentName, resource);
           return Promise.resolve(cached.result);
         }
         if (cached?.status === 'loading') {
           resourceEventsStateByResource.set(cacheKey, { ...cached, sections: [...(cached.sections || []), section] });
           renderResourceRelatedEventsState(section, deploymentName, resource, 'Loading related runtime events…', '', '', true, limit, source);
+          refreshResourceTroubleshootingSummary(deploymentName, resource);
           return cached.promise;
         }
         if (!force && cached?.status === 'error') {
@@ -8365,9 +8377,11 @@
           } else {
             renderResourceRelatedEventsState(section, deploymentName, resource, `Failed to load related runtime events: ${cached.error?.message || 'unknown error'}`, 'error', '', false, limit, source);
           }
+          refreshResourceTroubleshootingSummary(deploymentName, resource);
           return Promise.reject(cached.error);
         }
         renderResourceRelatedEventsState(section, deploymentName, resource, 'Loading related runtime events…', '', '', true, limit, source);
+        refreshResourceTroubleshootingSummary(deploymentName, resource);
         const promise = Promise.resolve()
           .then(() => fetchResourceRelatedEvents(deploymentName, resource, limit, source))
           .then((rawResult) => {
@@ -8375,6 +8389,7 @@
             const current = resourceEventsStateByResource.get(cacheKey);
             resourceEventsStateByResource.set(cacheKey, { status: 'ready', result });
             (current?.sections || []).forEach((container) => renderResourceRelatedEventsPayload(container, deploymentName, resource, result, limit, source));
+            refreshResourceTroubleshootingSummary(deploymentName, resource);
             return result;
           })
           .catch((error) => {
@@ -8388,9 +8403,11 @@
               if (renderOperatorReadFailurePanel(container, 'Related runtime events', createResourceRelatedEventsActions(container, deploymentName, resource, false, null, limit, source), resourceEventsReadRoute(deploymentName, resource, limit, source), error)) return;
               renderResourceRelatedEventsState(container, deploymentName, resource, `Failed to load related runtime events: ${error.message}`, 'error', '', false, limit, source);
             });
+            refreshResourceTroubleshootingSummary(deploymentName, resource);
             throw error;
           });
         resourceEventsStateByResource.set(cacheKey, { status: 'loading', promise, sections: [section] });
+        refreshResourceTroubleshootingSummary(deploymentName, resource);
         return promise;
       };
       const renderDeploymentEventsState = (section, deploymentName, text, className = '', detailText = '', isLoading = false, limit = currentPageState.eventLimit) => {
