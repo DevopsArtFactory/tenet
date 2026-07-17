@@ -1540,6 +1540,7 @@ func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditC
 		}
 	}
 	for _, fragment := range []string{
+		"safe action filter control for exactly `plan.created`, `apply.requested`, `apply.transitioned`, and `controller.refresh.requested`",
 		"`GET /v1/audit-logs?action={action}` narrows the same local audit timeline to exactly `plan.created`, `apply.requested`, `apply.transitioned`, or `controller.refresh.requested`",
 		"visible-entry summary for total rows, `plan.created`, `apply.requested`, `apply.transitioned`, `controller.refresh.requested`, recorded actors, and unavailable/unknown actors",
 	} {

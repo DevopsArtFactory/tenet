@@ -42,7 +42,7 @@ The audit page is a sibling operator slice, not a replacement for the applicatio
 It stays intentionally narrow:
 - fetch `GET /v1/audit-logs`
 - preserve optional bookmarkable `action`, `deployment`, and `limit` URL state on the audit route
-- render a safe action filter control for exactly `plan.created`, `apply.requested`, and `apply.transitioned`
+- render a safe action filter control for exactly `plan.created`, `apply.requested`, `apply.transitioned`, and `controller.refresh.requested`
 - render immutable plan/apply activity newest-first, including persisted apply lifecycle transitions as `apply.transitioned` rows with previous/new status and step metadata
 - show each row's immutable `Source record` route plus `Source detail` route when present, with `Open source record` / `Open source detail` raw JSON links, so operators can jump from the audit evidence back to the stored plan/apply record or source snapshot they are troubleshooting
 - give each audit row a stable `audit-entry-*` anchor plus an `_self` `Share audit entry` link that preserves deployment/action/limit filters, and surface those visible row anchors in deployment-scoped quick navigation so incident handoffs can jump to one immutable row instead of the whole filtered timeline
