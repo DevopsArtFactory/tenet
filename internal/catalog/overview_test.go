@@ -1204,6 +1204,109 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	}
 }
 
+func TestBuildDeploymentOverviewDetailSummarizesRelatedEventsByResource(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+	}
+	snapshots := []statusstore.Snapshot{{
+		DeploymentName: "payments-api-prod",
+		Status: domain.DeploymentStatus{
+			Rollout: &domain.RolloutSummary{Execution: []domain.RolloutExecutionDetail{
+				{Resource: "ecsService", Name: "payments-api-staging-service", Description: "ECS service receiving rollout traffic"},
+				{Resource: "trafficShiftPlan", Name: "payments-api-staging-routing", Description: "Weighted routing plan"},
+				{Resource: "userDataBootstrapSource", Name: "userdata.sh", Description: "Normalized userdata bootstrap source for candidate EC2 capacity"},
+			}},
+			History: []domain.StatusHistoryEntry{
+				{
+					Timestamp: "2026-04-16T06:10:00Z",
+					Source:    "controller",
+					Summary:   "Service rollout accepted",
+					ResourceRefs: []domain.RuntimeEventResourceRef{{
+						ResourceType: "ecsService",
+						ResourceName: "payments-api-staging-service",
+						Source:       "rollout_execution",
+					}},
+				},
+				{
+					Timestamp: "2026-04-16T06:20:00Z",
+					Source:    "managed_drift",
+					Summary:   "Traffic route drift detected",
+					ManagedDrift: []domain.ManagedDriftItem{
+						{Field: "traffic.listener.weight", Severity: domain.ManagedDriftSeverityHigh, ResourceRef: &domain.ManagedDriftResourceRef{ResourceType: "trafficShiftPlan", ResourceName: "payments-api-staging-routing"}},
+						{Field: "traffic.listener.test", Severity: domain.ManagedDriftSeverityMedium, Source: &domain.ManagedDriftSource{ResourceType: "trafficShiftPlan", ResourceName: "payments-api-staging-routing"}},
+					},
+				},
+				{
+					Timestamp: "2026-04-16T06:25:00Z",
+					Source:    "controller",
+					Summary:   "Service rollout progressed",
+					ResourceRefs: []domain.RuntimeEventResourceRef{{
+						ResourceType: "ecsService",
+						ResourceName: "payments-api-staging-service",
+					}},
+				},
+			},
+		},
+	}}
+
+	detail, err := BuildDeploymentOverviewDetail(catalog, snapshots, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildDeploymentOverviewDetail returned error: %v", err)
+	}
+	if len(detail.ResourceRelatedEvents) != 3 {
+		t.Fatalf("expected one related-event summary per rollout resource, got %+v", detail.ResourceRelatedEvents)
+	}
+
+	service := detail.ResourceRelatedEvents[0]
+	if service.ResourceType != "ecsService" || service.ResourceName != "payments-api-staging-service" || service.ResourceDescription != "ECS service receiving rollout traffic" {
+		t.Fatalf("expected ecsService identity to match rollout execution resource, got %+v", service)
+	}
+	if service.RetainedEventCount != 2 || service.NewestEventTimestamp != "2026-04-16T06:25:00Z" {
+		t.Fatalf("expected service retained-event count and newest timestamp, got %+v", service)
+	}
+	if !reflect.DeepEqual(service.SourceSummary, []RuntimeEventSourceSummary{{Source: "controller", Count: 2}}) {
+		t.Fatalf("expected controller source summary for service resource, got %+v", service.SourceSummary)
+	}
+
+	routing := detail.ResourceRelatedEvents[1]
+	if routing.ResourceType != "trafficShiftPlan" || routing.ResourceName != "payments-api-staging-routing" {
+		t.Fatalf("expected trafficShiftPlan identity, got %+v", routing)
+	}
+	if routing.RetainedEventCount != 1 || routing.ManagedDriftSummary != (ManagedDriftSummary{Total: 2, High: 1, Medium: 1}) {
+		t.Fatalf("expected managed drift-backed routing summary, got %+v", routing)
+	}
+	if !reflect.DeepEqual(routing.SourceSummary, []RuntimeEventSourceSummary{{Source: "managed_drift", Count: 1}}) {
+		t.Fatalf("expected source-filterable routing summary, got %+v", routing.SourceSummary)
+	}
+
+	userdata := detail.ResourceRelatedEvents[2]
+	if userdata.ResourceType != "userDataBootstrapSource" || userdata.RetainedEventCount != 0 || userdata.NewestEventTimestamp != "" || userdata.SourceSummary == nil || len(userdata.SourceSummary) != 0 {
+		t.Fatalf("expected no-history rollout resource to remain explicit and empty, got %+v", userdata)
+	}
+
+	payload, err := json.Marshal(detail)
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("failed to decode detail payload: %v", err)
+	}
+	rawSummaries, ok := decoded["resourceRelatedEvents"].([]any)
+	if !ok || len(rawSummaries) != 3 {
+		t.Fatalf("expected resourceRelatedEvents JSON array field, got %#v", decoded["resourceRelatedEvents"])
+	}
+	first, ok := rawSummaries[0].(map[string]any)
+	if !ok || first["resourceType"] != "ecsService" || first["retainedEventCount"] != float64(2) || first["newestEventTimestamp"] != "2026-04-16T06:25:00Z" {
+		t.Fatalf("expected raw JSON field names for related event summary, got %#v", first)
+	}
+	if _, exists := decoded["ResourceRelatedEvents"]; exists {
+		t.Fatalf("unexpected Go-style resource related events field in %#v", decoded)
+	}
+}
+
 func TestBuildDeploymentOverviewEvents(t *testing.T) {
 	catalog := manifest.Catalog{
 		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
@@ -1801,30 +1904,31 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 		t.Fatalf("expected history for application page, got %+v", detail.History)
 	}
 	expected := ApplicationOverviewDetail{
-		Name:                deploymentDetail.Name,
-		AppRef:              deploymentDetail.AppRef,
-		EnvironmentRef:      deploymentDetail.EnvironmentRef,
-		AccountName:         deploymentDetail.AccountName,
-		AWSAccountID:        deploymentDetail.AWSAccountID,
-		AllowedRegions:      append([]string(nil), deploymentDetail.AllowedRegions...),
-		Region:              deploymentDetail.Region,
-		TargetType:          deploymentDetail.TargetType,
-		Strategy:            deploymentDetail.Strategy,
-		ExecutionMode:       deploymentDetail.ExecutionMode,
-		DesiredArtifact:     deploymentDetail.DesiredArtifact,
-		UserData:            deploymentDetail.UserData,
-		RolloutConfig:       cloneDeploymentRolloutConfig(deploymentDetail.RolloutConfig),
-		DeployedArtifact:    deploymentDetail.DeployedArtifact,
-		ObservedGeneration:  deploymentDetail.ObservedGeneration,
-		SourceFingerprint:   deploymentDetail.SourceFingerprint,
-		Sync:                deploymentDetail.Sync,
-		Health:              deploymentDetail.Health,
-		ManagedDrift:        cloneManagedDrift(deploymentDetail.ManagedDrift),
-		ManagedDriftSummary: deploymentDetail.ManagedDriftSummary,
-		RuntimeSummary:      cloneRuntimeSummary(deploymentDetail.RuntimeSummary),
-		Rollout:             cloneRolloutSummary(deploymentDetail.Rollout),
-		Conditions:          append([]domain.Condition(nil), deploymentDetail.Conditions...),
-		History:             cloneStatusHistory(deploymentDetail.History),
+		Name:                  deploymentDetail.Name,
+		AppRef:                deploymentDetail.AppRef,
+		EnvironmentRef:        deploymentDetail.EnvironmentRef,
+		AccountName:           deploymentDetail.AccountName,
+		AWSAccountID:          deploymentDetail.AWSAccountID,
+		AllowedRegions:        append([]string(nil), deploymentDetail.AllowedRegions...),
+		Region:                deploymentDetail.Region,
+		TargetType:            deploymentDetail.TargetType,
+		Strategy:              deploymentDetail.Strategy,
+		ExecutionMode:         deploymentDetail.ExecutionMode,
+		DesiredArtifact:       deploymentDetail.DesiredArtifact,
+		UserData:              deploymentDetail.UserData,
+		RolloutConfig:         cloneDeploymentRolloutConfig(deploymentDetail.RolloutConfig),
+		DeployedArtifact:      deploymentDetail.DeployedArtifact,
+		ObservedGeneration:    deploymentDetail.ObservedGeneration,
+		SourceFingerprint:     deploymentDetail.SourceFingerprint,
+		Sync:                  deploymentDetail.Sync,
+		Health:                deploymentDetail.Health,
+		ManagedDrift:          cloneManagedDrift(deploymentDetail.ManagedDrift),
+		ManagedDriftSummary:   deploymentDetail.ManagedDriftSummary,
+		RuntimeSummary:        cloneRuntimeSummary(deploymentDetail.RuntimeSummary),
+		Rollout:               cloneRolloutSummary(deploymentDetail.Rollout),
+		ResourceRelatedEvents: cloneResourceRelatedEventSummaries(deploymentDetail.ResourceRelatedEvents),
+		Conditions:            append([]domain.Condition(nil), deploymentDetail.Conditions...),
+		History:               cloneStatusHistory(deploymentDetail.History),
 	}
 	if !reflect.DeepEqual(detail, expected) {
 		t.Fatalf("expected application detail to preserve deployment detail semantics, got application=%+v expected=%+v", detail, expected)
