@@ -2202,6 +2202,8 @@ for fragment in (
     "No linked resources are available in this workspace yet.",
     "Current source: controller-authored managedDrift rows.",
     "managedDrift is present in the deployment detail payload, so fallback read-model heuristics stay suppressed for this deployment.",
+    "Current source: derived fallback read-model heuristics.",
+    "managedDrift is absent in the deployment detail payload, so Tenet is deriving field-level drift from artifact, generation, runtime-context, and unhealthy-condition read-model signals.",
     "Drift summary",
     "workspace-detail-freshness",
     "Total rows",
