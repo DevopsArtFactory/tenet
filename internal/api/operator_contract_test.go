@@ -498,7 +498,7 @@ func TestOperatorTroubleshootingRunbookDocsContract(t *testing.T) {
 		"Capture each row's `Linked resources` cue so reviewers can tell whether inventory came from controller-authored `rollout.execution[]` rows or fallback inventory before drilling into the application page.",
 		"| Application detail | `/?page=application&deployment={deploymentName}` | `GET /v1/overview/applications/{deploymentName}`",
 		"application page keeps deployment, source fingerprint, runtime summary, events context, and `Linked resource inventory` visible",
-		"Capture total/visible linked-resource counts plus per-group counts before treating a filtered page as missing rollout inventory.",
+		"Capture total/visible linked-resource counts, per-group counts, and any `Related events · N` resource cues/source mix before treating a filtered page as missing rollout inventory or missing controller-history handoffs.",
 		"| Resource detail | `/?page=resource&deployment={deploymentName}&resourceType={type}&resourceId={stableResourceId}` | `GET /v1/overview/deployments/{deploymentName}`",
 		"| Recent logs | `#resource-recent-logs` | `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}`",
 		"| Live inspection | `#resource-live-inspection` | `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}`",
