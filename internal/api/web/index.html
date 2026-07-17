@@ -275,17 +275,22 @@
         driftSort: defaultDriftFilters.sort,
       };
       const auditActionOptions = [
-        { value: '', label: 'All actions' },
-        { value: 'plan.created', label: 'Plan preview created (plan.created)' },
-        { value: 'apply.requested', label: 'Apply requested (apply.requested)' },
-        { value: 'apply.transitioned', label: 'Apply lifecycle transitioned (apply.transitioned)' },
-        { value: 'controller.refresh.requested', label: 'Controller refresh requested (controller.refresh.requested)' },
+        { value: '', label: 'All actions', displayLabel: 'All actions' },
+        { value: 'plan.created', label: 'Plan preview created (plan.created)', displayLabel: 'Plan preview created' },
+        { value: 'apply.requested', label: 'Apply requested (apply.requested)', displayLabel: 'Apply requested' },
+        { value: 'apply.transitioned', label: 'Apply lifecycle transitioned (apply.transitioned)', displayLabel: 'Apply lifecycle transitioned' },
+        { value: 'controller.refresh.requested', label: 'Controller refresh requested (controller.refresh.requested)', displayLabel: 'Controller refresh requested' },
       ];
       const validAuditActions = new Set(auditActionOptions.map((option) => option.value).filter(Boolean));
       const auditActionLabel = (value) => {
         const action = String(value || '').trim();
         const option = auditActionOptions.find((entry) => entry.value === action);
         return option?.label || textOrDash(action);
+      };
+      const auditActionDisplayLabel = (value) => {
+        const action = String(value || '').trim();
+        const option = auditActionOptions.find((entry) => entry.value === action);
+        return option?.displayLabel || textOrDash(action);
       };
 
       const statusClass = (state) => {
@@ -2445,7 +2450,7 @@
         limit: currentPageState.auditLimit,
       });
       const auditEntryNavigationSummary = (entry) => {
-        const action = auditActionLabel(entry?.action);
+        const action = auditActionDisplayLabel(entry?.action);
         const subject = entry?.applyId
           ? `apply ${entry.applyId}`
           : entry?.planId
@@ -8417,7 +8422,7 @@
       const auditFilterLabels = () => {
         const labels = [];
         if (currentPageState.deployment) labels.push(`deployment ${currentPageState.deployment}`);
-        if (currentPageState.auditAction) labels.push(`action ${auditActionLabel(currentPageState.auditAction)}`);
+        if (currentPageState.auditAction) labels.push(`action ${auditActionDisplayLabel(currentPageState.auditAction)}`);
         return labels;
       };
       const auditLimitLabel = () => currentPageState.auditLimit > 0 ? `Limit cap: latest ${currentPageState.auditLimit}` : 'Limit cap: all entries';
@@ -8448,8 +8453,8 @@
         }
         if (currentPageState.auditAction) {
           chips.append(createAuditFilterChip({
-            label: `Action: ${auditActionLabel(currentPageState.auditAction)}`,
-            clearLabel: `Clear action filter ${auditActionLabel(currentPageState.auditAction)}`,
+            label: `Action: ${auditActionDisplayLabel(currentPageState.auditAction)}`,
+            clearLabel: `Clear action filter ${auditActionDisplayLabel(currentPageState.auditAction)}`,
             clearControl: 'action',
           }));
         }
@@ -8544,7 +8549,7 @@
         const deploymentName = scope?.deploymentName || currentPageState.deployment;
         const action = scope?.action || currentPageState.auditAction;
         if (deploymentName) filters.push(`deployment ${deploymentName}`);
-        if (action) filters.push(`action ${auditActionLabel(action)}`);
+        if (action) filters.push(`action ${auditActionDisplayLabel(action)}`);
         return filters.length ? `Applied scope · ${filters.join(' · ')}` : 'Applied scope · all audit entries';
       };
       const createAuditResultScopeSummary = (result, entries) => {
@@ -8878,7 +8883,7 @@
             entry.environmentRef ? `Environment ${entry.environmentRef}` : '',
           ].filter(Boolean).join(' · ') || 'No deployment context recorded';
           titleWrap.append(
-            createElement('h3', 'row-title', auditActionLabel(entry.action)),
+            createElement('h3', 'row-title', auditActionDisplayLabel(entry.action)),
             createElement('div', 'row-subtitle', deploymentContext),
           );
           const rowPills = createElement('div', 'pills');
@@ -8892,7 +8897,7 @@
 
           const metrics = createElement('div', 'metrics');
           [
-            ['Action', auditActionLabel(entry.action)],
+            ['Action', auditActionDisplayLabel(entry.action)],
             ['Timestamp', textOrDash(entry.timestamp)],
             ['Deployment', textOrDash(entry.deploymentName)],
             ['Application', textOrDash(entry.appRef)],

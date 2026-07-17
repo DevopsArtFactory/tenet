@@ -3053,7 +3053,7 @@ assert 'Current audit read: ${buildEmbeddedPageReadRoute(currentPageState)}' in 
 assert 'toolbar-chip' in audit_ui, audit_ui
 assert "chips.setAttribute('aria-label', 'Active audit controls');" in audit_ui, audit_ui
 assert 'Clear deployment filter ${currentPageState.deployment}' in audit_ui, audit_ui
-assert 'Clear action filter ${auditActionLabel(currentPageState.auditAction)}' in audit_ui, audit_ui
+assert 'Clear action filter ${auditActionDisplayLabel(currentPageState.auditAction)}' in audit_ui, audit_ui
 assert 'Clear limit cap latest ${currentPageState.auditLimit}' in audit_ui, audit_ui
 assert 'const clearAuditControl = (control) => {' in audit_ui, audit_ui
 assert 'Source record · ${entry.source.recordRoute}' in audit_ui, audit_ui
@@ -3077,7 +3077,7 @@ assert 'Share or continue in app' in audit_ui, audit_ui
 assert 'No audit activity has been persisted yet.' in audit_ui, audit_ui
 assert 'No audit activity has been persisted yet for deployment ${currentPageState.deployment}. Create a plan preview or apply request from the plan/apply workspace to add immutable audit rows for this deployment.' in audit_ui, audit_ui
 assert "const auditFilterLabels = () => {" in audit_ui, audit_ui
-assert "labels.push(`action ${auditActionLabel(currentPageState.auditAction)}`);" in audit_ui, audit_ui
+assert "labels.push(`action ${auditActionDisplayLabel(currentPageState.auditAction)}`);" in audit_ui, audit_ui
 assert "const auditEmptyStateText = () => {" in audit_ui, audit_ui
 assert "No audit entries match the current filters (${filters.join(' · ')}${hasLimit ? `; ${auditLimitLabel()}` : ''}). ${currentPageState.deployment && (currentPageState.auditAction || hasLimit) ? 'Clear action/limit to stay scoped to this deployment, or clear audit controls to remove the deployment scope.' : 'Clear audit controls to return to the full audit timeline.'}" in audit_ui, audit_ui
 assert "'Clear action/limit'" in audit_ui, audit_ui
@@ -3099,13 +3099,13 @@ assert "const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } 
 assert "if (action) params.set('action', action);" in audit_ui, audit_ui
 assert "const createAuditQuickNav = (sectionLinks = []) => createDeploymentQuickNav(" in audit_ui, audit_ui
 assert "const normalizeAuditLimit = (value) => {" in audit_ui, audit_ui
-assert "{ value: 'plan.created', label: 'Plan preview created (plan.created)' }," in audit_ui, audit_ui
-assert "{ value: 'apply.requested', label: 'Apply requested (apply.requested)' }," in audit_ui, audit_ui
-assert "{ value: 'apply.transitioned', label: 'Apply lifecycle transitioned (apply.transitioned)' }," in audit_ui, audit_ui
+assert "{ value: 'plan.created', label: 'Plan preview created (plan.created)', displayLabel: 'Plan preview created' }," in audit_ui, audit_ui
+assert "{ value: 'apply.requested', label: 'Apply requested (apply.requested)', displayLabel: 'Apply requested' }," in audit_ui, audit_ui
+assert "{ value: 'apply.transitioned', label: 'Apply lifecycle transitioned (apply.transitioned)', displayLabel: 'Apply lifecycle transitioned' }," in audit_ui, audit_ui
 assert "['Apply transitions', String(transitionCount)]," in audit_ui, audit_ui
 assert "Transition · ${textOrDash(entry.metadata.previousStatus)} → ${textOrDash(entry.metadata.newStatus)}" in audit_ui, audit_ui
 assert "const auditActionLabel = (value) => {" in audit_ui, audit_ui
-assert "labels.push(`action ${auditActionLabel(currentPageState.auditAction)}`);" in audit_ui, audit_ui
+assert "labels.push(`action ${auditActionDisplayLabel(currentPageState.auditAction)}`);" in audit_ui, audit_ui
 assert "const auditLimitSelectOptions = (limit) => {" in audit_ui, audit_ui
 assert "const syncAuditQueryParams = (params, pageState) => {" in audit_ui, audit_ui
 assert "const clearAuditPageFilters = ({ preserveDeployment = false } = {}) => {" in audit_ui, audit_ui
