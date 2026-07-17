@@ -8181,7 +8181,13 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   const trafficShiftPlanInspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing';
   const trafficShiftPlanRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=' + encodeURIComponent(trafficShiftPlanResourceID), (url) => {
     if (url === asgDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(asgDetailBody) });
-    if (url === trafficShiftPlanLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'no_log_source', entries: [] }) });
+    if (url === trafficShiftPlanLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      available: false,
+      source: '',
+      unavailableReason: 'no_log_source',
+      entries: [],
+      relatedLogRoutes: [{ label: 'Open candidate ASG recent logs', route: '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate' }],
+    }) });
     if (url === trafficShiftPlanInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
       available: true,
       source: 'rollout_execution_summary',
@@ -8199,6 +8205,14 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!trafficShiftPlanText.includes('Traffic shift plan')) throw new Error('expected traffic shift plan inspection to render display name');
   if (!trafficShiftPlanText.includes('Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s')) throw new Error('expected traffic shift plan inspection to render summary text');
   if (!trafficShiftPlanText.includes('This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.')) throw new Error('expected traffic shift plan recent logs to explain no-log-source state');
+  if (!trafficShiftPlanText.includes('Related recent-log reads')) throw new Error('expected related recent-log handoff section for no-log-source payload');
+  if (!trafficShiftPlanText.includes('backend-provided read-only handoffs')) throw new Error('expected related recent-log handoff operator guidance');
+  const trafficShiftPlanLinks = collectNodes(trafficShiftPlanRun.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const relatedLogLink = trafficShiftPlanLinks.find((node) => node.textContent === 'Open candidate ASG recent logs');
+  if (!relatedLogLink) throw new Error('expected backend-authored related recent-log link');
+  if (relatedLogLink.href !== '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate') throw new Error('expected related recent-log route to stay backend-authored, got ' + relatedLogLink.href);
+  if (relatedLogLink.target !== '_blank') throw new Error('expected related recent-log handoff to open raw read in a separate tab');
+  if (!String(relatedLogLink.rel || '').includes('noopener')) throw new Error('expected related recent-log handoff to use noopener rel');
 })();
 `
 
