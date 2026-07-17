@@ -1919,6 +1919,7 @@ assert_fragments("ui", ui, (
     "const deploymentDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;",
     "createElement('div', 'account-topology workspace-read-route', `Current workspace read: ${deploymentDetailReadRoute(deploymentName)}.`)",
     "createNavLink(deploymentDetailJSONRoute(deploymentName), 'Workspace JSON')",
+    "createCopyReadRouteButton(deploymentDetailReadRoute(deploymentName), 'Copy workspace read route')",
     "const applicationsClearFiltersLabel = (activeFilters) => {",
     "return `Clear ${count} ${count === 1 ? 'filter' : 'filters'}`;",
     "const clearLabel = applicationsClearFiltersAriaLabel(active);",
