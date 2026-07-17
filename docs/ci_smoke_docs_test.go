@@ -1558,9 +1558,9 @@ func TestOverviewDashboardNearTermRoadmapTracksCurrentOperatorGaps(t *testing.T)
 
 	for _, fragment := range []string{
 		"Already-shipped dashboard surfaces should not be reopened as generic roadmap items",
-		"controller runtime-event timelines, resource-scoped event navigation, account/group runtime-event cues, and local-safe apply/executor metadata are current operator surfaces",
-		"render backend-authored `managedDriftSourceCoverage[]` in the drift workspace",
-		"keep future drift-source coverage wording tied to backend evidence rather than inventing UI-only drift telemetry",
+		"controller runtime-event timelines, resource-scoped event navigation, account/group runtime-event cues, the drift workspace `Drift source coverage` panel, and local-safe apply/executor metadata are current operator surfaces",
+		"keep future drift-source coverage wording tied to new backend-authored `managedDriftSourceCoverage[]` evidence",
+		"including source-specific unavailable or unsupported states, rather than inventing UI-only drift telemetry",
 		"real CodeDeploy, ECS, ALB, ASG, or EC2 mutation execution remains a separate future live-AWS executor lane",
 	} {
 		if !strings.Contains(section, fragment) {
@@ -1573,6 +1573,7 @@ func TestOverviewDashboardNearTermRoadmapTracksCurrentOperatorGaps(t *testing.T)
 		"real AWS mutation execution from reviewed plan/apply operations",
 		"account/group summary sparklines or event cues",
 		"deeper drift diagnostics once the backend exposes richer live drift sources beyond the current derived read model",
+		"render backend-authored `managedDriftSourceCoverage[]` in the drift workspace",
 	} {
 		if strings.Contains(section, stale) {
 			t.Fatalf("expected near-term roadmap not to reopen shipped or superseded work %q", stale)

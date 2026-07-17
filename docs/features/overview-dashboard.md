@@ -526,9 +526,8 @@ When changing the overview UI, preserve all of the following:
 
 ## Near-term next steps
 
-Already-shipped dashboard surfaces should not be reopened as generic roadmap items: controller runtime-event timelines, resource-scoped event navigation, account/group runtime-event cues, and local-safe apply/executor metadata are current operator surfaces. The next small UI/docs slices should point at the remaining concrete seams instead:
-- render backend-authored `managedDriftSourceCoverage[]` in the drift workspace so operators can see which drift sources were checked, unavailable, or fallback-derived before interpreting field-level rows
-- keep future drift-source coverage wording tied to backend evidence rather than inventing UI-only drift telemetry
+Already-shipped dashboard surfaces should not be reopened as generic roadmap items: controller runtime-event timelines, resource-scoped event navigation, account/group runtime-event cues, the drift workspace `Drift source coverage` panel, and local-safe apply/executor metadata are current operator surfaces. The next small UI/docs slices should point at the remaining concrete seams instead:
+- keep future drift-source coverage wording tied to new backend-authored `managedDriftSourceCoverage[]` evidence, including source-specific unavailable or unsupported states, rather than inventing UI-only drift telemetry
 - keep local-safe apply/executor docs explicit that queued, claimed, preflight, execution-preview, heartbeat, and transition records are Tenet control-plane evidence only; real CodeDeploy, ECS, ALB, ASG, or EC2 mutation execution remains a separate future live-AWS executor lane
 - eventual extraction into a dedicated frontend only if the current read-model/UI surface becomes too large for embedded HTML
 
