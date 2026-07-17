@@ -72,7 +72,7 @@ Common response fields:
 - optional `backingResourceName`
 - `lookupContext`
 - `available`
-- `source`
+- `source` (stable API token; the embedded UI translates known values such as `aws_ecs`, `aws_cloudwatch_logs`, and `rollout_execution_summary` into operator-friendly labels)
 - optional `resultScope`
 - `unavailableReason` on unavailable responses
 

@@ -6106,6 +6106,8 @@ async function render(search, inspectionResult, hash = '') {
   const serviceResult = { available: true, source: 'ecs_service', clusterArn, lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, resultScope: { sampleType: 'ecsTasks', requestedLimit: 10, effectiveLimit: 10, returnedItemCount: 1, truncationStatus: 'not_truncated' }, ecsService: { clusterArn, serviceName: 'worker-prod-service', status: 'ACTIVE', deploymentControllerType: 'ECS', deploymentCircuitBreaker: { enabled: true, rollback: true }, deploymentAlarmConfiguration: { enabled: true, rollback: false, alarmNames: ['payments-api-5xx', 'payments-api-latency'] }, desiredCount: 1, runningCount: 1, pendingCount: 0, taskDefinition: 'worker:42', deployments: [], events: [{ createdAt: '2026-04-18T00:12:00Z', message: 'service reached steady state' }], eventsScope: { effectiveLimit: 10, returnedEventCount: 1, truncationStatus: 'not_truncated', truncated: false, newestEventAt: '2026-04-18T00:12:00Z', oldestEventAt: '2026-04-18T00:12:00Z', summary: 'Showing 1 ECS service events retained in this inspection response.' }, tasksScope: { effectiveLimit: 10, returnedTaskCount: 1, truncationStatus: 'not_truncated' }, tasks: [{ taskArn, taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-sample', ec2InstanceId: 'i-0sampleec2host', capacityProviderName: 'worker-capacity', availabilityZone: 'ap-northeast-2c', containers: [{ name: 'worker', lastStatus: 'RUNNING', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' }, networkBindings: [{ bindIp: '10.0.8.21', containerPort: 8080, hostPort: 8080, protocol: 'tcp' }] }] }] } };
   const serviceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn, serviceResult);
   if (!serviceRun.text.includes('Recent ECS tasks')) throw new Error('expected ECS service task list');
+  if (!serviceRun.text.includes('Inspection source | AWS ECS')) throw new Error('expected ECS inspection source to use a friendly label: ' + serviceRun.text);
+  if (serviceRun.text.includes('Inspection source | ecs_service')) throw new Error('expected ECS inspection source not to expose raw token: ' + serviceRun.text);
   ['Sample type | ECS tasks', 'Requested sample cap | 10 items', 'Effective sample cap | 10 items', 'Returned sample items | 1 item', 'Scope status | Below cap; no router truncation'].forEach((fragment) => {
     if (!serviceRun.text.includes(fragment)) throw new Error('expected top-level live inspection result-scope evidence ' + fragment + ': ' + serviceRun.text);
   });
@@ -7113,7 +7115,8 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   const populatedLookupCardText = collectText(populatedLookupCards[0]).join(' | ');
   if (!populatedLookupCardText.includes('Lookup path · ap-northeast-2 · control 123456789012 → target 210987654321 · cross-account lookup · observer role configured')) throw new Error('expected populated lookup-context card summary, got ' + populatedLookupCardText);
   if (!populatedText.includes('Logs source')) throw new Error('expected populated recent logs section to show source');
-  if (!populatedText.includes('cloudwatch')) throw new Error('expected populated recent logs section to show source value');
+  if (!populatedText.includes('CloudWatch Logs')) throw new Error('expected populated recent logs section to show friendly source value');
+  if (populatedText.includes('Logs source | cloudwatch')) throw new Error('expected populated recent logs section to hide raw source token');
   if (!populatedText.includes('Lookup path · ap-northeast-2 · control 123456789012 → target 210987654321 · cross-account lookup · observer role configured')) throw new Error('expected populated recent logs state to summarize the lookup path, got ' + populatedText);
   if (!populatedText.includes('Lookup region')) throw new Error('expected populated recent logs section to label lookup region');
   if (!populatedText.includes('Control account ID')) throw new Error('expected populated recent logs section to label control account');
@@ -7402,7 +7405,8 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!summaryText.includes('Traffic-routing status')) throw new Error('expected traffic-routing inspection to render compact status heading');
   if (!summaryText.includes('Resource · CodeDeploy deployment group')) throw new Error('expected traffic-routing status row to render resource display name');
   if (!summaryText.includes('Inspection mode · Rollout summary only')) throw new Error('expected traffic-routing status row to render readable inspection mode');
-  if (!summaryText.includes('Source · rollout_execution_summary')) throw new Error('expected traffic-routing status row to render inspection source');
+  if (!summaryText.includes('Source · Rollout execution summary')) throw new Error('expected traffic-routing status row to render friendly inspection source');
+  if (summaryText.includes('Source · rollout_execution_summary')) throw new Error('expected traffic-routing status row to hide raw inspection source token');
   if (!summaryText.includes('Rollout summary')) throw new Error('expected traffic-routing inspection to render rollout summary heading');
   if (!summaryText.includes('CodeDeploy deployment group')) throw new Error('expected traffic-routing inspection to render display name');
   if (!summaryText.includes('Rollout summary only')) throw new Error('expected traffic-routing inspection to render summary inspection mode');
@@ -7780,7 +7784,8 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   const emptyText = collectText(emptyRun.document.getElementById('accounts')).join(' | ');
   if (!emptyText.includes('No live inspection details are available for this resource yet.')) throw new Error('expected empty inspection state');
   if (!emptyText.includes('Inspection source')) throw new Error('expected empty inspection state to show inspection source');
-  if (!emptyText.includes('ecs_service')) throw new Error('expected empty inspection state to show inspection source value');
+  if (!emptyText.includes('AWS ECS')) throw new Error('expected empty inspection state to show friendly inspection source value');
+  if (emptyText.includes('Inspection source | ecs_service')) throw new Error('expected empty inspection state to hide raw inspection source token');
 
   const ecsSupportedRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(ecsResourceID), (url) => {
     if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(ecsDetailBody) });
@@ -8201,7 +8206,8 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   const bootstrapRecentLogsText = collectText(bootstrapRecentLogsSection).join(' | ');
   if (!bootstrapSupportedText.includes('Desired bootstrap source')) throw new Error('expected bootstrap-source inspection to render desired source label');
   if (!bootstrapSupportedText.includes('Logs source')) throw new Error('expected bootstrap-source recent logs to render logs source label');
-  if (!bootstrapSupportedText.includes('ec2_console')) throw new Error('expected bootstrap-source recent logs to render logs source value');
+  if (!bootstrapSupportedText.includes('EC2 console logs')) throw new Error('expected bootstrap-source recent logs to render friendly logs source value');
+  if (bootstrapSupportedText.includes('Logs source | ec2_console')) throw new Error('expected bootstrap-source recent logs to hide raw logs source token');
   if (!bootstrapSupportedText.includes('bootstrap start')) throw new Error('expected bootstrap-source recent logs to render first console line');
   if (!bootstrapSupportedText.includes('bootstrap complete')) throw new Error('expected bootstrap-source recent logs to render second console line');
   if (!bootstrapRecentLogsText.includes('Backing resource type')) throw new Error('expected bootstrap-source recent logs to render backing resource type label');
@@ -9271,10 +9277,12 @@ async function renderResource(logPayload, inspectionPayload) {
   if (!emptyText.includes('Troubleshooting summary')) throw new Error('expected resource troubleshooting summary heading');
   if (!emptyText.includes('Derived from selected deployment/resource context plus the latest Live inspection and Recent logs panel results.')) throw new Error('expected derived-summary explanation');
   if (!emptySummaryText.includes('Selected lookup scope | Selected instance · i-0abc123def4567890 · Selected container · app · Selected cluster · arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-prod')) throw new Error('expected selected lookup scope in resource troubleshooting summary: ' + emptySummaryText);
-  if (!emptyText.includes('Recent logs | Empty · no log rows · cloudwatch')) throw new Error('expected successful empty recent-log summary state: ' + emptyText);
+  if (!emptyText.includes('Recent logs | Empty · no log rows · CloudWatch Logs')) throw new Error('expected successful empty recent-log summary state with friendly source label: ' + emptyText);
+  if (emptyText.includes('Recent logs | Empty · no log rows · cloudwatch')) throw new Error('expected successful empty recent-log summary to hide raw source token: ' + emptyText);
   if (!emptyText.match(/Evidence freshness \| Recent logs refreshed .+ · Live inspection refreshed .+/)) throw new Error('expected successful empty evidence reads to surface freshness in summary: ' + emptyText);
   if (emptyText.includes('Recent logs | Empty · no_recent_events')) throw new Error('expected summary to hide raw empty recent-log reason code: ' + emptyText);
-  if (!emptyText.includes('Live inspection | Available · ecs_service')) throw new Error('expected available live-inspection summary state: ' + emptyText);
+  if (!emptyText.includes('Live inspection | Available · AWS ECS')) throw new Error('expected available live-inspection summary state with friendly source label: ' + emptyText);
+  if (emptyText.includes('Live inspection | Available · ecs_service')) throw new Error('expected available live-inspection summary to hide raw source token: ' + emptyText);
   if (!emptyText.includes('Next check | Recent logs returned no rows in the selected window; increase the log cap or refresh after deployment activity before treating logs as absent.')) throw new Error('expected empty-log next-step guidance: ' + emptyText);
 
   const unavailableRun = await renderResource(

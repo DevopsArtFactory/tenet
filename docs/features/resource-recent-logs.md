@@ -61,7 +61,7 @@ Response fields:
   - `crossAccount`
   - `observerRoleConfigured`
 - `available`
-- `source`
+- `source` (stable API token; embedded UI evidence panels translate known values such as `aws_cloudwatch_logs`, `cloudwatch`, `ecs_service`, and `ec2_console` into operator-friendly labels)
 - `entries[]`
   - `entryId` (`rlog_...`, backend-authored stable row identifier for row-level handoffs)
   - `timestamp`
