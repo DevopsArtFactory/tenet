@@ -2872,18 +2872,31 @@
         { value: '25', label: '25 events' },
         { value: '50', label: '50 events' },
       ];
+      const deploymentEventSourceLabel = (source) => {
+        const normalized = String(source || '').trim();
+        if (!normalized) return '';
+        const labels = {
+          controller: 'Controller history',
+          'deployment-controller': 'Deployment controller history',
+          'github-webhook': 'GitHub webhook refresh',
+          github: 'GitHub refresh',
+          managed_drift: 'Managed drift',
+          unknown: 'Unknown source',
+        };
+        return labels[normalized] || `Source ${normalized}`;
+      };
       const deploymentEventsSourceOptions = [
         { value: '', label: 'All sources' },
-        { value: 'controller', label: 'controller' },
-        { value: 'deployment-controller', label: 'deployment-controller' },
-        { value: 'github', label: 'github' },
+        { value: 'controller', label: deploymentEventSourceLabel('controller') },
+        { value: 'deployment-controller', label: deploymentEventSourceLabel('deployment-controller') },
+        { value: 'github', label: deploymentEventSourceLabel('github') },
       ];
       const deploymentEventsSourceSelectOptions = (source = currentPageState.eventSource) => {
         const normalizedSource = normalizeDeploymentEventsSource(source);
         if (!normalizedSource || deploymentEventsSourceOptions.some((option) => option.value === normalizedSource)) {
           return deploymentEventsSourceOptions;
         }
-        return [...deploymentEventsSourceOptions, { value: normalizedSource, label: normalizedSource }];
+        return [...deploymentEventsSourceOptions, { value: normalizedSource, label: deploymentEventSourceLabel(normalizedSource) }];
       };
       const auditLimitPresets = [1, 2, 5, 10, 20, 50];
       const auditLimitSelectOptions = (limit) => {
@@ -4365,17 +4378,7 @@
       );
       const relatedRuntimeEventsForResource = (result, resource) => sortTimelineEvents(result?.events || [])
         .filter((event) => runtimeEventMatchesApplicationResource(event, resource));
-      const relatedRuntimeEventSourceLabel = (source) => {
-        const normalized = String(source || '').trim();
-        if (!normalized) return '';
-        const labels = {
-          controller: 'Controller history',
-          github: 'GitHub refresh',
-          managed_drift: 'Managed drift',
-          unknown: 'Unknown source',
-        };
-        return labels[normalized] || `Source ${normalized}`;
-      };
+      const relatedRuntimeEventSourceLabel = (source) => deploymentEventSourceLabel(source);
       const relatedRuntimeEventSourceCue = (event) => relatedRuntimeEventSourceLabel(event?.source);
       const relatedRuntimeEventNewestCue = (event) => {
         const summary = String(event?.summary || '').trim();
@@ -7782,7 +7785,7 @@
         const chips = createElement('div', 'pills deployment-events-source-summary');
         chips.setAttribute('aria-label', 'Runtime event source summary');
         entries.forEach(({ source, count }) => {
-          chips.append(createElement('span', 'pill target deployment-events-source-chip', `Source mix · ${source} · ${deploymentEventsCountText(count)}`));
+          chips.append(createElement('span', 'pill target deployment-events-source-chip', `Source mix · ${deploymentEventSourceLabel(source)} · ${deploymentEventsCountText(count)}`));
         });
         return chips;
       };
@@ -7834,7 +7837,7 @@
         const fields = [
         ];
         if (scope) {
-          if (scope.sourceFilter) fields.push(['Source filter', scope.sourceFilter]);
+          if (scope.sourceFilter) fields.push(['Source filter', deploymentEventSourceLabel(scope.sourceFilter)]);
           fields.push(
             ['Requested window', scope.requestedLimit == null ? 'All available events' : deploymentEventsScopeLimitText(scope.requestedLimit)],
             ['Effective window', deploymentEventsScopeLimitText(scope.effectiveLimit)],
@@ -8270,7 +8273,7 @@
             eventMeta.append(createElement('span', 'detail-condition-meta', `Event details · ${changeDetailsText(event.changeDetails)}`));
           }
           if (event.source) {
-            eventMeta.append(createElement('span', 'detail-condition-meta', `Source · ${event.source}`));
+            eventMeta.append(createElement('span', 'detail-condition-meta', `Source · ${deploymentEventSourceLabel(event.source)}`));
           }
           const controllerRefreshCue = createControllerRefreshCue(event);
           if (controllerRefreshCue) {

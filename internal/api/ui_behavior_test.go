@@ -3246,6 +3246,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const backendEventShare = accountLinks.find((node) => node.href.includes('page=application') && node.href.includes('deployment=payments-api-staging') && node.href.endsWith('#runtime-event-evt-backend-744') && node.textContent === 'Share event' && node.target === '_self');
   if (!backendEventShare || backendEventShare.rel) throw new Error('expected runtime event share link to prefer backend eventId anchors, got ' + accountLinks.filter((node) => node.textContent === 'Share event').map((node) => node.href).join(', '));
   if (!accountsText.includes('requested 2026-05-04T12:29:50Z · received 2026-05-04T12:29:51Z · reconciled 2026-05-04T12:30:00Z')) throw new Error('expected application route GitHub refresh timing evidence');
+  if (!accountsText.includes('Source · Controller history')) throw new Error('expected ordinary runtime event source to use operator-readable source label');
+  if (!accountsText.includes('Source · GitHub webhook refresh')) throw new Error('expected webhook runtime event source to use operator-readable source label');
+  if (accountsText.includes('Source · controller') || accountsText.includes('Source · github-webhook')) throw new Error('expected application route to hide raw runtime event source identifiers from row metadata');
   if (!accountsText.includes('Ticker reconcile complete')) throw new Error('expected application route non-webhook runtime event to remain visible');
   if (accountsText.includes('repo —') || accountsText.includes('delivery —') || accountsText.includes('GitHub refresh evidence · Source · controller')) throw new Error('expected application route to avoid GitHub placeholders on ordinary runtime events');
   if (!accountsText.includes('payments-api-staging-service')) throw new Error('expected application route synthesized workload resource');
@@ -4868,7 +4871,7 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   if (!readyText.includes('2 events in latest 10-event window · newest controller event first')) throw new Error('expected event ordering guidance');
   if (!readyText.includes('Last refreshed ·')) throw new Error('expected successful runtime-events read to render a freshness cue');
   if (!readyText.includes('Requested window · 10 events') || !readyText.includes('Effective window · 10 events') || !readyText.includes('Returned events · 2 events') || !readyText.includes('Total retained events · 10 events') || !readyText.includes('Retention limit · 10 events') || !readyText.includes('Retention retained · 10 retained events') || !readyText.includes('Retention status · Controller retention cap reached; older runtime history may have been dropped') || !readyText.includes('Newest event · 2026-04-16T07:10:00Z') || !readyText.includes('Oldest event · 2026-04-16T07:05:00Z') || !readyText.includes('Window status · Query-limited response; increase Event window to inspect older returned history')) throw new Error('expected runtime-events resultScope and retention summary from bounded deployment events payload');
-  if (!readyText.includes('Source mix · controller · 7 events') || !readyText.includes('Source mix · github · 3 events')) throw new Error('expected runtime-events sourceSummary chips for unfiltered payload');
+  if (!readyText.includes('Source mix · Controller history · 7 events') || !readyText.includes('Source mix · GitHub refresh · 3 events')) throw new Error('expected runtime-events sourceSummary chips for unfiltered payload to use operator-readable source labels');
   let sourceSummaryChips = collectNodes(loadingView.document.getElementById('accounts'), (node) => String(node.className || '').includes('deployment-events-source-chip'));
   if (sourceSummaryChips.length !== 2) throw new Error('expected two sourceSummary chips for unfiltered payload, got ' + sourceSummaryChips.length);
   if (!readyText.includes('Managed drift summary · 2 total · 1 high · 1 medium · 0 low')) throw new Error('expected managed drift severity summary from deployment events payload');
@@ -4882,7 +4885,7 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   if (!readyText.includes('Artifact · ghcr.io/example/payments:v2')) throw new Error('expected deployed artifact context');
   if (!readyText.includes('Conditions · Progressing = True · TrafficShiftLinear')) throw new Error('expected conditions context');
   if (!readyText.includes('Event details · Current step changed from CreateCodeDeployDeployment to ShiftTrafficLinear')) throw new Error('expected event change details');
-  if (!readyText.includes('Source · controller')) throw new Error('expected controller source metadata');
+  if (!readyText.includes('Source · Controller history')) throw new Error('expected controller source metadata to use operator-readable label');
   if (readyText.indexOf('Shifted 50 percent of traffic') > readyText.indexOf('Created deployment group revision for v2')) throw new Error('expected newest event to render before older event');
   buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
@@ -4985,8 +4988,8 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   const selectedSourceCopyButton = collectNodes(selectedSourceView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Copy runtime events route');
   if (!selectedSourceCopyButton) throw new Error('expected source-filtered runtime-events copy-route button');
   if (selectedSourceCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/payments-api-staging/events?limit=25&source=controller') throw new Error('expected source-filtered copy-route button to preserve selected limit/source, got ' + selectedSourceCopyButton.getAttribute('aria-label'));
-  if (!selectedSourceText.includes('Source filter · controller')) throw new Error('expected runtime-events scope summary to show the selected source filter');
-  if (!selectedSourceText.includes('Source mix · controller · 7 events') || !selectedSourceText.includes('Source mix · github · 3 events')) throw new Error('expected source-filtered runtime-events payload to keep retained sourceSummary chips');
+  if (!selectedSourceText.includes('Source filter · Controller history')) throw new Error('expected runtime-events scope summary to show the selected source filter with operator-readable label');
+  if (!selectedSourceText.includes('Source mix · Controller history · 7 events') || !selectedSourceText.includes('Source mix · GitHub refresh · 3 events')) throw new Error('expected source-filtered runtime-events payload to keep retained sourceSummary chips with operator-readable labels');
   const eventSourceSelect = collectNodes(selectedSourceView.document.getElementById('accounts'), (node) => node.tagName === 'SELECT').find((node) => node.dataset.toolbarField === 'Event source');
   if (!eventSourceSelect) throw new Error('expected Event source selector on application runtime-events section');
   if (eventSourceSelect.disabled) throw new Error('expected Event source selector enabled after runtime-events load');
@@ -5031,8 +5034,8 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   if (!filteredEmptyText.includes('No controller runtime events match source filter "controller" in the latest 10-event window. Clear Event source or refresh before treating controller history as absent.')) throw new Error('expected source-filtered empty runtime-events guidance, got ' + filteredEmptyText);
   assertStatusRegion(deploymentEventsStateNode(filteredEmptyView.document, 'No controller runtime events match source filter "controller"'), 'runtime-events source-filtered empty state');
   if (filteredEmptyText.includes('No controller runtime events are retained for this application yet.')) throw new Error('expected source-filtered empty copy to differ from no retained controller history');
-  if (!filteredEmptyText.includes('Source filter · controller')) throw new Error('expected filtered-empty scope summary to keep selected source filter metadata');
-  if (!filteredEmptyText.includes('Source mix · deployment-controller · 6 events') || !filteredEmptyText.includes('Source mix · github · 4 events')) throw new Error('expected source-filtered empty payload to keep retained sourceSummary chips');
+  if (!filteredEmptyText.includes('Source filter · Controller history')) throw new Error('expected filtered-empty scope summary to keep selected source filter metadata with operator-readable label');
+  if (!filteredEmptyText.includes('Source mix · Deployment controller history · 6 events') || !filteredEmptyText.includes('Source mix · GitHub refresh · 4 events')) throw new Error('expected source-filtered empty payload to keep retained sourceSummary chips with operator-readable labels');
   sourceSummaryChips = collectNodes(filteredEmptyView.document.getElementById('accounts'), (node) => String(node.className || '').includes('deployment-events-source-chip'));
   if (sourceSummaryChips.length !== 2) throw new Error('expected two sourceSummary chips for source-filtered empty payload, got ' + sourceSummaryChips.length);
 
