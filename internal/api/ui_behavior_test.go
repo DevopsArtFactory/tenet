@@ -2277,9 +2277,13 @@ async function render(search, fetchImpl, clipboardImpl) {
   const resourceBodyText = collectText(resourceView.document.getElementById('accounts')).join(' | ');
   const resourceToolbarText = collectText(resourceView.document.getElementById('toolbar')).join(' | ');
   if (!resourceBodyText.includes('Current resource read: GET /v1/overview/deployments/payments-api-staging')) throw new Error('expected resource detail body to show the top-level read route');
+  if (!resourceBodyText.includes('Linked-resource source: Fallback rollout inventory')) throw new Error('expected resource detail body to preserve fallback linked-resource source cue, got ' + resourceBodyText);
   if (resourceToolbarText.includes('Current resource read: GET /v1/overview/deployments/payments-api-staging')) throw new Error('expected current resource read route outside toolbar');
+  if (resourceToolbarText.includes('Linked-resource source: Fallback rollout inventory')) throw new Error('expected linked-resource source cue outside toolbar');
   const resourceReadRouteCue = collectNodes(resourceView.document.getElementById('accounts'), (node) => String(node.className || '').split(/\s+/).includes('resource-read-route')).find((node) => node.textContent === 'Current resource read: GET /v1/overview/deployments/payments-api-staging. Loaded before focused Recent logs and Live inspection reads.');
   if (!resourceReadRouteCue) throw new Error('expected resource detail body read-route cue node');
+  const resourceLinkedSourceCue = collectNodes(resourceView.document.getElementById('accounts'), (node) => String(node.className || '').split(/\s+/).includes('resource-linked-source-cue')).find((node) => node.textContent.includes('Linked-resource source: Fallback rollout inventory'));
+  if (!resourceLinkedSourceCue) throw new Error('expected resource detail body linked-source cue node');
 })();
 `
 
@@ -5535,6 +5539,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const text = collectText(callout).join(' | ');
   if (!text.includes('Selected resource context')) throw new Error('expected selected-resource callout: ' + text);
   if (!text.includes('Current resource read: GET /v1/overview/deployments/payments-api-prod.')) throw new Error('expected selected-resource callout to keep top-level resource read: ' + text);
+  if (!text.includes('Linked-resource source: Controller-authored rollout execution')) throw new Error('expected selected-resource callout to explain controller-authored linked-resource source: ' + text);
   if (!text.includes('No focused evidence handoffs are available for this resource type yet. Use the current resource read above for this selection.')) throw new Error('expected unsupported resource copy to avoid unavailable panels: ' + text);
   for (const forbidden of [
     'Use the Live inspection and Recent logs handoffs below',
@@ -8741,6 +8746,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const readCue = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('resource-current-read-cue'))[0];
   if (!readCue) throw new Error('expected current resource read cue before lazy panels resolve');
   if (readCue.textContent !== 'Current resource read: GET /v1/overview/deployments/payments-api-staging. Loaded before focused Recent logs and Live inspection reads.') throw new Error('expected current resource read cue to show deployment-detail route before lazy panels resolve');
+  const linkedSourceCue = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('resource-linked-source-cue'))[0];
+  if (!linkedSourceCue) throw new Error('expected linked-resource source cue before lazy panels resolve');
+  if (!linkedSourceCue.textContent.includes('Linked-resource source: Controller-authored rollout execution')) throw new Error('expected linked-resource source cue to preserve selected resource provenance before lazy panels resolve');
   if (!text.includes('Loading recent logs…')) throw new Error('expected initial loading state for recent logs');
   if (!text.includes('Loading live inspection…')) throw new Error('expected initial loading state for live inspection');
   const initialStatusNodes = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('detail-state'));

@@ -2832,6 +2832,8 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "const createCurrentResourceReadCue = (deploymentName) =>" in body, body
     assert 'Selected resource context' in body, body
     assert "workspace-callout-factors resource-read-route resource-current-read-cue" in body, body
+    assert "workspace-callout-factors resource-linked-source-cue" in body, body
+    assert "Linked-resource source: ${resource?.linkedResourceSource || applicationLinkedResourceSourceText(detail)}" in body, body
     assert "Current resource read: ${resourceDetailReadRoute(deploymentName)}. Loaded before focused Recent logs and Live inspection reads." in body, body
     assert "const selectedResourceEvidenceCalloutText = (supportsInspection, supportsLogs, routeBits) => {" in body, body
     assert 'Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection.' in body, body
