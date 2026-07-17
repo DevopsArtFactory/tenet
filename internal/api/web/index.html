@@ -4365,10 +4365,18 @@
       );
       const relatedRuntimeEventsForResource = (result, resource) => sortTimelineEvents(result?.events || [])
         .filter((event) => runtimeEventMatchesApplicationResource(event, resource));
-      const relatedRuntimeEventSourceCue = (event) => {
-        const source = String(event?.source || '').trim();
-        return source ? `Source ${source}` : '';
+      const relatedRuntimeEventSourceLabel = (source) => {
+        const normalized = String(source || '').trim();
+        if (!normalized) return '';
+        const labels = {
+          controller: 'Controller history',
+          github: 'GitHub refresh',
+          managed_drift: 'Managed drift',
+          unknown: 'Unknown source',
+        };
+        return labels[normalized] || `Source ${normalized}`;
       };
+      const relatedRuntimeEventSourceCue = (event) => relatedRuntimeEventSourceLabel(event?.source);
       const relatedRuntimeEventNewestCue = (event) => {
         const summary = String(event?.summary || '').trim();
         const source = relatedRuntimeEventSourceCue(event);
@@ -4385,7 +4393,7 @@
           const source = String(item?.source || '').trim();
           const count = Number(item?.count || 0);
           if (!source || !Number.isFinite(count) || count <= 0) return '';
-          return count === 1 ? `Source ${source}` : `Source ${source} × ${count}`;
+          return count === 1 ? relatedRuntimeEventSourceLabel(source) : `${relatedRuntimeEventSourceLabel(source)} × ${count}`;
         })
         .filter(Boolean)
         .join(' · ');
