@@ -1412,6 +1412,8 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 		"with visible/total impact, a compact `Linked resource inventory` summary with per-group counts, and section-specific empty guidance alongside the inline",
 		"`Clear resource filter`. Their linked-resource summary also includes `Linked-resource source`, distinguishing controller-authored `rollout.execution[]` rows from canonical fallback rollout inventory when that array is missing or empty, plus compact resource-row `Evidence cues`:",
 		"`Live evidence available` / `Recent logs supported` / `Related runtime events supported` `_self` handoffs to the final",
+		"Application resource rows seed those related-event cues from the already-loaded `resourceRelatedEvents[]` detail summary first",
+		"using operator-readable source labels such as `Controller history` while preserving custom source values",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README to include application-detail resource-filter summary %q", fragment)
