@@ -2094,7 +2094,7 @@ for fragment in (
     "Traffic-routing status",
     "['Resource', trafficRoutingDisplayName(trafficRouting)]",
     "['Inspection mode', trafficRoutingInspectionModeText(trafficRouting?.inspectionMode)]",
-    "['Source', metricValue(result?.source)]",
+    "['Source', evidenceSourceLabel(result?.source)]",
     "['Summary', textOrDash(trafficRouting?.summary)]",
     "Target health · ${cue.label}",
     "At least one target is unhealthy. Inspect registered target health, deployment events, and service logs before shifting more traffic.",

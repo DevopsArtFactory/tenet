@@ -2436,7 +2436,7 @@ assert 'Bounded live deployment-group evidence for the CodeDeploy traffic-routin
 assert 'Traffic-routing status' in ui, ui
 assert "['Resource', trafficRoutingDisplayName(trafficRouting)]" in ui, ui
 assert "['Inspection mode', trafficRoutingInspectionModeText(trafficRouting?.inspectionMode)]" in ui, ui
-assert "['Source', metricValue(result?.source)]" in ui, ui
+assert "['Source', evidenceSourceLabel(result?.source)]" in ui, ui
 assert "['Summary', textOrDash(trafficRouting?.summary)]" in ui, ui
 assert 'Target health · ${cue.label}' in ui, ui
 assert 'At least one target is unhealthy. Inspect registered target health, deployment events, and service logs before shifting more traffic.' in ui, ui

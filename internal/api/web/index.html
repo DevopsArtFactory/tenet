@@ -643,6 +643,43 @@
         return steps.length ? steps.join(' → ') : '—';
       };
       const metricValue = (value) => value ?? '—';
+      const evidenceSourceLabel = (source) => {
+        const token = typeof source === 'string' ? source.trim() : '';
+        if (!token) return '—';
+        const normalized = token.toLowerCase();
+        switch (normalized) {
+          case 'rollout_execution_summary':
+            return 'Rollout execution summary';
+          case 'aws_cloudwatch_logs':
+          case 'cloudwatch_logs':
+          case 'cloudwatch':
+            return 'CloudWatch Logs';
+          case 'aws_ecs':
+          case 'ecs_service':
+          case 'ecs_task':
+          case 'ecs':
+            return 'AWS ECS';
+          case 'aws_autoscaling':
+          case 'auto_scaling_group':
+          case 'autoscaling':
+          case 'asg':
+            return 'AWS Auto Scaling';
+          case 'ec2_console':
+            return 'EC2 console logs';
+          case 'traffic_routing_aws':
+            return 'AWS traffic routing';
+          case 'live':
+            return 'Live provider lookup';
+          case 'last_attempted':
+            return 'Last attempted';
+          default:
+            return token
+              .replace(/[_-]+/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .replace(/\b\w/g, (char) => char.toUpperCase()) || token;
+        }
+      };
       const generationValue = (value) => Number.isFinite(value) && value > 0 ? String(value) : '—';
       const generationsText = (value) => {
         const desired = generationValue(value?.desiredGeneration);
@@ -4220,7 +4257,7 @@
         }
       };
       const resourceTroubleshootingLogsLabel = (result) => {
-        const source = metricValue(result?.source);
+        const source = evidenceSourceLabel(result?.source);
         if (!result?.available) {
           return `Unavailable · ${resourceTroubleshootingReasonLabel(result?.unavailableReason, 'provider unavailable')}`;
         }
@@ -4231,7 +4268,7 @@
         return `Available · ${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}${source !== '—' ? ` · ${source}` : ''}`;
       };
       const resourceTroubleshootingInspectionLabel = (result) => {
-        const source = metricValue(result?.source);
+        const source = evidenceSourceLabel(result?.source);
         if (!result?.available) {
           return `Unavailable · ${resourceTroubleshootingReasonLabel(result?.unavailableReason, 'provider unavailable')}`;
         }
@@ -5992,7 +6029,7 @@
         const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [
           ...resourceLogsRequestIDFields(result),
           ...requestRouteFields,
-          ['Logs source', metricValue(result.source)],
+          ['Logs source', evidenceSourceLabel(result.source)],
           ...scopeFields,
           ...backingResourceFields,
         ]);
@@ -6517,7 +6554,7 @@
         }
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ...resourceInspectionRequestIDFields(result),
-          ['Inspection source', metricValue(result?.source)],
+          ['Inspection source', evidenceSourceLabel(result?.source)],
           ...resourceInspectionResultScopeFields(result?.resultScope),
           ['Service name', textOrDash(service?.serviceName)],
           ['Service status', textOrDash(service?.status)],
@@ -6763,7 +6800,7 @@
         ].filter(Boolean);
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ...resourceInspectionRequestIDFields(result),
-          ['Inspection source', metricValue(result?.source)],
+          ['Inspection source', evidenceSourceLabel(result?.source)],
           ...resourceInspectionResultScopeFields(result?.resultScope),
           ['Auto Scaling Group name', textOrDash(group?.autoScalingGroupName)],
           ['Desired capacity', countText(group?.desiredCapacity)],
@@ -6900,7 +6937,7 @@
         const actions = createResourceInspectionActions(section, detail, resource);
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ...resourceInspectionRequestIDFields(result),
-          ['Inspection source', metricValue(result?.source)],
+          ['Inspection source', evidenceSourceLabel(result?.source)],
           ...resourceInspectionResultScopeFields(result?.resultScope),
           ['Desired bootstrap source', textOrDash(inspectionDetail?.desiredBootstrapSource)],
           ['Observed bootstrap source', textOrDash(inspectionDetail?.observedBootstrapSource)],
@@ -7081,7 +7118,7 @@
         const statusRows = [
           ['Resource', trafficRoutingDisplayName(trafficRouting)],
           ['Inspection mode', trafficRoutingInspectionModeText(trafficRouting?.inspectionMode)],
-          ['Source', metricValue(result?.source)],
+          ['Source', evidenceSourceLabel(result?.source)],
           ['Summary', textOrDash(trafficRouting?.summary)],
         ];
         const targetGroup = trafficRoutingTargetGroupDetail(trafficRouting);
@@ -7291,7 +7328,7 @@
         const actions = createResourceInspectionActions(section, deploymentName, resource);
         const taskFields = [
           ...resourceInspectionRequestIDFields(result),
-          ['Inspection source', metricValue(result?.source)],
+          ['Inspection source', evidenceSourceLabel(result?.source)],
           ...resourceInspectionResultScopeFields(result?.resultScope),
           ['Task ID', textOrDash(task?.taskId)],
           ['Task ARN', textOrDash(task?.taskArn)],
@@ -7389,7 +7426,7 @@
         const actions = createResourceInspectionActions(section, detail, resource);
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ...resourceInspectionRequestIDFields(result),
-          ['Inspection source', metricValue(result?.source)],
+          ['Inspection source', evidenceSourceLabel(result?.source)],
           ...resourceInspectionResultScopeFields(result?.resultScope),
           ['Resource kind', textOrDash(trafficRouting?.kind)],
           ['Display name', textOrDash(trafficRouting?.displayName)],
@@ -7424,7 +7461,7 @@
         const inspectionFields = [
           ...resourceInspectionRequestIDFields(result),
           ...requestRouteFields,
-          ['Inspection source', metricValue(result?.source)],
+          ['Inspection source', evidenceSourceLabel(result?.source)],
           ...resourceInspectionResultScopeFields(result?.resultScope),
         ];
         if (result?.instanceId) {
@@ -8122,7 +8159,7 @@
             (row?.source?.resourceType === resource?.type && row?.source?.resourceName === resource?.name)
           ));
           if (matchingRows.length) eventMeta.append(createElement('span', 'detail-condition-meta', `Resource drift references · ${matchingRows.length}`));
-          if (event.source) eventMeta.append(createElement('span', 'detail-condition-meta', `Source · ${event.source}`));
+          if (event.source) eventMeta.append(createElement('span', 'detail-condition-meta', `Source · ${evidenceSourceLabel(event.source)}`));
           item.append(eventMeta);
           eventList.append(item);
         });
