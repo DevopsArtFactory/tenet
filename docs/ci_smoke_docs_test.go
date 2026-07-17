@@ -598,6 +598,9 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 func TestOperatorTroubleshootingCallsOutRelatedRuntimeEvents(t *testing.T) {
 	runbookText := readTextFile(t, "runbooks/operator-troubleshooting.md")
 	contractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
+	readmeText := readTextFile(t, "../README.md")
+	overviewGuideText := readTextFile(t, "features/overview-dashboard.md")
+	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
 	for _, fragment := range []string{
 		"| Related runtime events | `#resource-related-runtime-events` | `GET /v1/overview/deployments/{deploymentName}/events?resourceType={type}&resourceName={name}&limit={n}[&source={source}]` |",
 		"the selected `Related event source`, and the selected event window",
@@ -620,6 +623,33 @@ func TestOperatorTroubleshootingCallsOutRelatedRuntimeEvents(t *testing.T) {
 	} {
 		if !strings.Contains(contractsText, fragment) {
 			t.Fatalf("expected operator contracts to include resource-events fragment %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"application detail lists the linked resource, resource detail narrows retained controller history to that resource",
+		"empty related-event results mean no retained matching rollout/drift/resource evidence in the selected source/window rather than missing Recent logs, Live inspection, or immutable audit data",
+	} {
+		if !strings.Contains(overviewGuideText, fragment) {
+			t.Fatalf("expected overview dashboard guide to include resource-events journey fragment %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"The resource page reuses the same backend contract for the `Related runtime events` panel after the application detail has already listed the selected resource",
+		"empty states mean no retained matching controller-history evidence for that resource/source/window rather than missing Recent logs, Live inspection, or audit rows",
+	} {
+		if !strings.Contains(overviewUIText, fragment) {
+			t.Fatalf("expected overview UI architecture doc to include resource-events journey fragment %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"Resource drill-down Related runtime events, Recent logs, and Live inspection panels summarize controller history, lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract.",
+		"distinguishes empty retained history from source-filtered no-match states and route failures",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README to include resource-events journey fragment %q", fragment)
 		}
 	}
 }
