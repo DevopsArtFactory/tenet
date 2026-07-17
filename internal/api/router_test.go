@@ -2386,6 +2386,15 @@ func TestRouterOverviewDetailManagedDriftSummaryJSON(t *testing.T) {
 							{Field: "runtimeContext.capacity.desired", Severity: domain.ManagedDriftSeverityLow},
 						},
 						ManagedDriftSummary: catalog.ManagedDriftSummary{Total: 3, High: 1, Medium: 1, Low: 1},
+						ResourceRelatedEvents: []catalog.ResourceRelatedEventSummary{{
+							ResourceType:         "ecsService",
+							ResourceName:         "payments-api-prod-service",
+							ResourceDescription:  "ECS service receiving rollout traffic",
+							RetainedEventCount:   2,
+							NewestEventTimestamp: "2026-04-16T06:25:00Z",
+							SourceSummary:        []catalog.RuntimeEventSourceSummary{{Source: "controller", Count: 2}},
+							ManagedDriftSummary:  catalog.ManagedDriftSummary{Total: 1, High: 1},
+						}},
 					}, nil
 				},
 				OverviewApplication: func(_ context.Context, name string) (catalog.ApplicationOverviewDetail, error) {
@@ -2400,6 +2409,15 @@ func TestRouterOverviewDetailManagedDriftSummaryJSON(t *testing.T) {
 							{Field: "runtimeContext.capacity.desired", Severity: domain.ManagedDriftSeverityLow},
 						},
 						ManagedDriftSummary: catalog.ManagedDriftSummary{Total: 3, High: 1, Medium: 1, Low: 1},
+						ResourceRelatedEvents: []catalog.ResourceRelatedEventSummary{{
+							ResourceType:         "ecsService",
+							ResourceName:         "payments-api-prod-service",
+							ResourceDescription:  "ECS service receiving rollout traffic",
+							RetainedEventCount:   2,
+							NewestEventTimestamp: "2026-04-16T06:25:00Z",
+							SourceSummary:        []catalog.RuntimeEventSourceSummary{{Source: "controller", Count: 2}},
+							ManagedDriftSummary:  catalog.ManagedDriftSummary{Total: 1, High: 1},
+						}},
 					}, nil
 				},
 			})
@@ -2425,6 +2443,17 @@ func TestRouterOverviewDetailManagedDriftSummaryJSON(t *testing.T) {
 			items, ok := payload["managedDrift"].([]any)
 			if !ok || len(items) != 3 {
 				t.Fatalf("expected managedDrift rows to be preserved, got %#v", payload["managedDrift"])
+			}
+			related, ok := payload["resourceRelatedEvents"].([]any)
+			if !ok || len(related) != 1 {
+				t.Fatalf("expected resourceRelatedEvents rows to be preserved, got %#v", payload["resourceRelatedEvents"])
+			}
+			resourceSummary, ok := related[0].(map[string]any)
+			if !ok || resourceSummary["resourceType"] != "ecsService" || resourceSummary["resourceName"] != "payments-api-prod-service" || resourceSummary["resourceDescription"] != "ECS service receiving rollout traffic" || resourceSummary["retainedEventCount"] != float64(2) || resourceSummary["newestEventTimestamp"] != "2026-04-16T06:25:00Z" {
+				t.Fatalf("expected resource related-event JSON fields, got %#v", resourceSummary)
+			}
+			if _, exists := payload["ResourceRelatedEvents"]; exists {
+				t.Fatalf("unexpected Go-style resource related events field in %#v", payload)
 			}
 		})
 	}
