@@ -2213,7 +2213,11 @@ for fragment in (
     "Severity",
     "No controller-authored field-level drift was reported for this deployment.",
     "No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.",
-    "emptyActions.append(createRefreshButton('Clear drift filters', false, clearDriftFilters));",
+    "const describeClearDriftFiltersAction = (activeFilters) => {",
+    "description: `Clear active drift filters: ${activeFilters.join(', ')}`",
+    "applyClearDriftFiltersCopy(clearDriftFiltersButton, activeDriftFilters);",
+    "const emptyClearButton = createRefreshButton('Clear drift filters', false, clearDriftFilters);",
+    "applyClearDriftFiltersCopy(emptyClearButton, activeDriftFilters);",
     "driftTableWrap.replaceChildren(stateNode, emptyActions);",
 ):
     assert fragment in drift_ui, fragment
