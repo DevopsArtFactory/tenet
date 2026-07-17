@@ -4065,6 +4065,56 @@ func TestDeploymentOverviewEventsRouteFiltersByResourceBeforeApplyingLimit(t *te
 	}
 }
 
+func TestDeploymentOverviewEventsRouteFiltersByGenericResourceRefs(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			return catalog.DeploymentOverviewEvents{
+				DeploymentName: name,
+				Events: []domain.StatusHistoryEntry{
+					{Timestamp: "2026-05-06T04:00:00Z", Source: "controller", Summary: "rollout execution progressed", ResourceRefs: []domain.RuntimeEventResourceRef{{ResourceType: "trafficShiftPlan", ResourceName: "payments-api-shift", Source: "rollout_execution", Context: "Weighted routing plan Tenet follows"}}},
+					{Timestamp: "2026-05-06T03:00:00Z", Source: "controller", Summary: "managed drift on a different resource", ManagedDrift: []domain.ManagedDriftItem{{Field: "artifact", Severity: domain.ManagedDriftSeverityHigh, ResourceRef: &domain.ManagedDriftResourceRef{ResourceType: "ecsService", ResourceName: "payments-api"}}}},
+				},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events?resourceType=trafficShiftPlan&resourceName=payments-api-shift", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode deployment events payload: %v", err)
+	}
+	events, ok := payload["events"].([]any)
+	if !ok || len(events) != 1 {
+		t.Fatalf("expected one generic resourceRef-filtered event, got %#v", payload["events"])
+	}
+	event, ok := events[0].(map[string]any)
+	if !ok || event["summary"] != "rollout execution progressed" {
+		t.Fatalf("expected non-drift generic resourceRef event, got %#v", events[0])
+	}
+	refs, ok := event["resourceRefs"].([]any)
+	if !ok || len(refs) != 1 {
+		t.Fatalf("expected resourceRefs array in returned event, got %#v", event["resourceRefs"])
+	}
+	ref, ok := refs[0].(map[string]any)
+	if !ok || ref["resourceType"] != "trafficShiftPlan" || ref["resourceName"] != "payments-api-shift" || ref["source"] != "rollout_execution" || ref["context"] != "Weighted routing plan Tenet follows" {
+		t.Fatalf("expected generic resourceRef fields, got %#v", refs[0])
+	}
+	if _, ok := event["managedDrift"]; ok {
+		t.Fatalf("expected non-drift event to remain free of managedDrift evidence, got %#v", event["managedDrift"])
+	}
+	summary, ok := payload["managedDriftSummary"].(map[string]any)
+	if !ok || summary["total"] != float64(0) || summary["high"] != float64(0) {
+		t.Fatalf("expected zero managedDriftSummary for generic non-drift event, got %#v", payload["managedDriftSummary"])
+	}
+}
+
 func TestDeploymentOverviewEventsRouteReturnsEmptyResourceFilterWindow(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},

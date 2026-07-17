@@ -221,6 +221,17 @@ type ControllerRefreshEvidence struct {
 	ReconciledAt string `json:"reconciledAt,omitempty"`
 }
 
+// RuntimeEventResourceRef identifies a concrete rollout or runtime resource a
+// controller-authored history event is associated with. It is intentionally
+// generic so non-drift rollout events can power resource-scoped event reads
+// without pretending the event came from live drift evidence.
+type RuntimeEventResourceRef struct {
+	ResourceType string `json:"resourceType"`
+	ResourceName string `json:"resourceName"`
+	Source       string `json:"source,omitempty"`
+	Context      string `json:"context,omitempty"`
+}
+
 // StatusHistoryEntry captures one operator-facing runtime history event.
 type StatusHistoryEntry struct {
 	EventID            string                     `json:"eventId,omitempty"`
@@ -231,6 +242,7 @@ type StatusHistoryEntry struct {
 	ChangeDetails      []string                   `json:"changeDetails,omitempty"`
 	ControllerRefresh  *ControllerRefreshEvidence `json:"controllerRefresh,omitempty"`
 	ManagedDrift       []ManagedDriftItem         `json:"managedDrift,omitempty"`
+	ResourceRefs       []RuntimeEventResourceRef  `json:"resourceRefs,omitempty"`
 	DeployedArtifact   DeploymentArtifact         `json:"deployedArtifact,omitempty"`
 	Conditions         []Condition                `json:"conditions,omitempty"`
 	Sync               Sync                       `json:"sync"`

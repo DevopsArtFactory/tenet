@@ -3552,3 +3552,27 @@ func desiredGenerationForTest(t *testing.T, repoRoot string, deploymentName stri
 	t.Fatalf("deployment %q not found in compiled repository", deploymentName)
 	return 0
 }
+
+func TestDeriveRuntimeHistoryEntryIncludesRolloutExecutionResourceRefs(t *testing.T) {
+	status := domain.DeploymentStatus{
+		Rollout: &domain.RolloutSummary{
+			Summary:       "Shifting traffic through weighted target groups",
+			ExecutionMode: "asgWeightedTargetGroups",
+			Execution: []domain.RolloutExecutionDetail{
+				{Resource: "trafficShiftPlan", Name: "payments-api-shift", Description: "Weighted routing plan Tenet follows"},
+				{Resource: " trafficShiftPlan ", Name: " payments-api-shift ", Description: " duplicate should collapse "},
+				{Resource: "candidateAutoScalingGroup", Name: "payments-api-candidate", Description: "Candidate Auto Scaling Group Tenet creates"},
+				{Resource: "", Name: "missing-type", Description: "ignored"},
+			},
+		},
+	}
+
+	got := deriveRuntimeHistoryEntry(status)
+	want := []domain.RuntimeEventResourceRef{
+		{ResourceType: "trafficShiftPlan", ResourceName: "payments-api-shift", Source: "rollout_execution", Context: "Weighted routing plan Tenet follows"},
+		{ResourceType: "candidateAutoScalingGroup", ResourceName: "payments-api-candidate", Source: "rollout_execution", Context: "Candidate Auto Scaling Group Tenet creates"},
+	}
+	if !reflect.DeepEqual(got.ResourceRefs, want) {
+		t.Fatalf("expected rollout execution resource refs, got %+v", got.ResourceRefs)
+	}
+}

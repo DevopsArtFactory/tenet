@@ -880,6 +880,13 @@ func cloneManagedDrift(items []domain.ManagedDriftItem) []domain.ManagedDriftIte
 	return domain.AssignManagedDriftIDs(items)
 }
 
+func cloneRuntimeEventResourceRefs(refs []domain.RuntimeEventResourceRef) []domain.RuntimeEventResourceRef {
+	if len(refs) == 0 {
+		return nil
+	}
+	return append([]domain.RuntimeEventResourceRef(nil), refs...)
+}
+
 func cloneDeploymentOverview(deployment DeploymentOverview) DeploymentOverview {
 	copy := deployment
 	copy.RuntimeSummary = cloneRuntimeSummary(deployment.RuntimeSummary)
@@ -922,6 +929,7 @@ func cloneStatusHistory(history []domain.StatusHistoryEntry) []domain.StatusHist
 		cloned[i].Changes = append([]string(nil), history[i].Changes...)
 		cloned[i].ChangeDetails = append([]string(nil), history[i].ChangeDetails...)
 		cloned[i].ManagedDrift = cloneManagedDrift(history[i].ManagedDrift)
+		cloned[i].ResourceRefs = cloneRuntimeEventResourceRefs(history[i].ResourceRefs)
 		cloned[i].Conditions = append([]domain.Condition(nil), history[i].Conditions...)
 	}
 	return cloned
