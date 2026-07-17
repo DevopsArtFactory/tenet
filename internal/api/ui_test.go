@@ -4811,6 +4811,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"maps known reasons to friendly next-step copy for missing cross-account observer-role wiring, missing ECS tasks, missing ASG instances, stale resource selections, and temporary AWS/provider access failures",
 			"Route-stable resource with no independent stream: `available=false`, `unavailableReason=no_log_source`",
 			"unavailable/no-log-source responses use `returnedCount=0`, compatibility `returnedEntryCount=0`, `truncated=false`, and `truncationStatus=not_applicable`",
+			"`relatedLogRoutes[]` handoffs so operators can try sibling recent-log reads without treating the selected resource as broken",
 			"the UI also recognizes the compatibility aliases `capped` and `at_cap_unknown_total`",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
@@ -4877,6 +4878,8 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"assert_ecs_service_event_ids('worker_resource_inspection', worker_resource_inspection)",
 			"assert_ecs_service_event_ids('selected_worker_resource_inspection', selected_worker_resource_inspection)",
 			"assert no_log_source.get('truncationStatus') == 'not_applicable'",
+			"assert_related_log_routes('traffic_resource_logs', traffic_resource_logs",
+			"'relatedLogRoutes'",
 			"assert 'recent-log-lookup-context-card' in ui, ui",
 		},
 		"../../scripts/smoke-docker.sh": {
@@ -4899,6 +4902,8 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"assert ecs_task_scope.get(\"requestedLimit\") == 1",
 			"assert ecs_task_resource_inspection[\"resourceType\"] == \"ecsTask\"",
 			"assert no_log_source.get(\"truncationStatus\") == \"not_applicable\"",
+			"assert_related_log_routes(\"traffic_resource_logs\", traffic_resource_logs",
+			"\"relatedLogRoutes\"",
 			"\"const markResourcePanelStatusNode = (node) => {\"",
 			"\"markResourcePanelStatusNode(stateNode);\"",
 			"\"node.setAttribute('role', 'status');\"",
