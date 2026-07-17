@@ -495,6 +495,7 @@ func TestOperatorTroubleshootingRunbookDocsContract(t *testing.T) {
 		"`authRuntime.tenetManagedLogin`",
 		"Managed login authenticates browser identity; it does not grant Tenet roles or deployment access.",
 		"| Applications overview | `/` | `GET /v1/overview/applications`",
+		"Capture each row's `Linked resources` cue so reviewers can tell whether inventory came from controller-authored `rollout.execution[]` rows or fallback inventory before drilling into the application page.",
 		"| Application detail | `/?page=application&deployment={deploymentName}` | `GET /v1/overview/applications/{deploymentName}`",
 		"| Resource detail | `/?page=resource&deployment={deploymentName}&resourceType={type}&resourceId={stableResourceId}` | `GET /v1/overview/deployments/{deploymentName}`",
 		"| Recent logs | `#resource-recent-logs` | `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}`",
