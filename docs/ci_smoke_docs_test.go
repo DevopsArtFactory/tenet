@@ -481,6 +481,7 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 
 	for _, fragment := range []string{
 		"events?limit=1",
+		"events?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate",
 		"requestedLimit",
 		"effectiveLimit",
 		"returnedEventCount",
@@ -504,6 +505,7 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 		"`retention.limit` may still be non-zero",
 		"`sourceSummary` array of `{source, count}` entries computed from the retained window before optional source filtering and before positive limit truncation (blank persisted sources are bucketed as `unknown`, and `?source=unknown` selects those legacy entries)",
 		"`returnedCount` as a compact alias for `returnedEventCount`",
+		"`GET /v1/overview/deployments/payments-api-prod/events?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate`",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README deployment-events docs to include %q", fragment)
@@ -535,8 +537,8 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 	for _, fragment := range []string{
 		"Invalid source filters return `400 Bad Request` with `invalid source query`.",
 		"additive `sourceSummary` entries with `source` and `count` computed from the retained runtime window before optional source filtering and before positive limit truncation, including the `unknown` bucket for blank persisted sources",
-		"calls the fixture-empty deployment-events route with `?limit=1` and `?source=controller&limit=1`",
-		"direct-process smoke owns retention metadata, exact `?source=controller&limit=1`, and invalid-source `400` coverage",
+		"calls the fixture-empty deployment-events route with `?limit=1`, `?source=controller&limit=1`, and `?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate`",
+		"direct-process smoke owns retention metadata, exact `?source=controller&limit=1`, resource-filter `resultScope` metadata, and invalid-source `400` coverage",
 	} {
 		if !strings.Contains(localRuntimeText, fragment) {
 			t.Fatalf("expected local runtime smoke docs to include %q", fragment)
