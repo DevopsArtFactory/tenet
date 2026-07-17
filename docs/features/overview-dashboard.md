@@ -223,6 +223,7 @@ Current behavior:
 - renders breadcrumb chrome with `_self` links for prior drill-down levels, including the account step when the loaded deployment detail exposes `awsAccountId`
 - keeps the current resource as a non-click breadcrumb chip instead of presenting it as a self link
 - keeps all links bookmarkable and `_self` inside the embedded shell
+- repeats the `Linked-resource source` cue in the selected-resource context, preserving whether the focused resource came from controller-authored `rollout.execution[]` rows or from canonical fallback rollout inventory when that array is missing or empty
 - includes `Applications overview`, `Back to application`, `Drift view`, `Plan/apply`, and deployment-scoped `Audit log` links
 - renders the current resource as an explicit non-click chip so the strip does not present the active destination as a lateral link
 - adds a `Current section` group that derives a non-click chip from `window.location.hash` when the bookmarkable route targets one of the rendered resource sections
