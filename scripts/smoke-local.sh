@@ -2602,8 +2602,10 @@ assert "pushResourceSection(executionSection, 'resource-rollout-execution', 'Rol
 assert "pushResourceSection(conditionsSection, 'resource-status-conditions', 'Conditions');" in ui, ui
 assert "pushResourceSection(inspectionSection, 'resource-live-inspection', 'Live inspection');" in ui, ui
 assert "pushResourceSection(relatedEventsSection, 'resource-related-runtime-events', 'Related runtime events');" in ui, ui
-assert "const resourceEventsReadRoute = (deploymentName, resource, limit = defaultDeploymentEventsLimit) => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit, resourceType: resource?.type || '', resourceName: resource?.name || '' })}`;" in ui, ui
+assert "const resourceEventsReadRoute = (deploymentName, resource, limit = defaultDeploymentEventsLimit, source = '') => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit, source, resourceType: resource?.type || '', resourceName: resource?.name || '' })}`;" in ui, ui
 assert "renderResourceRelatedEventsSection(relatedEventsSection, deploymentName, resource).catch(() => {});" in ui, ui
+assert "Related event window" in ui, ui
+assert "Related event source" in ui, ui
 assert "Copy related events route" in ui, ui
 assert "pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');" in ui, ui
 assert "const resourceLogsLimitOptions = [" in ui, ui
@@ -2914,6 +2916,8 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "pushResourceSection(conditionsSection, 'resource-status-conditions', 'Conditions');" in body, body
     assert "pushResourceSection(inspectionSection, 'resource-live-inspection', 'Live inspection');" in body, body
     assert "pushResourceSection(relatedEventsSection, 'resource-related-runtime-events', 'Related runtime events');" in body, body
+    assert "Related event window" in body, body
+    assert "Related event source" in body, body
     assert "Copy related events route" in body, body
     assert "pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');" in body, body
     assert "const renderOperatorReadFailurePanel = (container, title, actions, route, error) => {" in body, body
