@@ -3088,7 +3088,9 @@ assert 'Newest visible entry' in audit_ui, audit_ui
 assert 'Oldest visible entry' in audit_ui, audit_ui
 assert "createNavLink(auditEntryAnchorURL(newest.entry, newest.anchorID), 'Jump to newest entry', '_self')" in audit_ui, audit_ui
 assert "createNavLink(auditEntryAnchorURL(oldest.entry, oldest.anchorID), 'Jump to oldest visible entry', '_self')" in audit_ui, audit_ui
-assert "createNavLink(auditEntryAnchorURL(entry, rowAnchorID), 'Share audit entry', '_self')" in audit_ui, audit_ui
+assert "const auditEntryURL = auditEntryAnchorURL(entry, rowAnchorID);" in audit_ui, audit_ui
+assert "createNavLink(auditEntryURL, 'Share audit entry', '_self')" in audit_ui, audit_ui
+assert "createCopyLinkButton(auditEntryURL, 'Copy audit entry link', 'Copy audit entry share link')" in audit_ui, audit_ui
 assert 'Share or continue in app' in audit_ui, audit_ui
 assert 'No audit activity has been persisted yet.' in audit_ui, audit_ui
 assert 'No audit activity has been persisted yet for deployment ${currentPageState.deployment}. Create a plan preview or apply request from the plan/apply workspace to add immutable audit rows for this deployment.' in audit_ui, audit_ui
