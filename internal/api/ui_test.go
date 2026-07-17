@@ -3311,6 +3311,28 @@ func TestSmokeScriptsLockApplicationsOverviewInitialLoadingCopy(t *testing.T) {
 	}
 }
 
+func TestSmokeScriptsLockResourceRelatedEventsShell(t *testing.T) {
+	fragments := []string{
+		"pushResourceSection(relatedEventsSection, 'resource-related-runtime-events', 'Related runtime events');",
+		"const resourceEventsReadRoute = (deploymentName, resource, limit = defaultDeploymentEventsLimit) => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit, resourceType: resource?.type || '', resourceName: resource?.name || '' })}`;",
+		"renderResourceRelatedEventsSection(relatedEventsSection, deploymentName, resource).catch(() => {});",
+		"Copy related events route",
+	}
+
+	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
+		body, err := os.ReadFile("../../scripts/" + script)
+		if err != nil {
+			t.Fatalf("read %s: %v", script, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to lock resource related-events shell fragment %q", script, fragment)
+			}
+		}
+	}
+}
+
 func TestSmokeScriptsLockDriftSourceCalloutCopy(t *testing.T) {
 	fragments := []string{
 		"Current source: controller-authored managedDrift rows.",
