@@ -8805,6 +8805,7 @@ let resolveInitialEvents;
 let resolveInitialLogs;
 let resolveInitialInspection;
 let resolveSourceEvents;
+let resolveClearSourceEvents;
 let resolveWindowEvents;
 let resolveRefreshEvents;
 let resolveRefreshLogs;
@@ -8817,6 +8818,7 @@ const fetch = (url) => {
   if (url === eventsURL) {
     eventsFetchCount += 1;
     if (eventsFetchCount === 1) return new Promise((resolve) => { resolveInitialEvents = resolve; });
+    if (eventsFetchCount === 3) return new Promise((resolve) => { resolveClearSourceEvents = resolve; });
     throw new Error('unexpected default events fetch count: ' + eventsFetchCount);
   }
   if (url === eventsSourceURL) {
@@ -8919,12 +8921,45 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle(3);
   text = collectText(root).join(' | ');
   if (!text.includes('No controller runtime events from source "controller" mention payments-api-staging-service in the latest 10-event resource-filtered window.')) throw new Error('expected source-filtered empty related runtime events copy after source control change: ' + text);
+  if (!text.includes('Show all related event sources')) throw new Error('expected source-filtered empty related runtime events recovery action: ' + text);
   if (text.includes('Initial related runtime event')) throw new Error('expected source-filtered related-events response to replace stale payload');
 
   relatedEventWindow = selectByField('Related event window');
   relatedEventSource = selectByField('Related event source');
   if (!relatedEventWindow || !relatedEventSource) throw new Error('expected related-events controls after source-filtered response');
   if (relatedEventSource.value !== 'controller') throw new Error('expected related event source control to retain controller selection after rerender');
+  let showAllSources = collectNodes(root, (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Show all related event sources');
+  if (!showAllSources || showAllSources.disabled) throw new Error('expected source-filtered empty state to expose enabled source recovery action');
+  showAllSources.dispatch('click');
+  await settle(1);
+  if (window.location.search !== initialSearch) throw new Error('expected source recovery action to preserve bookmarkable resource URL');
+  if (logsFetchCount !== 1 || inspectionFetchCount !== 1) throw new Error('expected source recovery action not to refetch sibling lazy panels');
+  resolveClearSourceEvents({ ok: true, json: () => Promise.resolve({
+    deploymentName: 'payments-api-staging',
+    resultScope: { requestedLimit: 10, effectiveLimit: 10, returnedEventCount: 1, totalEventCount: 2, retainedEventCount: 3, resourceFilter: { resourceType: 'ecsService', resourceName: 'payments-api-staging-service' } },
+    events: [{ timestamp: '2026-04-18T00:18:00Z', summary: 'Recovered all-source related event', sync: { state: 'Reconciling', reason: 'ResourceDrift' } }],
+  }) });
+  await settle(3);
+  text = collectText(root).join(' | ');
+  if (!text.includes('Recovered all-source related event')) throw new Error('expected source recovery action to reload all related event sources: ' + text);
+  if (text.includes('No controller runtime events from source "controller"')) throw new Error('expected source recovery action to replace source-filtered empty state');
+  relatedEventSource = selectByField('Related event source');
+  if (!relatedEventSource || relatedEventSource.value !== '') throw new Error('expected source recovery action to reset the related event source control');
+  if (collectNodes(root, (node) => node.tagName === 'BUTTON').some((node) => node.textContent === 'Show all related event sources')) throw new Error('expected source recovery action to remove source-only recovery button after all-source response');
+
+  relatedEventSource.value = 'controller';
+  relatedEventSource.dispatch('change');
+  await settle(1);
+  resolveSourceEvents({ ok: true, json: () => Promise.resolve({
+    deploymentName: 'payments-api-staging',
+    resultScope: { requestedLimit: 10, effectiveLimit: 10, returnedEventCount: 0, totalEventCount: 2, retainedEventCount: 3, sourceFilter: 'controller', resourceFilter: { resourceType: 'ecsService', resourceName: 'payments-api-staging-service' } },
+    events: [],
+  }) });
+  await settle(3);
+  relatedEventWindow = selectByField('Related event window');
+  relatedEventSource = selectByField('Related event source');
+  if (!relatedEventWindow || !relatedEventSource) throw new Error('expected related-events controls after reapplying source filter');
+  if (relatedEventSource.value !== 'controller') throw new Error('expected related event source control to retain reapplied controller selection');
   relatedEventWindow.value = '25';
   relatedEventWindow.dispatch('change');
   await settle(1);
@@ -9035,8 +9070,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Inspection path · ap-northeast-2 · account 210987654321 · same-account lookup · observer role configured')) throw new Error('expected live inspection provider lookup context summary');
   if (text.includes('Failed to load live inspection: resource inspection request failed (503)')) throw new Error('expected refreshed live inspection payload to replace stale error state');
   if (fetchCalls.filter((url) => url === deploymentURL).length !== 1) throw new Error('expected in-place refresh controls not to reload deployment detail');
-  if (fetchCalls.filter((url) => url === eventsURL).length !== 1) throw new Error('expected exactly one default related-events fetch');
-  if (fetchCalls.filter((url) => url === eventsSourceURL).length !== 1) throw new Error('expected exactly one source-filtered related-events fetch');
+  if (fetchCalls.filter((url) => url === eventsURL).length !== 2) throw new Error('expected initial and source-recovery default related-events fetches');
+  if (fetchCalls.filter((url) => url === eventsSourceURL).length !== 2) throw new Error('expected initial and reapplied source-filtered related-events fetches');
   if (fetchCalls.filter((url) => url === eventsWindowURL).length !== 2) throw new Error('expected selected window/source related-events fetch plus denied refresh');
   if (fetchCalls.filter((url) => url === logsURL).length !== 2) throw new Error('expected exactly two recent-logs fetches');
   if (fetchCalls.filter((url) => url === inspectionURL).length !== 2) throw new Error('expected exactly two live-inspection fetches');

@@ -628,6 +628,7 @@ func TestOperatorTroubleshootingCallsOutRelatedRuntimeEvents(t *testing.T) {
 
 	for _, fragment := range []string{
 		"application detail lists the linked resource, resource detail narrows retained controller history to that resource",
+		"Source-filtered empty states also include a one-click `Show all related event sources` recovery action",
 		"empty related-event results mean no retained matching rollout/drift/resource evidence in the selected source/window rather than missing Recent logs, Live inspection, or immutable audit data",
 	} {
 		if !strings.Contains(overviewGuideText, fragment) {
@@ -647,6 +648,7 @@ func TestOperatorTroubleshootingCallsOutRelatedRuntimeEvents(t *testing.T) {
 	for _, fragment := range []string{
 		"Resource drill-down Related runtime events, Recent logs, and Live inspection panels summarize controller history, lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract.",
 		"distinguishes empty retained history from source-filtered no-match states and route failures",
+		"provides a one-click `Show all related event sources` recovery action for source-filtered empty states",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README to include resource-events journey fragment %q", fragment)
