@@ -5619,6 +5619,13 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   }
   const links = collectNodes(accounts, (node) => node.tagName === 'A');
   if (links.find((node) => node.textContent === 'Jump to live inspection' || node.textContent === 'Jump to recent logs')) throw new Error('expected unsupported resource callout to omit evidence jump links');
+  const pageText = collectText(accounts).join(' | ');
+  if (!pageText.includes('Recent logs | Unsupported for this resource type')) throw new Error('expected troubleshooting summary to mark Recent logs unsupported: ' + pageText);
+  if (!pageText.includes('Live inspection | Unsupported for this resource type')) throw new Error('expected troubleshooting summary to mark Live inspection unsupported: ' + pageText);
+  if (!pageText.includes('Evidence freshness | Recent logs unsupported for this resource type · Live inspection unsupported for this resource type')) throw new Error('expected freshness row to avoid stale not-refreshed guidance: ' + pageText);
+  if (!pageText.includes('Next check | Focused evidence panels are not supported for this resource type yet; use the current resource read, rollout context, status conditions, and related runtime events before escalating.')) throw new Error('expected unsupported next-check guidance: ' + pageText);
+  if (pageText.includes('Open or refresh Live inspection and Recent logs')) throw new Error('unsupported troubleshooting summary should not ask operators to refresh hidden panels: ' + pageText);
+  if (fetchCalls.find((url) => String(url).includes('/resource-inspection') || String(url).includes('/resource-logs'))) throw new Error('unsupported resource should not lazy-fetch hidden panels: ' + fetchCalls.join(', '));
 })();
 `
 
