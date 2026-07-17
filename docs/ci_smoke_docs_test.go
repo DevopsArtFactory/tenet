@@ -1502,7 +1502,7 @@ func TestOverviewDashboardDocumentsRuntimeRetentionAndLatestRuntimeCueGuard(t *t
 	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
 
 	for _, fragment := range []string{
-		"Each row keeps compact `Project` and `Last update` fields",
+		"Each row keeps compact `Project`, `Linked resources`, and `Last update` fields",
 		"falling back to `Latest runtime status` when no timestamp is present",
 	} {
 		if !strings.Contains(readmeText, fragment) {
@@ -1512,7 +1512,7 @@ func TestOverviewDashboardDocumentsRuntimeRetentionAndLatestRuntimeCueGuard(t *t
 
 	applicationsSection := markdownSection(t, overviewText, "### Applications overview")
 	for _, fragment := range []string{
-		"each row includes compact `Project` and `Last update` fields next to account/environment and health, using `appRef` for ownership",
+		"each row includes compact `Project`, `Linked resources`, and `Last update` fields next to account/environment and health, using `appRef` for ownership",
 		"`Last update`, `Visible subset last update`, and the optional row-local `Runtime` line are latest controller-runtime cues, not UI read-freshness cues",
 		"`Applications read refreshed` is the only applications-overview cue for when the browser last fetched `GET /v1/overview/applications`",
 	} {
@@ -1522,7 +1522,7 @@ func TestOverviewDashboardDocumentsRuntimeRetentionAndLatestRuntimeCueGuard(t *t
 	}
 
 	for _, fragment := range []string{
-		"The overview intentionally stays compact: rows show the app name, account/environment, project, sync, health, last update, and one dominant `Open application` action",
+		"The overview intentionally stays compact: rows show the app name, account/environment, project, linked-resource availability, sync, health, last update, and one dominant `Open application` action",
 	} {
 		if !strings.Contains(operatorContractsText, fragment) {
 			t.Fatalf("expected operator contracts docs to include applications-overview compact row contract %q", fragment)

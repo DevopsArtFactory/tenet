@@ -2031,6 +2031,9 @@ assert_fragments("audit_ui", audit_ui, operator_read_auth_fragments + (
 for fragment in (
     "Open account",
     "Open application",
+    "['Linked resources', overviewLinkedResourceCue(deployment)]",
+    "controller-authored",
+    "fallback inventory",
     "More actions for ${deployment.name || 'deployment'}",
     "secondaryActions.setAttribute('aria-label', `Secondary actions for ${deployment.name || 'deployment'}`);",
     "Drift view",

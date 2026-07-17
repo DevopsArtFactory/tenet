@@ -166,8 +166,8 @@ Start at `/` for the applications overview. The overview keeps the first page
 compact with application rows, status chips, filters, a count-aware `Clear N filters`
 reset action with an active-filter tooltip that names the exact search, sync, health, and account state before reset, `Open application`, a self-describing
 `More actions for {deploymentName}` disclosure with an accessible secondary-action
-group label, and `Applications JSON` / `Copy read route` handoffs for `GET /v1/overview/applications`. Each row keeps compact `Project` and `Last update` fields
-from the joined application/runtime summary, falling back to `Latest runtime status` when no timestamp is present, and adds a compact `Latest runtime change`
+group label, and `Applications JSON` / `Copy read route` handoffs for `GET /v1/overview/applications`. Each row keeps compact `Project`, `Linked resources`, and `Last update` fields
+from the joined application/runtime summary, using controller-authored `rollout.execution[]` counts when present and execution-mode fallback inventory counts otherwise, falling back to `Latest runtime status` when no timestamp is present, and adds a compact `Latest runtime change`
 cue only when `runtimeSummary.changeDetails[]` carries controller-authored change copy. The secondary account
 drill-down keeps its toolbar `Refresh account detail` action and surfaces `Current account read: GET /v1/overview/accounts/{awsAccountId}` in the account header; account/group JSON handoffs include adjacent `Copy account read route`
 / `Copy group read route` controls for exact scoped `GET /v1/overview/accounts/...`

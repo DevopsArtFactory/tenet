@@ -22,6 +22,7 @@ It is intentionally narrow and should stay easy to scan.
 The first page focuses on:
 - application name
 - account/environment
+- linked-resource availability
 - sync state
 - health
 - one primary drill-down action
