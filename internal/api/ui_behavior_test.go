@@ -10935,6 +10935,40 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 			"ready":              false,
 			"unavailableReason":  "missing_deployer_role",
 			"summary":            "Operation has reviewed apply intent, but the target account is missing deployer-role readiness evidence.",
+			"capabilityChecks": []map[string]any{{
+				"action":         "codedeploy:GetDeploymentGroup",
+				"resourceType":   "codeDeployDeploymentGroup",
+				"resourceName":   "api-prod-codedeploy-group",
+				"requiredRole":   "arn:aws:iam::123456789012:role/tenet-deployer",
+				"state":          "allowed",
+				"checkedWithAws": true,
+				"allowed":        true,
+				"summary":        "IAM policy simulation reported this read capability as allowed; no AWS mutation was attempted.",
+			}, {
+				"action":         "codedeploy:CreateDeployment",
+				"resourceType":   "codeDeployDeploymentGroup",
+				"resourceName":   "api-prod-codedeploy-group",
+				"requiredRole":   "arn:aws:iam::123456789012:role/tenet-deployer",
+				"state":          "denied",
+				"reason":         "permission_denied",
+				"checkedWithAws": true,
+				"allowed":        false,
+				"summary":        "IAM policy simulation did not allow this future executor capability; no AWS mutation was attempted.",
+			}, {
+				"action":       "codedeploy:StopDeployment",
+				"resourceType": "codeDeployDeploymentGroup",
+				"resourceName": "api-prod-codedeploy-group",
+				"state":        "unchecked",
+				"reason":       "missing_permission_actions",
+				"summary":      "Permission simulation has not checked this recovery capability yet.",
+			}, {
+				"action":       "codedeploy:GetDeployment",
+				"resourceType": "codeDeployDeploymentGroup",
+				"resourceName": "api-prod-codedeploy-group",
+				"state":        "unavailable",
+				"reason":       "aws_unavailable",
+				"summary":      "IAM permission simulation could not run for this read capability in the local-safe environment.",
+			}},
 			"handoffs": map[string]any{
 				"deploymentDetailRoute":   "/v1/overview/deployments/api-prod",
 				"planApplyWorkspaceRoute": "/?applyId=apply_failed_123&deployment=api-prod&page=plan&planId=plan_ready_123",
@@ -10997,6 +11031,17 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 				"reason":  "missing_deployer_role",
 				"summary": "No deployer role is configured for this target account and region.",
 			},
+			"capabilityChecks": []map[string]any{{
+				"action":         "codedeploy:CreateDeployment",
+				"resourceType":   "codeDeployDeploymentGroup",
+				"resourceName":   "api-prod-codedeploy-group",
+				"requiredRole":   "arn:aws:iam::123456789012:role/tenet-deployer",
+				"state":          "denied",
+				"reason":         "permission_denied",
+				"checkedWithAws": true,
+				"allowed":        false,
+				"summary":        "IAM simulation denied mutation readiness for this preview action.",
+			}},
 		}, {
 			"operationId":        "operation-watch-stability",
 			"phase":              "Verifying",
@@ -11869,6 +11914,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Create the CodeDeploy deployment for the queued handoff.')) throw new Error('expected execution preview operation summary');
   if (!text.includes('Action · codedeploy:CreateDeployment')) throw new Error('expected execution preview operation action');
   if (!text.includes('Capability · codedeploy:CreateDeployment')) throw new Error('expected execution preview required capability');
+  if (!text.includes('Permission readiness · denied codedeploy:CreateDeployment')) throw new Error('expected execution preview permission denial summary');
+  if (!text.includes('IAM simulation denied mutation readiness for this preview action.')) throw new Error('expected execution preview capability-check explanation');
   if (!text.includes('operation-watch-stability')) throw new Error('expected second execution preview operation row');
   if (!text.includes('Watch ECS service stability after the deployment starts.')) throw new Error('expected second execution preview operation summary');
   if (!text.includes('Action · ecs:DescribeServices')) throw new Error('expected second execution preview operation action');
@@ -11898,6 +11945,13 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Capability · codedeploy:CreateDeployment')) throw new Error('expected preflight capability handoff copy');
   if (!text.includes('Role · arn:aws:iam::123456789012:role/tenet-deployer')) throw new Error('expected preflight role handoff copy');
   if (!text.includes('Reason · No deployer role is configured for this target account and region.')) throw new Error('expected preflight deployer-role unavailable reason copy');
+  if (!text.includes('Permission denied')) throw new Error('expected denied permission status on preflight operation row');
+  if (!text.includes('Permission readiness · allowed codedeploy:GetDeploymentGroup')) throw new Error('expected allowed permission readiness summary on preflight operation row');
+  if (!text.includes('denied codedeploy:CreateDeployment')) throw new Error('expected denied mutation permission readiness summary on preflight operation row');
+  if (!text.includes('unchecked codedeploy:StopDeployment')) throw new Error('expected unchecked permission readiness summary on preflight operation row');
+  if (!text.includes('unavailable codedeploy:GetDeployment')) throw new Error('expected unavailable permission readiness summary on preflight operation row');
+  if (!text.includes('IAM simulation did not allow this future executor capability for the configured deployer role.')) throw new Error('expected friendly permission-denied capability copy');
+  if (!text.includes('IAM permission simulation was skipped because no concrete AWS actions were available.')) throw new Error('expected friendly unchecked capability copy');
   if (text.includes('Reason · missing_deployer_role')) throw new Error('expected friendly preflight reason instead of raw missing_deployer_role code');
   const preflightLinks = collectNodes(root, (node) => node.tagName === 'A');
   if (!preflightLinks.find((node) => node.textContent === 'Live inspection' && node.href === '/v1/overview/deployments/api-prod/resource-inspection?resourceName=api-prod-codedeploy-group&resourceType=codeDeployDeploymentGroup')) throw new Error('expected live-inspection preflight handoff link');
