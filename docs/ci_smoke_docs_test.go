@@ -609,6 +609,7 @@ func TestOperatorTroubleshootingCallsOutRelatedRuntimeEvents(t *testing.T) {
 		"managedDrift[].source.resourceType/resourceName",
 		"controller history filtered by retained resource evidence; not Recent logs, Live inspection, or immutable audit evidence",
 		"no matching rollout, drift, or resource evidence",
+		"If only a selected source is empty, use `Show all related event sources` before treating controller history as absent.",
 		"curl -i \"$TENET_API_BASE/v1/overview/deployments/{deploymentName}/events?resourceType={type}&resourceName={name}&limit=10&source=controller\"",
 	} {
 		if !strings.Contains(runbookText, fragment) {
