@@ -1884,6 +1884,7 @@ assert_fragments("ui", ui, (
     "applications-overview-freshness",
     "Applications read not refreshed yet",
     "Applications read refreshed ·",
+    "Loading applications overview…",
     "overviewState?.status === 'loading'",
     "() => overviewState?.onRefresh?.().catch(() => {})",
     "const applicationsOverviewRefreshState = (overviewState = null) => {",

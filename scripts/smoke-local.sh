@@ -2184,6 +2184,7 @@ assert "summary.textContent = operatorContextFailureHeading(operatorContextState
 assert '/v1/overview/applications' in ui, ui
 assert '/v1/overview/applications/${encodeURIComponent(deploymentName)}' in ui, ui
 assert "const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/overview/applications', {" in ui, ui
+assert 'Loading applications overview…' in ui, ui
 assert "failure: 'applications overview request failed'," in ui, ui
 assert 'No visible applications' in ui, ui
 assert 'Open Operator context details' in ui, ui
