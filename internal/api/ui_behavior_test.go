@@ -14808,6 +14808,7 @@ async function render(search, hash = '#application-current-status') {
   const toolbar = run.document.getElementById('toolbar');
   const input = collectNodes(toolbar, (node) => node.tagName === 'INPUT' && node.dataset.toolbarField === 'Filter linked resources')[0];
   if (!input) throw new Error('expected application resource filter input');
+  if (input.placeholder !== 'Filter by type, name, description, or source') throw new Error('expected source-aware resource filter placeholder, got ' + input.placeholder);
   if (input.value !== 'weighted') throw new Error('expected bookmarkable resource filter value, got ' + input.value);
   let text = compactText(accounts);
   if (!text.includes('productionListenerRule')) throw new Error('expected resource description filter to show traffic routing resource');
@@ -14835,6 +14836,13 @@ async function render(search, hash = '#application-current-status') {
   }
   if (!filteredResourceParams.get('resourceId')) throw new Error('expected filtered resource link to preserve resourceId, got ' + filteredResourceLink.href);
   if (collectNodes(accounts, (node) => ['A', 'BUTTON'].includes(node.tagName) && hasInteractiveAncestor(node)).length) throw new Error('expected no nested interactive controls in filtered application resources');
+
+  const sourceRun = await render('?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&resourceFilter=controller-authored');
+  const sourceText = compactText(sourceRun.document.getElementById('accounts'));
+  if (!sourceText.includes('3 of 3 linked resources match resource filter "controller-authored"')) throw new Error('expected source filter to match all controller-authored linked resources: ' + sourceText);
+  if (!sourceText.includes('Controller-authored rollout execution')) throw new Error('expected source-filtered view to retain source cue: ' + sourceText);
+  if (!sourceText.includes('ecsService') || !sourceText.includes('productionListenerRule') || !sourceText.includes('userDataBootstrapSource')) throw new Error('expected source filter to keep every source-matching linked resource: ' + sourceText);
+  if (sourceRun.window.location.search !== '?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&resourceFilter=controller-authored') throw new Error('expected source filter URL state to be preserved, got ' + sourceRun.window.location.search);
 
   input.focus();
   input.selectionStart = 3;

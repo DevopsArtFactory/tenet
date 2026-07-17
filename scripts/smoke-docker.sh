@@ -2332,7 +2332,7 @@ for fragment in (
     "const applicationResourceFilterMatches = (resource, query) => {",
     "const syncApplicationResourceFilterQueryParam = (value) => {",
     "const createClearApplicationResourceFilterButton = (detail, applicationState = null) => {",
-    "createInput('Filter linked resources', currentPageState.resourceFilter, 'Filter by type, name, or description',",
+    "createInput('Filter linked resources', currentPageState.resourceFilter, 'Filter by type, name, description, or source',",
     "createElement('div', 'account-topology resource-filter-summary')",
     "createClearApplicationResourceFilterButton(detail, applicationState)",
     "const applicationResourceSectionLinkLabel = (group, resourceFilter = '') => {",

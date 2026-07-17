@@ -3670,8 +3670,9 @@
           { title: 'Config and access', resources: [] },
         ];
         const resourceList = rolloutExecutionResources(detail);
+        const linkedResourceSource = applicationLinkedResourceSourceText(detail);
         resourceList.forEach((resource) => {
-          const normalized = normalizeResource(resource);
+          const normalized = { ...normalizeResource(resource), linkedResourceSource };
           const trafficResources = new Set(['productionListener', 'testListener', 'productionListenerRule', 'activeTargetGroup', 'candidateTargetGroup', 'blueTaskSetTargetGroup', 'greenTaskSetTargetGroup', 'trafficShiftPlan']);
           const configResources = new Set(['userDataBootstrapSource']);
           if (trafficResources.has(normalized.type)) {
@@ -3689,7 +3690,7 @@
       const applicationResourceFilterMatches = (resource, query) => {
         const filter = normalizeApplicationResourceFilter(query).toLowerCase();
         if (!filter) return true;
-        return [resource?.type, resource?.name, resource?.description]
+        return [resource?.type, resource?.name, resource?.description, resource?.linkedResourceSource]
           .map((value) => String(value || '').toLowerCase())
           .some((value) => value.includes(filter));
       };
@@ -4384,7 +4385,7 @@
         createApplicationDetailActions(applicationState).forEach((action) => {
           if (action) toolbarActions.append(action);
         });
-        toolbarActions.append(createInput('Filter linked resources', currentPageState.resourceFilter, 'Filter by type, name, or description', (event) => {
+        toolbarActions.append(createInput('Filter linked resources', currentPageState.resourceFilter, 'Filter by type, name, description, or source', (event) => {
           const nextFilter = normalizeApplicationResourceFilter(event.target.value);
           const nextFocus = captureToolbarFocus();
           currentPageState.resourceFilter = nextFilter;
