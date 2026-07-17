@@ -3261,6 +3261,18 @@ func TestSmokeScriptsLockECSServiceDeploymentRolloutUILabels(t *testing.T) {
 	}
 }
 
+func TestSmokeScriptsLockApplicationsOverviewInitialLoadingCopy(t *testing.T) {
+	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
+		body, err := os.ReadFile("../../scripts/" + script)
+		if err != nil {
+			t.Fatalf("read %s: %v", script, err)
+		}
+		if !strings.Contains(string(body), "Loading applications overview…") {
+			t.Fatalf("expected %s to lock applications-overview initial loading copy", script)
+		}
+	}
+}
+
 func TestEmbeddedUIIncludesRuntimeAndHistoryChangeDetailsRendering(t *testing.T) {
 	body := string(indexHTML)
 
