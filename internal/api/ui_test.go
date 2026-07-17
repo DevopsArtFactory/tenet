@@ -3321,6 +3321,9 @@ func TestSmokeScriptsLockResourceRelatedEventsShell(t *testing.T) {
 		"Related event window",
 		"Related event source",
 		"Copy related events route",
+		"No retained runtime events are available for this deployment yet, so none can mention",
+		"Clear Related event source or refresh before treating controller history as absent.",
+		"Refresh related events or inspect the application-level runtime events before treating controller history as absent.",
 	}
 
 	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {

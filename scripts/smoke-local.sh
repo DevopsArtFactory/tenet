@@ -2607,6 +2607,9 @@ assert "renderResourceRelatedEventsSection(relatedEventsSection, deploymentName,
 assert "Related event window" in ui, ui
 assert "Related event source" in ui, ui
 assert "Copy related events route" in ui, ui
+assert "No retained runtime events are available for this deployment yet, so none can mention" in ui, ui
+assert "Clear Related event source or refresh before treating controller history as absent." in ui, ui
+assert "Refresh related events or inspect the application-level runtime events before treating controller history as absent." in ui, ui
 assert "pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');" in ui, ui
 assert "const resourceLogsLimitOptions = [" in ui, ui
 assert "Log entry cap · ${resourceLogsLimitText(limit)}" in ui, ui
@@ -2919,6 +2922,9 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "Related event window" in body, body
     assert "Related event source" in body, body
     assert "Copy related events route" in body, body
+    assert "No retained runtime events are available for this deployment yet, so none can mention" in body, body
+    assert "Clear Related event source or refresh before treating controller history as absent." in body, body
+    assert "Refresh related events or inspect the application-level runtime events before treating controller history as absent." in body, body
     assert "pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');" in body, body
     assert "const renderOperatorReadFailurePanel = (container, title, actions, route, error) => {" in body, body
     assert "const resourceLogsReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceLogsRoute(deploymentName, resource, limit)}`;" in body, body
