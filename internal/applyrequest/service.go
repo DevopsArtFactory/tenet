@@ -39,6 +39,7 @@ type Service struct {
 	LoadPlan              PlanProvider
 	CurrentFingerprint    CurrentFingerprintProvider
 	DeployerRoleReadiness DeployerRoleReadinessProvider
+	PermissionSimulation  PermissionSimulationProvider
 	Store                 Store
 	Now                   func() time.Time
 	EnableAWSApply        bool

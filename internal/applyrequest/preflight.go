@@ -29,6 +29,22 @@ type DeployerRoleTarget struct {
 	DeploymentName string
 }
 
+// PermissionSimulationTarget identifies the apply/deployer context and deterministic
+// capability rows that may be checked with IAM policy simulation. Simulation is
+// read-only readiness evidence only; it must not imply live mutation success.
+type PermissionSimulationTarget struct {
+	DeploymentName string
+	AWSAccountID   string
+	Region         string
+	RoleARN        string
+	Checks         []OperationExecutionCapabilityCheck
+}
+
+// PermissionSimulationProvider enriches per-operation capability checks with
+// optional IAM policy-simulation evidence. Providers must degrade local/no-AWS
+// failures into explicit check states instead of failing the whole preflight.
+type PermissionSimulationProvider func(context.Context, PermissionSimulationTarget) ([]OperationExecutionCapabilityCheck, error)
+
 // DeployerRoleReadiness captures non-mutating identity readiness for the
 // configured target-account deployer role. It is troubleshooting evidence only,
 // not proof that rollout mutation ran or succeeded.
@@ -55,13 +71,15 @@ type OperationExecutionPreflightHandoffs struct {
 // OperationExecutionCapabilityCheck captures one deterministic, non-mutating capability item
 // that a future live executor would need to satisfy before mutating AWS resources.
 type OperationExecutionCapabilityCheck struct {
-	Action       string `json:"action"`
-	ResourceType string `json:"resourceType,omitempty"`
-	ResourceName string `json:"resourceName,omitempty"`
-	RequiredRole string `json:"requiredRole"`
-	State        string `json:"state"`
-	Reason       string `json:"reason,omitempty"`
-	Summary      string `json:"summary"`
+	Action         string `json:"action"`
+	ResourceType   string `json:"resourceType,omitempty"`
+	ResourceName   string `json:"resourceName,omitempty"`
+	RequiredRole   string `json:"requiredRole"`
+	State          string `json:"state"`
+	Reason         string `json:"reason,omitempty"`
+	Summary        string `json:"summary"`
+	CheckedWithAWS bool   `json:"checkedWithAws,omitempty"`
+	Allowed        *bool  `json:"allowed,omitempty"`
 }
 
 // OperationExecutionPreflight captures one non-mutating readiness row for an apply operation.
@@ -186,7 +204,32 @@ func (s Service) preflightForRecord(ctx context.Context, record Record) (Executi
 	}
 	readiness.DeployerRole = &role
 	readiness.Operations = deriveOperationExecutionPreflight(record, &role)
+	readiness.Operations = s.enrichOperationPermissionChecks(ctx, record, role, readiness.Operations)
 	return readiness, nil
+}
+
+func (s Service) enrichOperationPermissionChecks(ctx context.Context, record Record, role DeployerRoleReadiness, operations []OperationExecutionPreflight) []OperationExecutionPreflight {
+	if s.PermissionSimulation == nil || len(operations) == 0 {
+		return operations
+	}
+	if !role.Configured || !role.Ready || strings.TrimSpace(role.RoleARN) == "" {
+		return operations
+	}
+	checks, positions := flattenOperationCapabilityChecks(operations)
+	if len(checks) == 0 {
+		return operations
+	}
+	enriched, err := s.PermissionSimulation(ctx, PermissionSimulationTarget{
+		DeploymentName: record.DeploymentName,
+		AWSAccountID:   role.AWSAccountID,
+		Region:         role.Region,
+		RoleARN:        role.RoleARN,
+		Checks:         checks,
+	})
+	if err != nil {
+		enriched = unavailablePermissionChecks(checks, err)
+	}
+	return applyEnrichedCapabilityChecks(operations, positions, enriched)
 }
 
 func normalizeExecutionReadiness(record Record) Record {
@@ -380,6 +423,64 @@ func deriveOperationExecutionPreflight(record Record, role *DeployerRoleReadines
 	}
 	return rows
 }
+
+func flattenOperationCapabilityChecks(operations []OperationExecutionPreflight) ([]OperationExecutionCapabilityCheck, [][2]int) {
+	var checks []OperationExecutionCapabilityCheck
+	var positions [][2]int
+	for i, operation := range operations {
+		for j, check := range operation.CapabilityChecks {
+			checks = append(checks, check)
+			positions = append(positions, [2]int{i, j})
+		}
+	}
+	return checks, positions
+}
+
+func unavailablePermissionChecks(checks []OperationExecutionCapabilityCheck, err error) []OperationExecutionCapabilityCheck {
+	reason := "aws_unavailable"
+	if err != nil && strings.TrimSpace(err.Error()) != "" {
+		reason = "aws_unavailable"
+	}
+	out := make([]OperationExecutionCapabilityCheck, len(checks))
+	copy(out, checks)
+	for i := range out {
+		out[i].State = "unavailable"
+		out[i].Reason = reason
+		out[i].CheckedWithAWS = true
+		out[i].Allowed = boolPtr(false)
+		out[i].Summary = "IAM permission simulation could not run in this local-safe environment; no AWS mutation was attempted."
+	}
+	return out
+}
+
+func applyEnrichedCapabilityChecks(operations []OperationExecutionPreflight, positions [][2]int, checks []OperationExecutionCapabilityCheck) []OperationExecutionPreflight {
+	if len(checks) == 0 || len(positions) == 0 {
+		return operations
+	}
+	out := make([]OperationExecutionPreflight, len(operations))
+	copy(out, operations)
+	for i := range out {
+		if len(out[i].CapabilityChecks) > 0 {
+			copied := make([]OperationExecutionCapabilityCheck, len(out[i].CapabilityChecks))
+			copy(copied, out[i].CapabilityChecks)
+			out[i].CapabilityChecks = copied
+		}
+	}
+	limit := len(checks)
+	if len(positions) < limit {
+		limit = len(positions)
+	}
+	for idx := 0; idx < limit; idx++ {
+		pos := positions[idx]
+		if pos[0] >= len(out) || pos[1] >= len(out[pos[0]].CapabilityChecks) {
+			continue
+		}
+		out[pos[0]].CapabilityChecks[pos[1]] = checks[idx]
+	}
+	return out
+}
+
+func boolPtr(v bool) *bool { return &v }
 
 func operationExecutionHandoffs(record Record, resourceType, resourceName string) *OperationExecutionPreflightHandoffs {
 	deploymentName := strings.TrimSpace(record.DeploymentName)

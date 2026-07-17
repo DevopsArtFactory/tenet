@@ -344,6 +344,53 @@ func TestApplyRequestDeployerRoleReadinessProviderReportsAWSUnavailable(t *testi
 	}
 }
 
+func TestApplyRequestPermissionSimulationProviderReportsAllowedDeniedAndUnavailable(t *testing.T) {
+	checks := []applyrequest.OperationExecutionCapabilityCheck{
+		{Action: "codedeploy:GetDeploymentGroup", RequiredRole: "arn:aws:iam::123456789012:role/TenetDeployerRole", State: "blocked"},
+		{Action: "codedeploy:CreateDeployment", RequiredRole: "arn:aws:iam::123456789012:role/TenetDeployerRole", State: "blocked"},
+	}
+	provider := newApplyRequestPermissionSimulationProvider(func(ctx context.Context, region, roleARN string, got []applyrequest.OperationExecutionCapabilityCheck) ([]applyrequest.OperationExecutionCapabilityCheck, error) {
+		if region != "ap-northeast-2" || roleARN != "arn:aws:iam::123456789012:role/TenetDeployerRole" || len(got) != len(checks) {
+			t.Fatalf("unexpected permission simulation inputs: region=%q role=%q checks=%+v", region, roleARN, got)
+		}
+		out := make([]applyrequest.OperationExecutionCapabilityCheck, len(got))
+		copy(out, got)
+		for i := range out {
+			allowed := i == 0
+			out[i].CheckedWithAWS = true
+			out[i].Allowed = &allowed
+			if allowed {
+				out[i].State = "allowed"
+				out[i].Summary = "allowed"
+			} else {
+				out[i].State = "denied"
+				out[i].Reason = "permission_denied"
+				out[i].Summary = "denied"
+			}
+		}
+		return out, nil
+	})
+
+	enriched, err := provider(context.Background(), applyrequest.PermissionSimulationTarget{DeploymentName: "api-prod", AWSAccountID: "123456789012", Region: "ap-northeast-2", RoleARN: "arn:aws:iam::123456789012:role/TenetDeployerRole", Checks: checks})
+	if err != nil {
+		t.Fatalf("provider returned error: %v", err)
+	}
+	if len(enriched) != 2 || enriched[0].State != "allowed" || enriched[0].Allowed == nil || !*enriched[0].Allowed || enriched[1].State != "denied" || enriched[1].Allowed == nil || *enriched[1].Allowed {
+		t.Fatalf("expected allowed/denied simulated permission rows, got %+v", enriched)
+	}
+
+	unavailableProvider := newApplyRequestPermissionSimulationProvider(func(ctx context.Context, region, roleARN string, got []applyrequest.OperationExecutionCapabilityCheck) ([]applyrequest.OperationExecutionCapabilityCheck, error) {
+		return nil, errors.New("simulate principal policy: failed to refresh cached credentials")
+	})
+	unavailable, err := unavailableProvider(context.Background(), applyrequest.PermissionSimulationTarget{Region: "ap-northeast-2", RoleARN: "arn:aws:iam::123456789012:role/TenetDeployerRole", Checks: checks})
+	if err != nil {
+		t.Fatalf("unavailable provider returned error: %v", err)
+	}
+	if len(unavailable) != 2 || unavailable[0].State != "unavailable" || unavailable[0].Reason != "aws_unavailable" || !unavailable[0].CheckedWithAWS || unavailable[0].Allowed == nil || *unavailable[0].Allowed {
+		t.Fatalf("expected unavailable permission rows, got %+v", unavailable)
+	}
+}
+
 func TestNewAPIOptionsIncludesGitHubWebhookSecretFromEnv(t *testing.T) {
 	t.Setenv("TENET_GITHUB_WEBHOOK_SECRET", "top-secret")
 

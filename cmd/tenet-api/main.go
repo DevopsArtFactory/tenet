@@ -34,6 +34,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/redis/go-redis/v9"
 )
@@ -334,6 +336,7 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 			Store:                 applyrequest.NewFileStore(applyStorePath),
 			EnableAWSApply:        awsApplyEnabled(),
 			DeployerRoleReadiness: newApplyRequestDeployerRoleReadinessProvider(source, probeDeployerRoleIdentity),
+			PermissionSimulation:  newApplyRequestPermissionSimulationProvider(probeApplyPermissionSimulation),
 		}
 		options.CreateDeploymentPlanPreview = planService.Create
 		options.PlanPreview = planService.Get
@@ -379,6 +382,116 @@ func defaultApplyRequestStorePath() string {
 
 func defaultControllerRefreshAuditStorePath() string {
 	return filepath.Join(os.TempDir(), "tenet", "controller-refresh-requests.json")
+}
+
+type permissionSimulationProbe func(context.Context, string, string, []applyrequest.OperationExecutionCapabilityCheck) ([]applyrequest.OperationExecutionCapabilityCheck, error)
+
+func newApplyRequestPermissionSimulationProvider(probe permissionSimulationProbe) applyrequest.PermissionSimulationProvider {
+	if probe == nil {
+		probe = probeApplyPermissionSimulation
+	}
+	return func(ctx context.Context, target applyrequest.PermissionSimulationTarget) ([]applyrequest.OperationExecutionCapabilityCheck, error) {
+		roleARN := strings.TrimSpace(target.RoleARN)
+		region := strings.TrimSpace(target.Region)
+		checks := copyCapabilityChecks(target.Checks)
+		if len(checks) == 0 {
+			return checks, nil
+		}
+		if roleARN == "" {
+			return markPermissionChecks(checks, "unchecked", "missing_deployer_role", false, false, "IAM permission simulation was skipped because no deployer role is configured for this target account and region."), nil
+		}
+		if region == "" {
+			return markPermissionChecks(checks, "unchecked", "missing_region", false, false, "IAM permission simulation was skipped because the deployment placement has no AWS region."), nil
+		}
+		enriched, err := probe(ctx, region, roleARN, checks)
+		if err != nil {
+			reason := "aws_unavailable"
+			if unavailable, ok := resourceaws.UnavailableReasonForError(err); ok && strings.TrimSpace(unavailable) != "" {
+				reason = unavailable
+			}
+			return markPermissionChecks(checks, "unavailable", reason, true, false, "IAM permission simulation could not run in this local-safe environment; no AWS mutation was attempted."), nil
+		}
+		return enriched, nil
+	}
+}
+
+func copyCapabilityChecks(checks []applyrequest.OperationExecutionCapabilityCheck) []applyrequest.OperationExecutionCapabilityCheck {
+	if len(checks) == 0 {
+		return nil
+	}
+	copied := make([]applyrequest.OperationExecutionCapabilityCheck, len(checks))
+	copy(copied, checks)
+	return copied
+}
+
+func markPermissionChecks(checks []applyrequest.OperationExecutionCapabilityCheck, state, reason string, checkedWithAWS bool, allowed bool, summary string) []applyrequest.OperationExecutionCapabilityCheck {
+	out := copyCapabilityChecks(checks)
+	for i := range out {
+		out[i].State = state
+		out[i].Reason = reason
+		out[i].CheckedWithAWS = checkedWithAWS
+		if checkedWithAWS || state == "allowed" || state == "denied" || state == "unavailable" {
+			allowedValue := allowed
+			out[i].Allowed = &allowedValue
+		}
+		out[i].Summary = summary
+	}
+	return out
+}
+
+func probeApplyPermissionSimulation(ctx context.Context, region, roleARN string, checks []applyrequest.OperationExecutionCapabilityCheck) ([]applyrequest.OperationExecutionCapabilityCheck, error) {
+	checks = copyCapabilityChecks(checks)
+	if len(checks) == 0 {
+		return checks, nil
+	}
+	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(strings.TrimSpace(region)))
+	if err != nil {
+		return nil, err
+	}
+	cfg.Credentials = aws.NewCredentialsCache(stscreds.NewAssumeRoleProvider(sts.NewFromConfig(cfg), strings.TrimSpace(roleARN), func(options *stscreds.AssumeRoleOptions) {
+		options.RoleSessionName = "tenet-apply-permission-preflight"
+	}))
+	client := iam.NewFromConfig(cfg)
+	actions := make([]string, 0, len(checks))
+	for _, check := range checks {
+		if action := strings.TrimSpace(check.Action); action != "" {
+			actions = append(actions, action)
+		}
+	}
+	if len(actions) == 0 {
+		return markPermissionChecks(checks, "unchecked", "missing_permission_actions", false, false, "IAM permission simulation was skipped because no concrete AWS actions were available."), nil
+	}
+	result, err := client.SimulatePrincipalPolicy(ctx, &iam.SimulatePrincipalPolicyInput{
+		PolicySourceArn: aws.String(strings.TrimSpace(roleARN)),
+		ActionNames:     actions,
+		ResourceArns:    []string{"*"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	decisions := map[string]types.PolicyEvaluationDecisionType{}
+	for _, row := range result.EvaluationResults {
+		decisions[strings.TrimSpace(aws.ToString(row.EvalActionName))] = row.EvalDecision
+	}
+	for i := range checks {
+		decision, ok := decisions[strings.TrimSpace(checks[i].Action)]
+		allowed := ok && decision == types.PolicyEvaluationDecisionTypeAllowed
+		checks[i].CheckedWithAWS = true
+		checks[i].Allowed = &allowed
+		if allowed {
+			checks[i].State = "allowed"
+			checks[i].Reason = ""
+			checks[i].Summary = "IAM policy simulation reported this future executor capability as allowed for the configured deployer role; no AWS mutation was attempted."
+			continue
+		}
+		checks[i].State = "denied"
+		checks[i].Reason = "permission_denied"
+		if ok && decision != "" {
+			checks[i].Reason = "permission_" + strings.ToLower(string(decision))
+		}
+		checks[i].Summary = "IAM policy simulation did not allow this future executor capability for the configured deployer role; no AWS mutation was attempted."
+	}
+	return checks, nil
 }
 
 type deployerRoleIdentityProbe func(context.Context, string, string) error
