@@ -1625,6 +1625,7 @@ func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditC
 	for _, fragment := range []string{
 		"`Refresh audit log` control",
 		"`q`/`sync`/`account`, and stripping stale `#audit-*` anchors",
+		"`Share audit entry` and `Copy audit entry link` handoffs preserve the current audit filters and stable row anchor",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README audit workspace docs to include unsplit refresh/control contract %q", fragment)
