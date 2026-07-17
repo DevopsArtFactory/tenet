@@ -10271,7 +10271,8 @@ async function render(detail, search, hash = '') {
   const document = createDocument();
   const fetchCalls = [];
   const initialSearch = search || '?page=drift&deployment=' + encodeURIComponent(detail.name);
-  const window = { location: { pathname: '/', search: initialSearch, hash } };
+  const clipboardWrites = [];
+  const window = { location: { pathname: '/', search: initialSearch, hash }, navigator: { clipboard: { writeText: (text) => { clipboardWrites.push(String(text)); return Promise.resolve(); } } } };
   const history = { replaceState(_state, _title, url) {
     const [pathAndQuery, nextHash = ''] = String(url).split('#');
     const [pathname, query = ''] = pathAndQuery.split('?');
@@ -10287,7 +10288,7 @@ async function render(detail, search, hash = '') {
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
   await settle();
   await settle();
-  return { document, fetchCalls, window };
+  return { document, fetchCalls, window, clipboardWrites };
 }
 (async () => {
   const managedRun = await render(managedDetail);
@@ -10373,6 +10374,7 @@ async function render(detail, search, hash = '') {
   const text = collectText(run.document.getElementById('accounts')).join(' | ');
   const toolbarText = collectText(run.document.getElementById('toolbar')).join(' | ');
   const toolbarLinks = collectNodes(run.document.getElementById('toolbar'), (node) => node.tagName === 'A');
+  const toolbarButtons = collectNodes(run.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
   const workspaceLinks = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'A');
   const workspaceChips = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   const breadcrumbChips = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className.includes('breadcrumb-current'));
@@ -10392,6 +10394,13 @@ async function render(detail, search, hash = '') {
   if (text.includes('Drift viewer read not refreshed yet')) throw new Error('expected drift workspace freshness cue to use fetched timestamp');
   if (!toolbarText.includes('Back to application')) throw new Error('expected workspace back link');
   if (!workspaceJSONLink || workspaceJSONLink.target !== '_blank' || workspaceJSONLink.rel !== 'noreferrer noopener') throw new Error('expected drift workspace JSON handoff link');
+  const workspaceCopyButton = toolbarButtons.find((node) => node.textContent === 'Copy workspace read route');
+  if (!workspaceCopyButton || workspaceCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/api-prod') throw new Error('expected drift workspace copyable read route');
+  workspaceCopyButton.dispatch('click');
+  await settle();
+  if (run.clipboardWrites.join(', ') !== 'GET /v1/overview/deployments/api-prod') throw new Error('expected drift workspace copied read route, got ' + run.clipboardWrites.join(', '));
+  const workspaceCopyStatus = workspaceCopyButton.children[0];
+  if (!workspaceCopyStatus || workspaceCopyStatus.getAttribute('role') !== 'status' || workspaceCopyStatus.getAttribute('aria-live') !== 'polite' || workspaceCopyStatus.getAttribute('aria-atomic') !== 'true' || workspaceCopyStatus.textContent !== 'Copied') throw new Error('expected drift workspace copy button to announce copied state');
   if (!toolbarText.includes('api-prod')) throw new Error('expected workspace active deployment title');
   if (!text.includes('Breadcrumbs')) throw new Error('expected drift workspace breadcrumb chrome');
   if (!applicationsBreadcrumb || applicationsBreadcrumb.rel) throw new Error('expected drift workspace applications breadcrumb link');
@@ -11811,7 +11820,8 @@ document.byID.set('accounts', document.createElement('section'));
 const fetchCalls = [];
 let createRequestOptions = null;
 let createApplyRequestOptions = null;
-const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod', hash: '' } };
+const clipboardWrites = [];
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod', hash: '' }, navigator: { clipboard: { writeText: (text) => { clipboardWrites.push(String(text)); return Promise.resolve(); } } } };
 const history = { replaceState(_state, _title, url) { const [withoutHash, hash = ''] = String(url).split('#'); const [pathname, query = ''] = withoutHash.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
 let detailFetchCount = 0;
 const fetch = (url, options = {}) => {
@@ -11868,6 +11878,13 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Plan and apply read refreshed ·')) throw new Error('expected plan workspace deployment-detail freshness cue');
   if (text.includes('Plan and apply read not refreshed yet')) throw new Error('expected plan workspace freshness cue to use fetched timestamp');
   if (!workspaceJSONLink || workspaceJSONLink.target !== '_blank' || workspaceJSONLink.rel !== 'noreferrer noopener') throw new Error('expected plan workspace JSON handoff link');
+  let planWorkspaceCopyButton = collectNodes(toolbarRoot, (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Copy workspace read route');
+  if (!planWorkspaceCopyButton || planWorkspaceCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/api-prod') throw new Error('expected plan workspace copyable read route');
+  planWorkspaceCopyButton.dispatch('click');
+  await settle();
+  if (clipboardWrites.join(', ') !== 'GET /v1/overview/deployments/api-prod') throw new Error('expected plan workspace copied read route, got ' + clipboardWrites.join(', '));
+  const planWorkspaceCopyStatus = planWorkspaceCopyButton.children[0];
+  if (!planWorkspaceCopyStatus || planWorkspaceCopyStatus.getAttribute('role') !== 'status' || planWorkspaceCopyStatus.getAttribute('aria-live') !== 'polite' || planWorkspaceCopyStatus.getAttribute('aria-atomic') !== 'true' || planWorkspaceCopyStatus.textContent !== 'Copied') throw new Error('expected plan workspace copy button to announce copied state');
   if (!text.includes('Breadcrumbs')) throw new Error('expected plan workspace breadcrumb chrome');
   if (!applicationsBreadcrumb || applicationsBreadcrumb.rel) throw new Error('expected plan workspace applications breadcrumb link');
   if (accountBreadcrumb) throw new Error('expected plan workspace to omit account breadcrumb when awsAccountId is unavailable');

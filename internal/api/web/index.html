@@ -10969,7 +10969,10 @@
           createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self'),
         );
         if (deploymentName) {
-          toolbarActions.append(createNavLink(deploymentDetailJSONRoute(deploymentName), 'Workspace JSON'));
+          toolbarActions.append(
+            createNavLink(deploymentDetailJSONRoute(deploymentName), 'Workspace JSON'),
+            createCopyReadRouteButton(deploymentDetailReadRoute(deploymentName), 'Copy workspace read route'),
+          );
         }
         if (mode === 'plan') {
           toolbarActions.append(createRefreshButton(

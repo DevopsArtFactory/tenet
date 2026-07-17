@@ -2056,8 +2056,10 @@ assert "status.textContent = 'Copy failed';" in ui, ui
 assert "detailPanel.id = `account-deployment-detail-${sectionIDSegment(account.awsAccountId, 'account')}-${sectionIDSegment(deployment.name, 'deployment')}`;" in ui, ui
 assert "toggle.setAttribute('aria-controls', detailPanel.id);" in ui, ui
 assert 'Workspace JSON' in ui, ui
+assert 'Copy workspace read route' in ui, ui
 assert "const deploymentDetailJSONRoute = (deploymentName) => `/v1/overview/deployments/${encodeURIComponent(deploymentName || '')}`;" in ui, ui
 assert "createNavLink(deploymentDetailJSONRoute(deploymentName), 'Workspace JSON')" in ui, ui
+assert "createCopyReadRouteButton(deploymentDetailReadRoute(deploymentName), 'Copy workspace read route')" in ui, ui
 assert "const applicationsClearFiltersLabel = (activeFilters) => {" in ui, ui
 assert "return `Clear ${count} ${count === 1 ? 'filter' : 'filters'}`;" in ui, ui
 assert "const clearLabel = applicationsClearFiltersAriaLabel(active);" in ui, ui

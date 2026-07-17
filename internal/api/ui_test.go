@@ -2015,7 +2015,7 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"const backLink = createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application');",
 		"backLink.target = '_self';",
 		"backLink.rel = '';",
-		"toolbarActions.append(createNavLink(deploymentDetailJSONRoute(deploymentName), 'Workspace JSON'));",
+		"toolbarActions.append(\n            createNavLink(deploymentDetailJSONRoute(deploymentName), 'Workspace JSON'),\n            createCopyReadRouteButton(deploymentDetailReadRoute(deploymentName), 'Copy workspace read route'),\n          );",
 		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {",
 		"const createWorkspaceQuickNav = (detail, mode, sectionLinks = null) => {",
 		"const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';",
@@ -4121,6 +4121,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert \"createNavLink(deploymentDetailJSONRoute(deploymentName), 'Workspace JSON')\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert workspace JSON route contract")
+	}
+	if !strings.Contains(text, "assert \"createCopyReadRouteButton(deploymentDetailReadRoute(deploymentName), 'Copy workspace read route')\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert workspace copy route contract")
 	}
 	if !strings.Contains(text, "assert \"container.append(createElement('strong', '', 'Latest runtime change'));\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains compact latest runtime change label")
