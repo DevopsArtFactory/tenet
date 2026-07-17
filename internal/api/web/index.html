@@ -3831,6 +3831,29 @@
         if (Number.isFinite(count) && count >= 0) return `${count} runtime event${count === 1 ? '' : 's'}`;
         return 'No runtime events reported';
       };
+      const applicationCurrentStatusSummaryText = (detail, resourceGroups = []) => {
+        const sync = detail.sync?.state || detail.runtimeSummary?.sync?.state || 'Unknown';
+        const health = healthLabel(detail.health?.overall ? detail.health : detail.runtimeSummary?.health);
+        const rolloutContext = rolloutContextText(effectiveRolloutContext(detail)) || 'No rollout context';
+        const rolloutPhase = detail.rollout?.phase || detail.runtimeSummary?.rolloutPhase || '';
+        const currentStep = detail.rollout?.currentStep || detail.runtimeSummary?.currentStep || '';
+        const deployedArtifact = artifact(detail.deployedArtifact);
+        const desiredArtifact = artifact(detail.desiredArtifact);
+        const artifactText = deployedArtifact !== '—' ? deployedArtifact : desiredArtifact;
+        const linkedResources = resourceGroups.reduce((count, group) => count + ((group?.resources || []).length), 0);
+        const parts = [
+          `Current application status: ${sync} sync`,
+          `${health} health`,
+          rolloutContext,
+          rolloutPhase ? `phase ${rolloutPhase}` : '',
+          currentStep ? `step ${currentStep}` : '',
+          artifactText !== '—' ? `artifact ${artifactText}` : 'no artifact reported',
+          `${linkedResources} linked resource${linkedResources === 1 ? '' : 's'}`,
+          applicationRuntimeEventSummary(detail),
+          `last update ${runtimeSummaryTimestamp(detail.runtimeSummary)}`,
+        ].filter(Boolean);
+        return parts.join(' · ');
+      };
       const applicationDetailFetchedAtText = (detail) => {
         const fetchedAt = detail?.tenetFetchedAt;
         if (!fetchedAt) return '';
@@ -4552,7 +4575,7 @@
         detailSummary.append(
           createElement('h2', 'account-name', detail.name || currentPageState.deployment || 'Application'),
           createElement('div', 'account-meta', [detail.accountName, detail.awsAccountId, detail.region].filter(Boolean).join(' · ') || '—'),
-          createElement('div', 'account-topology', 'Application detail page: show only application-linked resources before the final resource-detail page.'),
+          createElement('div', 'account-topology application-current-status-summary', applicationCurrentStatusSummaryText(detail, allResourceGroups)),
           createElement('div', 'account-topology application-detail-read-route', `Current application read: ${applicationDetailReadRoute(deploymentName)}`),
           createApplicationDetailFreshnessMeta(applicationState, detail),
         );

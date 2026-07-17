@@ -2397,6 +2397,8 @@ for fragment in (
     "No ${group.title} resources match resource filter \"${resourceFilter}\". Clear the resource filter to show all ${group.title} resources.",
     "Clear resource filter",
     "Current application status",
+    "application-current-status-summary",
+    "Current application status: ${sync} sync",
     "Application rollout context:",
     "['Managed drift', applicationManagedDriftSummaryText(detail)],",
     "['Runtime events', applicationRuntimeEventSummary(detail)],",

@@ -3212,7 +3212,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('Application detail read refreshed ·')) throw new Error('expected application route read freshness cue, got ' + summaryText);
   if (!summaryText.includes('Current application read: GET /v1/overview/applications/payments-api-staging')) throw new Error('expected application route summary to show exact backing read route, got ' + summaryText);
   if (summaryText.includes('Application detail read not refreshed yet')) throw new Error('expected loaded application route to replace not-refreshed fallback');
-  if (!summaryText.includes('Application detail page: show only application-linked resources before the final resource-detail page.')) throw new Error('expected application route drill-down guidance');
+  if (summaryText.includes('Application detail page: show only application-linked resources before the final resource-detail page.')) throw new Error('expected application route summary to omit implementation-placeholder prose');
+  if (!summaryText.includes('Current application status: OutOfSync sync · Progressing health · Target ecs · Strategy linear · Execution ecsCodeDeploy')) throw new Error('expected application route summary to show compact current status, got ' + summaryText);
+  if (!summaryText.includes('artifact ghcr.io/devopsartfactory/payments-api:staging-20260415')) throw new Error('expected application route summary to show artifact, got ' + summaryText);
   if (!accountsText.includes('Application resources')) throw new Error('expected application route resources body');
   if (!accountsText.includes('Linked-resource source')) throw new Error('expected application route linked-resource source label');
   if (!accountsText.includes('Fallback rollout inventory')) throw new Error('expected application route to explain fallback linked-resource source, got ' + accountsText);
@@ -5248,6 +5250,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   await settle();
   await settle();
   if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-empty' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-empty/events?limit=10') throw new Error('expected empty application page to load application detail plus deployment events');
+  const summaryText = collectText(document.getElementById('summary')).join(' | ');
+  if (!summaryText.includes('Current application status: Synced sync · Healthy health · No rollout context · artifact ghcr.io/example/payments:v9 · 0 linked resources · No runtime events reported · last update Latest runtime status')) throw new Error('expected partial application header status summary without placeholders, got ' + summaryText);
+  if (summaryText.includes('Application detail page: show only application-linked resources before the final resource-detail page.')) throw new Error('expected empty application header to omit implementation-placeholder prose');
   const accounts = document.getElementById('accounts');
   const accountsText = collectText(accounts).join(' | ');
   if (!accountsText.includes('No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.')) throw new Error('expected explicit application empty-state copy');
