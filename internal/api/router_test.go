@@ -4005,6 +4005,131 @@ func TestDeploymentOverviewEventsRouteFiltersBlankSourcesAsUnknown(t *testing.T)
 	}
 }
 
+func TestDeploymentOverviewEventsRouteFiltersByResourceBeforeApplyingLimit(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			return catalog.DeploymentOverviewEvents{
+				DeploymentName: name,
+				Events: []domain.StatusHistoryEntry{
+					{Timestamp: "2026-05-06T04:00:00Z", Source: "controller", Summary: "unrelated controller event", ManagedDrift: []domain.ManagedDriftItem{{Field: "artifact", Severity: domain.ManagedDriftSeverityLow, ResourceRef: &domain.ManagedDriftResourceRef{ResourceType: "ecsService", ResourceName: "payments-api"}}}},
+					{Timestamp: "2026-05-06T03:00:00Z", Source: "controller", Summary: "new matching resource event", ManagedDrift: []domain.ManagedDriftItem{{Field: "runtimeContext.capacity.desired", Severity: domain.ManagedDriftSeverityHigh, ResourceRef: &domain.ManagedDriftResourceRef{ResourceType: "trafficShiftPlan", ResourceName: "payments-api-shift"}}}},
+					{Timestamp: "2026-05-06T02:00:00Z", Source: "github", Summary: "older matching source evidence event", ManagedDrift: []domain.ManagedDriftItem{{Field: "runtimeContext.capacity.min", Severity: domain.ManagedDriftSeverityMedium, Source: &domain.ManagedDriftSource{ResourceType: "trafficShiftPlan", ResourceName: "payments-api-shift"}}}},
+				},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events?resourceType=trafficShiftPlan&resourceName=payments-api-shift&limit=1", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode deployment events payload: %v", err)
+	}
+	events, ok := payload["events"].([]any)
+	if !ok || len(events) != 1 {
+		t.Fatalf("expected one resource-filtered event after limit, got %#v", payload["events"])
+	}
+	event, ok := events[0].(map[string]any)
+	if !ok || event["summary"] != "new matching resource event" {
+		t.Fatalf("expected newest matching resource event after resource-before-limit filtering, got %#v", events[0])
+	}
+	managedDrift, ok := event["managedDrift"].([]any)
+	if !ok || len(managedDrift) != 1 {
+		t.Fatalf("expected event managedDrift evidence, got %#v", event["managedDrift"])
+	}
+	drift, ok := managedDrift[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected managedDrift object, got %#v", managedDrift[0])
+	}
+	resourceRef, ok := drift["resourceRef"].(map[string]any)
+	if !ok || resourceRef["resourceType"] != "trafficShiftPlan" || resourceRef["resourceName"] != "payments-api-shift" {
+		t.Fatalf("expected nested resourceRef in returned event, got %#v", drift["resourceRef"])
+	}
+	summary, ok := payload["managedDriftSummary"].(map[string]any)
+	if !ok || summary["total"] != float64(1) || summary["high"] != float64(1) || summary["medium"] != float64(0) {
+		t.Fatalf("expected managedDriftSummary for returned resource-filtered events, got %#v", payload["managedDriftSummary"])
+	}
+	scope, ok := payload["resultScope"].(map[string]any)
+	if !ok || scope["totalEventCount"] != float64(2) || scope["returnedEventCount"] != float64(1) || scope["retainedEventCount"] != float64(3) || scope["limited"] != true || scope["truncationStatus"] != "truncated" {
+		t.Fatalf("expected resultScope to count resource-filtered events before limit, got %#v", payload["resultScope"])
+	}
+	resourceFilter, ok := scope["resourceFilter"].(map[string]any)
+	if !ok || resourceFilter["resourceType"] != "trafficShiftPlan" || resourceFilter["resourceName"] != "payments-api-shift" {
+		t.Fatalf("expected resultScope resourceFilter echo, got %#v", scope["resourceFilter"])
+	}
+}
+
+func TestDeploymentOverviewEventsRouteReturnsEmptyResourceFilterWindow(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			return catalog.DeploymentOverviewEvents{
+				DeploymentName: name,
+				Events:         []domain.StatusHistoryEntry{{Timestamp: "2026-05-06T03:00:00Z", Source: "controller", Summary: "controller reconcile", ManagedDrift: []domain.ManagedDriftItem{{Field: "artifact", Severity: domain.ManagedDriftSeverityHigh, ResourceRef: &domain.ManagedDriftResourceRef{ResourceType: "ecsService", ResourceName: "payments-api"}}}}},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events?resourceType=trafficShiftPlan&resourceName=payments-api-shift", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode deployment events payload: %v", err)
+	}
+	events, ok := payload["events"].([]any)
+	if !ok || len(events) != 0 {
+		t.Fatalf("expected explicit empty events array for unmatched resource filter, got %#v", payload["events"])
+	}
+	summary, ok := payload["managedDriftSummary"].(map[string]any)
+	if !ok || summary["total"] != float64(0) || summary["high"] != float64(0) || summary["medium"] != float64(0) || summary["low"] != float64(0) {
+		t.Fatalf("expected zero managedDriftSummary for empty resource filter, got %#v", payload["managedDriftSummary"])
+	}
+	scope, ok := payload["resultScope"].(map[string]any)
+	if !ok || scope["totalEventCount"] != float64(0) || scope["returnedEventCount"] != float64(0) || scope["retainedEventCount"] != float64(1) || scope["truncationStatus"] != "not_truncated" {
+		t.Fatalf("expected resultScope to describe empty resource-filtered window, got %#v", payload["resultScope"])
+	}
+	resourceFilter, ok := scope["resourceFilter"].(map[string]any)
+	if !ok || resourceFilter["resourceType"] != "trafficShiftPlan" || resourceFilter["resourceName"] != "payments-api-shift" {
+		t.Fatalf("expected resultScope resourceFilter echo, got %#v", scope["resourceFilter"])
+	}
+}
+
+func TestDeploymentOverviewEventsRouteRejectsMalformedResourceFilter(t *testing.T) {
+	providerCalls := 0
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			providerCalls++
+			return catalog.DeploymentOverviewEvents{DeploymentName: name}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events?resourceType=trafficShiftPlan", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", resp.Code, resp.Body.String())
+	}
+	if got := strings.TrimSpace(resp.Body.String()); got != "resourceType and resourceName query parameters must be provided together" {
+		t.Fatalf("expected invalid resource filter response, got %q", got)
+	}
+	if providerCalls != 0 {
+		t.Fatalf("expected malformed resource filter to fail before provider call, got %d calls", providerCalls)
+	}
+}
+
 func TestDeploymentOverviewEventsRouteReturnsEmptySourceFilterWindow(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
