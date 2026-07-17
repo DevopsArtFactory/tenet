@@ -771,7 +771,7 @@ func TestResourceUnavailableSmokeMatrixDocsAndScripts(t *testing.T) {
 		"ASG console logs",
 		"Traffic-routing no-log-source",
 		"Successful-empty provider read",
-		"`available=false`, `unavailableReason=no_log_source`, `entries=[]`, populated `lookupContext`, and `resultScope.truncationStatus=not_applicable`",
+		"`available=false`, `unavailableReason=no_log_source`, `entries=[]`, populated `lookupContext`, `resultScope.truncationStatus=not_applicable`, and `relatedLogRoutes[]` handoffs to sibling recent-log sources when Tenet can derive them",
 	} {
 		if !strings.Contains(recentLogsText, fragment) {
 			t.Fatalf("expected recent-log unavailable matrix to include %q", fragment)
