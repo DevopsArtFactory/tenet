@@ -2855,6 +2855,8 @@ assert "const createApplicationResourceRelatedEventsCue = (deploymentName, resou
 assert "const createApplicationResourceRelatedEventsSummaryCue = (deploymentName, resource, detail) => {" in application_ui, application_ui
 assert "resourceRelatedSummaryForResource(detail, resource)" in application_ui, application_ui
 assert "Retained summary" in application_ui, application_ui
+assert "const relatedRuntimeEventSourceLabel = (source) => {" in application_ui, application_ui
+assert "controller: 'Controller history'" in application_ui, application_ui
 assert "const refreshApplicationResourceRelatedEventCues = (deploymentName, result) => {" in application_ui, application_ui
 assert "buildPageSectionURL('resource', 'resource-related-runtime-events', routeParams)" in application_ui, application_ui
 assert "`Related events · ${count}`" in application_ui, application_ui

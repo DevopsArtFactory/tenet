@@ -2415,6 +2415,8 @@ for fragment in (
     "const createApplicationResourceRelatedEventsSummaryCue = (deploymentName, resource, detail) => {",
     "resourceRelatedSummaryForResource(detail, resource)",
     "Retained summary",
+    "const relatedRuntimeEventSourceLabel = (source) => {",
+    "controller: 'Controller history'",
     "const refreshApplicationResourceRelatedEventCues = (deploymentName, result) => {",
     "buildPageSectionURL('resource', 'resource-related-runtime-events', routeParams)",
     "`Related events · ${count}`",

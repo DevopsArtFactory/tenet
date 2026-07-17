@@ -4098,9 +4098,9 @@ func TestApplicationDetailPageWithNodeHarness(t *testing.T) {
 				"resourceType":         "ecsService",
 				"resourceName":         "payments-api-staging ECS Service",
 				"resourceDescription":  "Primary ECS service for the staging environment",
-				"retainedEventCount":   2,
+				"retainedEventCount":   3,
 				"newestEventTimestamp": "2026-04-16T07:15:30Z",
-				"sourceSummary":        []map[string]any{{"source": "controller", "count": 2}},
+				"sourceSummary":        []map[string]any{{"source": "controller", "count": 2}, {"source": "custom-probe", "count": 1}},
 				"managedDriftSummary":  map[string]any{"total": 1, "high": 1, "medium": 0, "low": 0},
 			},
 			{
@@ -4207,8 +4207,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   await settle();
   if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging/events?limit=10') throw new Error('expected application page to load application detail plus deployment events');
   let accountsText = collectText(document.getElementById('accounts')).join(' | ');
-  if (!accountsText.includes('Related events · 2')) throw new Error('expected application resource row to seed related-events cue from detail resourceRelatedEvents summary before events resolve');
-  if (!accountsText.includes('Retained summary · Source controller × 2 · Drift 1 high · 2026-04-16T07:15:30Z')) throw new Error('expected summary-backed related-events cue before events resolve: ' + accountsText);
+  if (!accountsText.includes('Related events · 3')) throw new Error('expected application resource row to seed related-events cue from detail resourceRelatedEvents summary before events resolve');
+  if (!accountsText.includes('Retained summary · Controller history × 2 · Source custom-probe · Drift 1 high · 2026-04-16T07:15:30Z')) throw new Error('expected summary-backed related-events cue before events resolve with operator-readable source labels and custom sources preserved: ' + accountsText);
   if (!resolveEvents) throw new Error('expected delayed deployment events request');
   resolveEvents();
   await settle();
@@ -4278,7 +4278,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!ecsServiceRelatedEventsLink) throw new Error('expected ECS service row to cue related runtime-event evidence');
   if (!ecsServiceRelatedEventsLink.href.includes(resourceIDFragment) || !ecsServiceRelatedEventsLink.href.endsWith('#resource-related-runtime-events')) throw new Error('expected related-events cue to deep-link to the resource related-events panel');
   const ecsServiceRowText = collectText(ecsServiceRow).join(' | ');
-  if (!ecsServiceRowText.includes('Newest: ECS service rollout progressed · Source controller · 2026-04-16T07:16:00Z')) throw new Error('expected related-events cue to show newest concise event context');
+  if (!ecsServiceRowText.includes('Newest: ECS service rollout progressed · Controller history · 2026-04-16T07:16:00Z')) throw new Error('expected related-events cue to show newest concise event context with operator-readable source label');
   if (codeDeployApplicationRelatedEventsLink) throw new Error('expected resource rows without retained evidence to stay quiet');
   if (!ecsServiceRecentLogsLink || !ecsServiceRecentLogsLink.href.includes(resourceIDFragment)) throw new Error('expected ECS service recent-logs cue to target its own resource row');
   if (!resourceLink.href.includes(resourceIDFragment)) throw new Error('expected stable unique resource identifier in drill-down href');
