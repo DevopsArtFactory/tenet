@@ -3886,6 +3886,25 @@
         if (resourceFilter) return `${visibleCount} of ${applicationResourceGroupTotal(group)} resources`;
         return `${visibleCount} resources`;
       };
+      const applicationResourceInventorySummaryText = (groups, totalResourceCount, visibleResourceCount, resourceFilter = '') => {
+        const groupCounts = (groups || [])
+          .map((group) => {
+            const visibleCount = (group?.resources || []).length;
+            const totalCount = applicationResourceGroupTotal(group);
+            if (resourceFilter) return `${group.title}: ${visibleCount} of ${totalCount}`;
+            return `${group.title}: ${visibleCount}`;
+          })
+          .join(' · ');
+        const resourceText = totalResourceCount === 1 ? 'linked resource' : 'linked resources';
+        if (resourceFilter) {
+          return `Linked resource inventory: ${visibleResourceCount} of ${totalResourceCount} ${resourceText} visible · ${groupCounts}`;
+        }
+        return `Linked resource inventory: ${totalResourceCount} ${resourceText} · ${groupCounts}`;
+      };
+      const createApplicationResourceInventorySummary = (groups, totalResourceCount, visibleResourceCount, resourceFilter = '') => {
+        if (!totalResourceCount) return null;
+        return createElement('div', 'account-topology application-resource-inventory-summary', applicationResourceInventorySummaryText(groups, totalResourceCount, visibleResourceCount, resourceFilter));
+      };
       const applicationResourceSectionLinkLabel = (group, resourceFilter = '') => {
         const visibleCount = (group?.resources || []).length;
         if (resourceFilter) return `${group.title} (${visibleCount} of ${applicationResourceGroupTotal(group)})`;
@@ -4753,6 +4772,10 @@
           createElement('h2', 'account-name', 'Application resources'),
           createElement('div', 'account-meta', 'Grouped linked resources for the selected application. Open a resource for focused rollout, log, and inspection evidence.'),
         );
+        const inventorySummary = createApplicationResourceInventorySummary(resourceGroups, totalResourceCount, visibleResourceCount, resourceFilter);
+        if (inventorySummary) {
+          page.append(inventorySummary);
+        }
         if (resourceFilter && totalResourceCount > 0) {
           const filterSummary = createElement('div', 'account-topology resource-filter-summary');
           filterSummary.append(

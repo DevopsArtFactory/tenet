@@ -15178,6 +15178,7 @@ async function render(search, hash = '#application-current-status') {
   await settle();
   const clearText = compactText(clearRun.document.getElementById('accounts'));
   if (!clearText.includes('ecsService') || !clearText.includes('productionListenerRule') || !clearText.includes('userDataBootstrapSource')) throw new Error('expected active filter clear action to restore all groups: ' + clearText);
+  if (!clearText.includes('Linked resource inventory: 3 linked resources · Workloads: 1 · Traffic routing: 1 · Config and access: 1')) throw new Error('expected active filter clear action to show full linked-resource inventory: ' + clearText);
   if (clearRun.window.location.search !== '?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging') throw new Error('expected active filter clear action to preserve existing query state and remove only resourceFilter, got ' + clearRun.window.location.search);
   const clearedActiveInput = collectNodes(clearRun.document.getElementById('toolbar'), (node) => node.tagName === 'INPUT' && node.dataset.toolbarField === 'Filter linked resources')[0];
   if (!clearedActiveInput || clearRun.document.activeElement !== clearedActiveInput) throw new Error('expected active clear action to restore focus to the resource filter input');
@@ -15195,6 +15196,7 @@ async function render(search, hash = '#application-current-status') {
   if (!text.includes('productionListenerRule')) throw new Error('expected resource description filter to show traffic routing resource');
   if (text.includes('ecsService') || text.includes('userDataBootstrapSource')) throw new Error('expected resource filter to hide unmatched resource groups');
   if (!text.includes('1 of 3 linked resources match resource filter "weighted"')) throw new Error('expected grouped filtered count copy: ' + text);
+  if (!text.includes('Linked resource inventory: 1 of 3 linked resources visible · Workloads: 0 of 1 · Traffic routing: 1 of 1 · Config and access: 0 of 1')) throw new Error('expected filtered linked-resource inventory summary: ' + text);
   if (!text.includes('Traffic routing') || !text.includes('1 of 1 linked resources match resource filter "weighted"')) throw new Error('expected filtered traffic-routing group count copy: ' + text);
   if (!text.includes('No Workloads resources match resource filter "weighted". Clear the resource filter to show all Workloads resources.')) throw new Error('expected section-specific workload filtered-empty copy: ' + text);
   if (!text.includes('No Config and access resources match resource filter "weighted". Clear the resource filter to show all Config and access resources.')) throw new Error('expected section-specific config filtered-empty copy: ' + text);
