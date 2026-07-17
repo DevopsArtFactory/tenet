@@ -4362,17 +4362,53 @@
         const timestamp = String(event?.timestamp || '').trim();
         return [summary || 'Newest retained event', source, timestamp].filter(Boolean).join(' · ');
       };
-      const createApplicationResourceRelatedEventsCue = (deploymentName, resource, result) => {
-        if (!deploymentName || !resource?.type || !resource?.id) return null;
-        const relatedEvents = relatedRuntimeEventsForResource(result, resource);
-        if (!relatedEvents.length) return null;
+      const resourceRelatedSummaryMatchesResource = (summary, resource) => Boolean(summary?.resourceType && summary?.resourceName && resource?.type && resource?.name)
+        && summary.resourceType === resource.type
+        && summary.resourceName === resource.name;
+      const resourceRelatedSummaryForResource = (detail, resource) => (Array.isArray(detail?.resourceRelatedEvents) ? detail.resourceRelatedEvents : [])
+        .find((summary) => resourceRelatedSummaryMatchesResource(summary, resource));
+      const relatedRuntimeSourceSummaryText = (sourceSummary = []) => (Array.isArray(sourceSummary) ? sourceSummary : [])
+        .map((item) => {
+          const source = String(item?.source || '').trim();
+          const count = Number(item?.count || 0);
+          if (!source || !Number.isFinite(count) || count <= 0) return '';
+          return count === 1 ? `Source ${source}` : `Source ${source} × ${count}`;
+        })
+        .filter(Boolean)
+        .join(' · ');
+      const managedDriftSummaryText = (summary = {}) => {
+        const counts = [
+          ['high', Number(summary.high || 0)],
+          ['medium', Number(summary.medium || 0)],
+          ['low', Number(summary.low || 0)],
+        ].filter(([, count]) => Number.isFinite(count) && count > 0);
+        return counts.length ? `Drift ${counts.map(([label, count]) => `${count} ${label}`).join(' · ')}` : '';
+      };
+      const resourceRelatedSummaryCueText = (summary) => [
+        'Retained summary',
+        relatedRuntimeSourceSummaryText(summary?.sourceSummary),
+        managedDriftSummaryText(summary?.managedDriftSummary),
+        String(summary?.newestEventTimestamp || '').trim(),
+      ].filter(Boolean).join(' · ');
+      const createApplicationResourceRelatedEventsCueFromCount = (deploymentName, resource, count, cueText) => {
+        if (!deploymentName || !resource?.type || !resource?.id || !Number.isFinite(count) || count <= 0) return null;
         const cue = createElement('div', 'detail-condition-meta application-resource-related-events-cue');
         const routeParams = { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id };
         cue.append(
-          createNavLink(buildPageSectionURL('resource', 'resource-related-runtime-events', routeParams), `Related events · ${relatedEvents.length}`, '_self'),
-          createElement('span', '', `Newest: ${relatedRuntimeEventNewestCue(relatedEvents[0])}`),
+          createNavLink(buildPageSectionURL('resource', 'resource-related-runtime-events', routeParams), `Related events · ${count}`, '_self'),
+          createElement('span', '', cueText),
         );
         return cue;
+      };
+      const createApplicationResourceRelatedEventsCue = (deploymentName, resource, result) => {
+        const relatedEvents = relatedRuntimeEventsForResource(result, resource);
+        if (!relatedEvents.length) return null;
+        return createApplicationResourceRelatedEventsCueFromCount(deploymentName, resource, relatedEvents.length, `Newest: ${relatedRuntimeEventNewestCue(relatedEvents[0])}`);
+      };
+      const createApplicationResourceRelatedEventsSummaryCue = (deploymentName, resource, detail) => {
+        const summary = resourceRelatedSummaryForResource(detail, resource);
+        const retainedEventCount = Number(summary?.retainedEventCount || 0);
+        return createApplicationResourceRelatedEventsCueFromCount(deploymentName, resource, retainedEventCount, resourceRelatedSummaryCueText(summary));
       };
       const refreshApplicationResourceRelatedEventCues = (deploymentName, result) => {
         const rows = document.querySelectorAll ? document.querySelectorAll('[data-application-resource-row="true"]') : [];
@@ -4525,6 +4561,9 @@
               if (cachedEvents?.status === 'ready') {
                 const cue = createApplicationResourceRelatedEventsCue(detail.name, resource, cachedEvents.result);
                 if (cue) relatedEventsCueSlot.append(cue);
+              } else {
+                const summaryCue = createApplicationResourceRelatedEventsSummaryCue(detail.name, resource, detail);
+                if (summaryCue) relatedEventsCueSlot.append(summaryCue);
               }
             }
             row.append(top, detailLinks, relatedEventsCueSlot);

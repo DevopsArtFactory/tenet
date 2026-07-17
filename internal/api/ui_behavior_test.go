@@ -4093,6 +4093,24 @@ func TestApplicationDetailPageWithNodeHarness(t *testing.T) {
 			"sync":         map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
 			"health":       map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy while rollout continues"},
 		},
+		"resourceRelatedEvents": []map[string]any{
+			{
+				"resourceType":         "ecsService",
+				"resourceName":         "payments-api-staging ECS Service",
+				"resourceDescription":  "Primary ECS service for the staging environment",
+				"retainedEventCount":   2,
+				"newestEventTimestamp": "2026-04-16T07:15:30Z",
+				"sourceSummary":        []map[string]any{{"source": "controller", "count": 2}},
+				"managedDriftSummary":  map[string]any{"total": 1, "high": 1, "medium": 0, "low": 0},
+			},
+			{
+				"resourceType":        "codeDeployApplication",
+				"resourceName":        "payments-api-staging CodeDeploy App",
+				"retainedEventCount":  0,
+				"sourceSummary":       []map[string]any{},
+				"managedDriftSummary": map[string]any{"total": 0, "high": 0, "medium": 0, "low": 0},
+			},
+		},
 		"rollout": map[string]any{
 			"execution": []map[string]any{
 				{"name": "payments-api-staging ECS Service", "resource": "ecsService", "description": "Primary ECS service for the staging environment"},
@@ -4164,19 +4182,20 @@ document.byID.set('toolbar', document.createElement('section'));
 document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const fetchCalls = [];
+let resolveEvents;
 const window = { location: { pathname: '/', search: '?page=application&deployment=payments-api-staging&q=payments&sync=OutOfSync&account=210987654321', hash: '' } };
 const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (url === '/v1/overview/deployments/payments-api-staging/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({
+  if (url === '/v1/overview/deployments/payments-api-staging/events?limit=10') return new Promise((resolve) => { resolveEvents = () => resolve({ ok: true, json: () => Promise.resolve({
     deploymentName: 'payments-api-staging',
     events: [
       { eventId: 'evt-ecs-service', timestamp: '2026-04-16T07:16:00Z', source: 'controller', summary: 'ECS service rollout progressed', resourceRefs: [{ resourceType: 'ecsService', resourceName: 'payments-api-staging ECS Service', source: 'rollout_execution', context: 'service traffic shifted' }] },
       { eventId: 'evt-listener', timestamp: '2026-04-16T07:14:00Z', source: 'managed_drift', summary: 'Listener drift detected', managedDrift: [{ field: 'traffic.listener.rule', severity: 'medium', resourceRef: { resourceType: 'productionListener', resourceName: 'prod listener' } }] },
     ],
     resultScope: { returnedEventCount: 2, totalEventCount: 2, retainedEventCount: 2 },
-  }) });
+  }) }); });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -4186,11 +4205,18 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging/events?limit=10') throw new Error('expected application page to load application detail plus deployment events');
+  let accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  if (!accountsText.includes('Related events · 2')) throw new Error('expected application resource row to seed related-events cue from detail resourceRelatedEvents summary before events resolve');
+  if (!accountsText.includes('Retained summary · Source controller × 2 · Drift 1 high · 2026-04-16T07:15:30Z')) throw new Error('expected summary-backed related-events cue before events resolve: ' + accountsText);
+  if (!resolveEvents) throw new Error('expected delayed deployment events request');
+  resolveEvents();
+  await settle();
+  await settle();
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
-  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
-  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging/events?limit=10') throw new Error('expected application page to load application detail plus deployment events');
   if (!toolbarText.includes('Back to applications')) throw new Error('expected application page back link');
   if (!summaryText.includes('payments-api-staging')) throw new Error('expected application summary title');
   if (!accountsText.includes('Application resources')) throw new Error('expected application resources heading');
