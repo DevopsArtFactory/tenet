@@ -713,6 +713,7 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 		"`lookupContext`",
 		"`unavailableReason`",
 		"`resultScope`",
+		"`source` (stable API token; the embedded UI translates known values such as `aws_ecs`, `aws_cloudwatch_logs`, and `rollout_execution_summary` into operator-friendly labels)",
 		"Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating",
 		"`Tenet request ID` metadata in the Live inspection card",
 		"Unavailable reason operator actions",
@@ -739,6 +740,7 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 	}
 
 	for _, fragment := range []string{
+		"`source` (stable API token; embedded UI evidence panels translate known values such as `aws_cloudwatch_logs`, `cloudwatch`, `ecs_service`, and `ec2_console` into operator-friendly labels)",
 		"optional `clusterArn` when an ECS service/task recent-log request supplied an accepted cluster selector",
 		"Tenet validates and echoes that selector just like `ecsService`",
 	} {
