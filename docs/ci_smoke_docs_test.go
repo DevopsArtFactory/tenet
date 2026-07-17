@@ -1552,6 +1552,34 @@ func TestOverviewDashboardDocumentsRuntimeRetentionAndLatestRuntimeCueGuard(t *t
 	}
 }
 
+func TestOverviewDashboardNearTermRoadmapTracksCurrentOperatorGaps(t *testing.T) {
+	overviewText := readTextFile(t, "features/overview-dashboard.md")
+	section := markdownSection(t, overviewText, "## Near-term next steps")
+
+	for _, fragment := range []string{
+		"Already-shipped dashboard surfaces should not be reopened as generic roadmap items",
+		"controller runtime-event timelines, resource-scoped event navigation, account/group runtime-event cues, and local-safe apply/executor metadata are current operator surfaces",
+		"render backend-authored `managedDriftSourceCoverage[]` in the drift workspace",
+		"keep future drift-source coverage wording tied to backend evidence rather than inventing UI-only drift telemetry",
+		"real CodeDeploy, ECS, ALB, ASG, or EC2 mutation execution remains a separate future live-AWS executor lane",
+	} {
+		if !strings.Contains(section, fragment) {
+			t.Fatalf("expected near-term roadmap to include current operator gap %q", fragment)
+		}
+	}
+
+	for _, stale := range []string{
+		"richer runtime history navigation and event timelines",
+		"real AWS mutation execution from reviewed plan/apply operations",
+		"account/group summary sparklines or event cues",
+		"deeper drift diagnostics once the backend exposes richer live drift sources beyond the current derived read model",
+	} {
+		if strings.Contains(section, stale) {
+			t.Fatalf("expected near-term roadmap not to reopen shipped or superseded work %q", stale)
+		}
+	}
+}
+
 func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditChips(t *testing.T) {
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
 	readmeText := readTextFile(t, "../README.md")
