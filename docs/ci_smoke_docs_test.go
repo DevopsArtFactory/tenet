@@ -1580,6 +1580,23 @@ func TestOverviewDashboardNearTermRoadmapTracksCurrentOperatorGaps(t *testing.T)
 	}
 }
 
+func TestOverviewDashboardDocumentsDriftSourceCoveragePanel(t *testing.T) {
+	overviewText := readTextFile(t, "features/overview-dashboard.md")
+	section := markdownSection(t, overviewText, "### Drift workspace")
+
+	for _, fragment := range []string{
+		"renders a compact `Drift source coverage` panel from backend-authored `managedDriftSourceCoverage[]` entries",
+		"reported rows, checked-but-empty evidence, unsupported bindings, or unavailable coverage",
+		"before scanning the field-level table",
+		"prefers backend-authored additive `managedDrift[]` rows",
+		"falls back to the existing client-derived artifact/generation/runtime-intent comparisons for older payloads",
+	} {
+		if !strings.Contains(section, fragment) {
+			t.Fatalf("expected drift workspace docs to describe drift source coverage panel contract %q", fragment)
+		}
+	}
+}
+
 func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditChips(t *testing.T) {
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
 	readmeText := readTextFile(t, "../README.md")
