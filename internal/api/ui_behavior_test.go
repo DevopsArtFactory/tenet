@@ -8733,17 +8733,21 @@ async function settle(count = 1) { for (let i = 0; i < count; i += 1) { await Pr
 const resourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
 const deploymentURL = '/v1/overview/deployments/payments-api-staging';
 const eventsURL = '/v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10';
+const eventsURL20 = '/v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=20';
+const eventsURL20Controller = '/v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=20&source=controller';
 const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service';
 const inspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10';
 const initialSearch = '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID);
 const fetchCalls = [];
 let eventsFetchCount = 0;
+let eventsWindowFetchCount = 0;
+let eventsSourceFetchCount = 0;
 let logsFetchCount = 0;
 let inspectionFetchCount = 0;
 let resolveInitialEvents;
 let resolveInitialLogs;
 let resolveInitialInspection;
-let resolveRefreshEvents;
+let resolveSourceRefreshEvents;
 let resolveRefreshLogs;
 let resolveRefreshInspection;
 const window = { location: { pathname: '/', search: initialSearch, hash: '' } };
@@ -8754,9 +8758,26 @@ const fetch = (url) => {
   if (url === eventsURL) {
     eventsFetchCount += 1;
     if (eventsFetchCount === 1) return new Promise((resolve) => { resolveInitialEvents = resolve; });
-    if (eventsFetchCount === 2) return new Promise((resolve) => { resolveRefreshEvents = resolve; });
-    if (eventsFetchCount === 3) return Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({ error: 'deployment access denied' }) });
-    throw new Error('unexpected events fetch count: ' + eventsFetchCount);
+    throw new Error('unexpected default events fetch count: ' + eventsFetchCount);
+  }
+  if (url === eventsURL20) {
+    eventsWindowFetchCount += 1;
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      deploymentName: 'payments-api-staging',
+      resultScope: { requestedLimit: 20, effectiveLimit: 20, returnedEventCount: 0, totalEventCount: 2, retainedEventCount: 3, resourceFilter: { resourceType: 'ecsService', resourceName: 'payments-api-staging-service' } },
+      events: [],
+    }) });
+  }
+  if (url === eventsURL20Controller) {
+    eventsSourceFetchCount += 1;
+    if (eventsSourceFetchCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      deploymentName: 'payments-api-staging',
+      resultScope: { requestedLimit: 20, effectiveLimit: 20, returnedEventCount: 0, totalEventCount: 2, retainedEventCount: 3, sourceFilter: 'controller', resourceFilter: { resourceType: 'ecsService', resourceName: 'payments-api-staging-service' } },
+      events: [],
+    }) });
+    if (eventsSourceFetchCount === 2) return new Promise((resolve) => { resolveSourceRefreshEvents = resolve; });
+    if (eventsSourceFetchCount === 3) return Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({ error: 'deployment access denied' }) });
+    throw new Error('unexpected source-filtered events fetch count: ' + eventsSourceFetchCount);
   }
   if (url === logsURL) {
     logsFetchCount += 1;
@@ -8830,6 +8851,36 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   assertStatusRegion(failedInspectionStatus, 'Live inspection error state');
   if (!text.match(/Evidence freshness \| Recent logs refreshed .+ · Live inspection not refreshed yet/)) throw new Error('expected troubleshooting summary to surface only completed evidence freshness after initial reads: ' + text);
 
+  let selects = collectNodes(root, (node) => node.tagName === 'SELECT');
+  let eventWindowSelect = selects.find((node) => node.dataset.toolbarField === 'Related event window');
+  let eventSourceSelect = selects.find((node) => node.dataset.toolbarField === 'Related event source');
+  if (!eventWindowSelect || !eventSourceSelect) throw new Error('expected related-events source and window controls');
+  eventWindowSelect.value = '20';
+  eventWindowSelect.dispatch('change');
+  await settle(3);
+  text = collectText(root).join(' | ');
+  if (eventsWindowFetchCount !== 1) throw new Error('expected event-window change to fetch the 20-event resource route once');
+  if (!text.includes('latest 20-event resource-filtered window')) throw new Error('expected event-window change to update related-events empty copy: ' + text);
+  if (window.location.search !== initialSearch) throw new Error('expected event-window change to preserve bookmarkable resource URL');
+  if (logsFetchCount !== 1 || inspectionFetchCount !== 1) throw new Error('expected event-window change not to refetch sibling resource panels');
+
+  selects = collectNodes(root, (node) => node.tagName === 'SELECT');
+  eventSourceSelect = selects.find((node) => node.dataset.toolbarField === 'Related event source');
+  if (!eventSourceSelect) throw new Error('expected related event source control after window rerender');
+  eventSourceSelect.value = 'controller';
+  eventSourceSelect.dispatch('change');
+  await settle(3);
+  text = collectText(root).join(' | ');
+  if (eventsSourceFetchCount !== 1) throw new Error('expected source change to fetch the source-filtered resource route once');
+  if (!text.includes('source filter "controller"')) throw new Error('expected source-filtered empty copy after related event source change: ' + text);
+  const filteredCopyButton = collectNodes(root, (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Copy related events route');
+  if (!filteredCopyButton || filteredCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=20&source=controller') throw new Error('expected copied related-events route to include source and window selectors');
+  if (window.location.search !== initialSearch) throw new Error('expected event-source change to preserve bookmarkable resource URL');
+  if (logsFetchCount !== 1 || inspectionFetchCount !== 1) throw new Error('expected event-source change not to refetch sibling resource panels');
+
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshEvents = buttons.find((node) => node.textContent === 'Refresh related events');
+  if (!refreshEvents || refreshEvents.disabled) throw new Error('expected related-events refresh button enabled after source filter change');
   refreshEvents.dispatch('click');
   await settle(1);
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
@@ -8841,17 +8892,17 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (refreshLogs.disabled || refreshInspection.disabled) throw new Error('expected sibling resource panel refreshes to stay enabled during related-events refresh');
   const refreshingEventsStatus = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('detail-state')).find((node) => node.textContent === 'Loading related runtime events…');
   assertStatusRegion(refreshingEventsStatus, 'Related runtime events refresh loading state');
-  if (eventsFetchCount !== 2) throw new Error('expected related-events refresh to bypass cached ready state');
+  if (eventsSourceFetchCount !== 2) throw new Error('expected related-events refresh to bypass cached source-filtered ready state');
   if (window.location.search !== initialSearch) throw new Error('expected related-events refresh to preserve bookmarkable URL');
 
-  resolveRefreshEvents({ ok: true, json: () => Promise.resolve({
+  resolveSourceRefreshEvents({ ok: true, json: () => Promise.resolve({
     deploymentName: 'payments-api-staging',
-    resultScope: { requestedLimit: 10, effectiveLimit: 10, returnedEventCount: 0, totalEventCount: 0, retainedEventCount: 3, resourceFilter: { resourceType: 'ecsService', resourceName: 'payments-api-staging-service' } },
+    resultScope: { requestedLimit: 20, effectiveLimit: 20, returnedEventCount: 0, totalEventCount: 2, retainedEventCount: 3, sourceFilter: 'controller', resourceFilter: { resourceType: 'ecsService', resourceName: 'payments-api-staging-service' } },
     events: [],
   }) });
   await settle(3);
   text = collectText(root).join(' | ');
-  if (!text.includes('No retained runtime events mention payments-api-staging-service in the latest 10-event resource-filtered window.')) throw new Error('expected filtered-empty related runtime events copy after refresh: ' + text);
+  if (!text.includes('No retained runtime events mention payments-api-staging-service for source filter "controller" in the latest 20-event resource-filtered window.')) throw new Error('expected source-filtered empty related runtime events copy after refresh: ' + text);
   if (text.includes('Initial related runtime event')) throw new Error('expected related-events refresh to replace stale payload');
 
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
@@ -8861,7 +8912,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle(3);
   text = collectText(root).join(' | ');
   if (!text.includes('Operator access denied')) throw new Error('expected shared 403 operator-read guidance for related events refresh');
-  if (!text.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10 after recognizing the caller')) throw new Error('expected related events 403 guidance to name the filtered events route');
+  if (!text.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=20&source=controller after recognizing the caller')) throw new Error('expected related events 403 guidance to name the source-filtered events route');
   if (window.location.search !== initialSearch) throw new Error('expected denied related-events refresh to preserve bookmarkable URL');
 
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
@@ -8939,7 +8990,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Inspection path · ap-northeast-2 · account 210987654321 · same-account lookup · observer role configured')) throw new Error('expected live inspection provider lookup context summary');
   if (text.includes('Failed to load live inspection: resource inspection request failed (503)')) throw new Error('expected refreshed live inspection payload to replace stale error state');
   if (fetchCalls.filter((url) => url === deploymentURL).length !== 1) throw new Error('expected in-place refresh controls not to reload deployment detail');
-  if (fetchCalls.filter((url) => url === eventsURL).length !== 3) throw new Error('expected exactly three related-events fetches');
+  if (fetchCalls.filter((url) => url === eventsURL).length !== 1) throw new Error('expected exactly one default related-events fetch');
+  if (fetchCalls.filter((url) => url === eventsURL20).length !== 1) throw new Error('expected exactly one window-adjusted related-events fetch');
+  if (fetchCalls.filter((url) => url === eventsURL20Controller).length !== 3) throw new Error('expected exactly three source-filtered related-events fetches');
   if (fetchCalls.filter((url) => url === logsURL).length !== 2) throw new Error('expected exactly two recent-logs fetches');
   if (fetchCalls.filter((url) => url === inspectionURL).length !== 2) throw new Error('expected exactly two live-inspection fetches');
   if (window.location.search !== initialSearch) throw new Error('expected bookmarkable URL to remain unchanged after both refreshes');

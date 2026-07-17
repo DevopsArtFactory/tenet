@@ -228,6 +228,8 @@
       const detailStateByDeployment = new Map();
       const deploymentEventsStateByDeployment = new Map();
       const resourceEventsStateByResource = new Map();
+      const resourceEventsLimitByResourceKey = new Map();
+      const resourceEventsSourceByResourceKey = new Map();
       const resourceLogStateByKey = new Map();
       const resourceLogLimitByResourceKey = new Map();
       const resourceInspectionLimitByResourceKey = new Map();
@@ -7550,14 +7552,17 @@
         return `${route}?${params.toString()}`;
       };
       const deploymentEventsReadRoute = (deploymentName, limit = currentPageState.eventLimit, source = currentPageState.eventSource) => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit, source })}`;
-      const resourceEventsReadRoute = (deploymentName, resource, limit = defaultDeploymentEventsLimit) => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit, resourceType: resource?.type || '', resourceName: resource?.name || '' })}`;
+      const resourceEventsReadRoute = (deploymentName, resource, limit = defaultDeploymentEventsLimit, source = '') => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit, source, resourceType: resource?.type || '', resourceName: resource?.name || '' })}`;
       const deploymentEventsCacheKey = (deploymentName, limit = currentPageState.eventLimit, source = currentPageState.eventSource) => `${deploymentName || ''}::limit=${normalizeDeploymentEventsLimit(limit)}::source=${normalizeDeploymentEventsSource(source) || 'all'}`;
-      const resourceEventsCacheKey = (deploymentName, resource, limit = defaultDeploymentEventsLimit) => `${deploymentName || ''}::${resource?.type || ''}::${resource?.name || ''}::limit=${normalizeDeploymentEventsLimit(limit)}`;
+      const resourceEventsBaseKey = (deploymentName, resource) => `${deploymentName || ''}::${resource?.type || ''}::${resource?.name || ''}`;
+      const resourceEventsCacheKey = (deploymentName, resource, limit = defaultDeploymentEventsLimit, source = '') => `${resourceEventsBaseKey(deploymentName, resource)}::limit=${normalizeDeploymentEventsLimit(limit)}::source=${normalizeDeploymentEventsSource(source) || 'all'}`;
+      const selectedResourceEventsLimit = (deploymentName, resource, explicitLimit = null) => normalizeDeploymentEventsLimit(explicitLimit ?? resourceEventsLimitByResourceKey.get(resourceEventsBaseKey(deploymentName, resource)) ?? defaultDeploymentEventsLimit);
+      const selectedResourceEventsSource = (deploymentName, resource, explicitSource = null) => normalizeDeploymentEventsSource(explicitSource ?? resourceEventsSourceByResourceKey.get(resourceEventsBaseKey(deploymentName, resource)) ?? '');
       const fetchDeploymentEvents = (deploymentName, limit = currentPageState.eventLimit, source = currentPageState.eventSource) => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName, { limit, source }), {
         unavailable: 'deployment events unavailable',
         failure: 'deployment events request failed',
       });
-      const fetchResourceRelatedEvents = (deploymentName, resource, limit = defaultDeploymentEventsLimit) => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName, { limit, resourceType: resource?.type || '', resourceName: resource?.name || '' }), {
+      const fetchResourceRelatedEvents = (deploymentName, resource, limit = defaultDeploymentEventsLimit, source = '') => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName, { limit, source, resourceType: resource?.type || '', resourceName: resource?.name || '' }), {
         unavailable: 'related runtime events unavailable',
         failure: 'related runtime events request failed',
       });
@@ -7870,21 +7875,45 @@
         }
         return actions;
       };
-      const createResourceRelatedEventsIntro = (deploymentName, resource, limit = defaultDeploymentEventsLimit) => createElement('div', 'detail-section-copy', `Controller-derived runtime events that mention ${textOrDash(resource?.name)} from ${resourceEventsReadRoute(deploymentName || '{deploymentName}', resource || { type: '{selectedType}', name: '{selectedName}' }, limit)}. This resource-depth panel is refresh-based and does not poll; it keeps the bookmarkable resource URL unchanged.`);
-      const createResourceRelatedEventsActions = (section, deploymentName, resource, isLoading = false, result = null, limit = defaultDeploymentEventsLimit) => [
+      const createResourceRelatedEventsIntro = (deploymentName, resource, limit = defaultDeploymentEventsLimit, source = '') => createElement('div', 'detail-section-copy', `Controller-derived runtime events that mention ${textOrDash(resource?.name)} from ${resourceEventsReadRoute(deploymentName || '{deploymentName}', resource || { type: '{selectedType}', name: '{selectedName}' }, limit, source)}. Use Related event source and Related event window to narrow the resource-filtered read without changing the bookmarkable resource URL; this resource-depth panel is refresh-based and does not poll.`);
+      const createResourceRelatedEventsLimitControl = (section, deploymentName, resource, isLoading = false, limit = defaultDeploymentEventsLimit, source = '') => createSelect(
+        'Related event window',
+        String(normalizeDeploymentEventsLimit(limit)),
+        deploymentEventsLimitOptions,
+        (event) => {
+          const nextLimit = normalizeDeploymentEventsLimit(event.target.value);
+          resourceEventsLimitByResourceKey.set(resourceEventsBaseKey(deploymentName, resource), nextLimit);
+          renderResourceRelatedEventsSection(section, deploymentName, resource, { force: true, limit: nextLimit, source }).catch(() => {});
+        },
+        { disabled: isLoading || !deploymentName || !resource?.type || !resource?.name },
+      );
+      const createResourceRelatedEventsSourceControl = (section, deploymentName, resource, isLoading = false, limit = defaultDeploymentEventsLimit, source = '') => createSelect(
+        'Related event source',
+        normalizeDeploymentEventsSource(source),
+        deploymentEventsSourceSelectOptions(source),
+        (event) => {
+          const nextSource = normalizeDeploymentEventsSource(event.target.value);
+          resourceEventsSourceByResourceKey.set(resourceEventsBaseKey(deploymentName, resource), nextSource);
+          renderResourceRelatedEventsSection(section, deploymentName, resource, { force: true, limit, source: nextSource }).catch(() => {});
+        },
+        { disabled: isLoading || !deploymentName || !resource?.type || !resource?.name },
+      );
+      const createResourceRelatedEventsActions = (section, deploymentName, resource, isLoading = false, result = null, limit = defaultDeploymentEventsLimit, source = '') => [
+        createResourceRelatedEventsLimitControl(section, deploymentName, resource, isLoading, limit, source),
+        createResourceRelatedEventsSourceControl(section, deploymentName, resource, isLoading, limit, source),
         createRefreshButton(
           'Refresh related events',
           isLoading || !deploymentName || !resource?.type || !resource?.name,
-          () => renderResourceRelatedEventsSection(section, deploymentName, resource, { force: true, limit }).catch(() => {}),
+          () => renderResourceRelatedEventsSection(section, deploymentName, resource, { force: true, limit, source }).catch(() => {}),
         ),
         createCopyReadRouteButton(
-          resourceEventsReadRoute(deploymentName, resource, limit),
+          resourceEventsReadRoute(deploymentName, resource, limit, source),
           'Copy related events route',
         ),
       ];
-      const renderResourceRelatedEventsState = (section, deploymentName, resource, text, className = '', detailText = '', isLoading = false, limit = defaultDeploymentEventsLimit) => {
-        const heading = createDetailSectionHeader('Related runtime events', createResourceRelatedEventsActions(section, deploymentName, resource, isLoading, null, limit));
-        const intro = createResourceRelatedEventsIntro(deploymentName, resource, limit);
+      const renderResourceRelatedEventsState = (section, deploymentName, resource, text, className = '', detailText = '', isLoading = false, limit = defaultDeploymentEventsLimit, source = '') => {
+        const heading = createDetailSectionHeader('Related runtime events', createResourceRelatedEventsActions(section, deploymentName, resource, isLoading, null, limit, source));
+        const intro = createResourceRelatedEventsIntro(deploymentName, resource, limit, source);
         const stateNode = createElement('div', 'detail-state', text);
         markPoliteStatusNode(stateNode);
         if (className) stateNode.classList.add(className);
@@ -7894,7 +7923,11 @@
         }
         section.replaceChildren(heading, intro, stateNode);
       };
-      const resourceRelatedEventsEmptyStateText = (resource, result, selectedLimit) => {
+      const resourceRelatedEventsEmptyStateText = (resource, result, selectedLimit, selectedSource = '') => {
+        const source = normalizeDeploymentEventsSource(selectedSource || result?.resultScope?.sourceFilter || '');
+        if (source) {
+          return `No retained runtime events mention ${textOrDash(resource?.name)} for source filter "${source}" in the latest ${selectedLimit}-event resource-filtered window. Clear Related event source, increase Related event window, or refresh before treating resource controller history as absent.`;
+        }
         const scope = result?.resultScope || {};
         const retainedCount = Number(scope.retainedEventCount ?? result?.retention?.retainedEventCount);
         if (Number.isFinite(retainedCount) && retainedCount === 0) {
@@ -7902,20 +7935,22 @@
         }
         return `No retained runtime events mention ${textOrDash(resource?.name)} in the latest ${selectedLimit}-event resource-filtered window. Refresh related events or inspect the application-level runtime events before treating controller history as absent.`;
       };
-      const renderResourceRelatedEventsPayload = (section, deploymentName, resource, result, limit = defaultDeploymentEventsLimit) => {
+      const renderResourceRelatedEventsPayload = (section, deploymentName, resource, result, limit = defaultDeploymentEventsLimit, source = '') => {
         const selectedLimit = normalizeDeploymentEventsLimit(limit);
+        const selectedSource = selectedResourceEventsSource(deploymentName, resource, source || result?.resultScope?.sourceFilter || '');
         const events = sortTimelineEvents(result?.events || []);
         const scopeSummary = createDeploymentEventsResultScopeSummary(result);
         const freshnessMeta = createDeploymentEventsFreshnessMeta(result);
-        const heading = createDetailSectionHeader('Related runtime events', createResourceRelatedEventsActions(section, deploymentName, resource, false, result, selectedLimit));
-        const intro = createResourceRelatedEventsIntro(deploymentName, resource, selectedLimit);
+        const heading = createDetailSectionHeader('Related runtime events', createResourceRelatedEventsActions(section, deploymentName, resource, false, result, selectedLimit, selectedSource));
+        const intro = createResourceRelatedEventsIntro(deploymentName, resource, selectedLimit, selectedSource);
         if (!events.length) {
-          const stateNode = createElement('div', 'detail-state', resourceRelatedEventsEmptyStateText(resource, result, selectedLimit));
+          const stateNode = createElement('div', 'detail-state', resourceRelatedEventsEmptyStateText(resource, result, selectedLimit, selectedSource));
           markPoliteStatusNode(stateNode);
           section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), stateNode);
           return;
         }
-        const ordering = createElement('div', 'detail-condition-meta', `${events.length} related runtime event${events.length === 1 ? '' : 's'} in latest ${selectedLimit}-event resource-filtered window · newest controller event first`);
+        const sourceText = selectedSource ? ` · source ${selectedSource}` : '';
+        const ordering = createElement('div', 'detail-condition-meta', `${events.length} related runtime event${events.length === 1 ? '' : 's'} in latest ${selectedLimit}-event resource-filtered window${sourceText} · newest controller event first`);
         const eventList = createElement('ol', 'detail-list');
         const seenEventAnchors = new Map();
         events.forEach((event) => {
@@ -7956,40 +7991,44 @@
       };
       const renderResourceRelatedEventsSection = (section, deploymentName, resource, options = {}) => {
         const force = Boolean(options?.force);
-        const limit = normalizeDeploymentEventsLimit(options?.limit ?? defaultDeploymentEventsLimit);
-        const cacheKey = resourceEventsCacheKey(deploymentName, resource, limit);
+        const limit = selectedResourceEventsLimit(deploymentName, resource, options?.limit);
+        const source = selectedResourceEventsSource(deploymentName, resource, options?.source);
+        const baseKey = resourceEventsBaseKey(deploymentName, resource);
+        resourceEventsLimitByResourceKey.set(baseKey, limit);
+        resourceEventsSourceByResourceKey.set(baseKey, source);
+        const cacheKey = resourceEventsCacheKey(deploymentName, resource, limit, source);
         const cached = resourceEventsStateByResource.get(cacheKey);
         if (!deploymentName || !resource?.type || !resource?.name) {
-          renderResourceRelatedEventsState(section, deploymentName, resource, 'Related runtime events are currently unavailable.', 'error', 'Resource detail is missing deployment, resource type, or resource name for GET /v1/overview/deployments/{deploymentName}/events?resourceType={selectedType}&resourceName={selectedName}.', false, limit);
+          renderResourceRelatedEventsState(section, deploymentName, resource, 'Related runtime events are currently unavailable.', 'error', 'Resource detail is missing deployment, resource type, or resource name for GET /v1/overview/deployments/{deploymentName}/events?resourceType={selectedType}&resourceName={selectedName}.', false, limit, source);
           return Promise.resolve(null);
         }
         if (!force && cached?.status === 'ready') {
-          renderResourceRelatedEventsPayload(section, deploymentName, resource, cached.result, limit);
+          renderResourceRelatedEventsPayload(section, deploymentName, resource, cached.result, limit, source);
           return Promise.resolve(cached.result);
         }
         if (cached?.status === 'loading') {
           resourceEventsStateByResource.set(cacheKey, { ...cached, sections: [...(cached.sections || []), section] });
-          renderResourceRelatedEventsState(section, deploymentName, resource, 'Loading related runtime events…', '', '', true, limit);
+          renderResourceRelatedEventsState(section, deploymentName, resource, 'Loading related runtime events…', '', '', true, limit, source);
           return cached.promise;
         }
         if (!force && cached?.status === 'error') {
           if (cached.error?.kind === 'unavailable') {
-            renderResourceRelatedEventsState(section, deploymentName, resource, 'Related runtime events are currently unavailable.', 'error', cached.error.message, false, limit);
-          } else if (renderOperatorReadFailurePanel(section, 'Related runtime events', createResourceRelatedEventsActions(section, deploymentName, resource, false, null, limit), resourceEventsReadRoute(deploymentName, resource, limit), cached.error)) {
+            renderResourceRelatedEventsState(section, deploymentName, resource, 'Related runtime events are currently unavailable.', 'error', cached.error.message, false, limit, source);
+          } else if (renderOperatorReadFailurePanel(section, 'Related runtime events', createResourceRelatedEventsActions(section, deploymentName, resource, false, null, limit, source), resourceEventsReadRoute(deploymentName, resource, limit, source), cached.error)) {
             return Promise.reject(cached.error);
           } else {
-            renderResourceRelatedEventsState(section, deploymentName, resource, `Failed to load related runtime events: ${cached.error?.message || 'unknown error'}`, 'error', '', false, limit);
+            renderResourceRelatedEventsState(section, deploymentName, resource, `Failed to load related runtime events: ${cached.error?.message || 'unknown error'}`, 'error', '', false, limit, source);
           }
           return Promise.reject(cached.error);
         }
-        renderResourceRelatedEventsState(section, deploymentName, resource, 'Loading related runtime events…', '', '', true, limit);
+        renderResourceRelatedEventsState(section, deploymentName, resource, 'Loading related runtime events…', '', '', true, limit, source);
         const promise = Promise.resolve()
-          .then(() => fetchResourceRelatedEvents(deploymentName, resource, limit))
+          .then(() => fetchResourceRelatedEvents(deploymentName, resource, limit, source))
           .then((rawResult) => {
             const result = withDeploymentEventsFetchedAt(rawResult);
             const current = resourceEventsStateByResource.get(cacheKey);
             resourceEventsStateByResource.set(cacheKey, { status: 'ready', result });
-            (current?.sections || []).forEach((container) => renderResourceRelatedEventsPayload(container, deploymentName, resource, result, limit));
+            (current?.sections || []).forEach((container) => renderResourceRelatedEventsPayload(container, deploymentName, resource, result, limit, source));
             return result;
           })
           .catch((error) => {
@@ -7997,11 +8036,11 @@
             resourceEventsStateByResource.set(cacheKey, { status: 'error', error });
             (current?.sections || []).forEach((container) => {
               if (error?.kind === 'unavailable') {
-                renderResourceRelatedEventsState(container, deploymentName, resource, 'Related runtime events are currently unavailable.', 'error', error.message, false, limit);
+                renderResourceRelatedEventsState(container, deploymentName, resource, 'Related runtime events are currently unavailable.', 'error', error.message, false, limit, source);
                 return;
               }
-              if (renderOperatorReadFailurePanel(container, 'Related runtime events', createResourceRelatedEventsActions(container, deploymentName, resource, false, null, limit), resourceEventsReadRoute(deploymentName, resource, limit), error)) return;
-              renderResourceRelatedEventsState(container, deploymentName, resource, `Failed to load related runtime events: ${error.message}`, 'error', '', false, limit);
+              if (renderOperatorReadFailurePanel(container, 'Related runtime events', createResourceRelatedEventsActions(container, deploymentName, resource, false, null, limit, source), resourceEventsReadRoute(deploymentName, resource, limit, source), error)) return;
+              renderResourceRelatedEventsState(container, deploymentName, resource, `Failed to load related runtime events: ${error.message}`, 'error', '', false, limit, source);
             });
             throw error;
           });

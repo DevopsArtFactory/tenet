@@ -908,9 +908,12 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"pushResourceSection(conditionsSection, 'resource-status-conditions', 'Conditions');",
 		"pushResourceSection(inspectionSection, 'resource-live-inspection', 'Live inspection');",
 		"pushResourceSection(relatedEventsSection, 'resource-related-runtime-events', 'Related runtime events');",
-		"const resourceEventsReadRoute = (deploymentName, resource, limit = defaultDeploymentEventsLimit) => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit, resourceType: resource?.type || '', resourceName: resource?.name || '' })}`;",
+		"const resourceEventsReadRoute = (deploymentName, resource, limit = defaultDeploymentEventsLimit, source = '') => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit, source, resourceType: resource?.type || '', resourceName: resource?.name || '' })}`;",
 		"renderResourceRelatedEventsSection(relatedEventsSection, deploymentName, resource).catch(() => {});",
 		"Copy related events route",
+		"Related event window",
+		"Related event source",
+		"resourceEventsSourceByResourceKey",
 		"const ecsServiceEventAnchorID = (event, index = 0) => {",
 		"const eventID = String(event?.eventId || '').trim();",
 		"if (eventID) return `ecs-service-event-${sectionIDSegment(eventID, 'unknown')}`;",
@@ -3314,9 +3317,12 @@ func TestSmokeScriptsLockApplicationsOverviewInitialLoadingCopy(t *testing.T) {
 func TestSmokeScriptsLockResourceRelatedEventsShell(t *testing.T) {
 	fragments := []string{
 		"pushResourceSection(relatedEventsSection, 'resource-related-runtime-events', 'Related runtime events');",
-		"const resourceEventsReadRoute = (deploymentName, resource, limit = defaultDeploymentEventsLimit) => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit, resourceType: resource?.type || '', resourceName: resource?.name || '' })}`;",
+		"const resourceEventsReadRoute = (deploymentName, resource, limit = defaultDeploymentEventsLimit, source = '') => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit, source, resourceType: resource?.type || '', resourceName: resource?.name || '' })}`;",
 		"renderResourceRelatedEventsSection(relatedEventsSection, deploymentName, resource).catch(() => {});",
 		"Copy related events route",
+		"Related event window",
+		"Related event source",
+		"resourceEventsSourceByResourceKey",
 	}
 
 	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {

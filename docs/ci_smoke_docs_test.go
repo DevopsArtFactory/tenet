@@ -598,13 +598,14 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 func TestOperatorTroubleshootingCallsOutRelatedRuntimeEvents(t *testing.T) {
 	runbookText := readTextFile(t, "runbooks/operator-troubleshooting.md")
 	for _, fragment := range []string{
-		"| Related runtime events | `#resource-related-runtime-events` | `GET /v1/overview/deployments/{deploymentName}/events?resourceType={type}&resourceName={name}` |",
+		"| Related runtime events | `#resource-related-runtime-events` | `GET /v1/overview/deployments/{deploymentName}/events?resourceType={type}&resourceName={name}[&limit={n}][&source={source}]` |",
 		"additive generic `events[].resourceRefs[]` rollout/execution references",
 		"managedDrift[].resourceRef",
 		"managedDrift[].source.resourceType/resourceName",
 		"controller history filtered by retained resource evidence; not Recent logs, Live inspection, or immutable audit evidence",
 		"no matching rollout, drift, or resource evidence",
-		"curl -i \"$TENET_API_BASE/v1/overview/deployments/{deploymentName}/events?resourceType={type}&resourceName={name}&limit=10\"",
+		"source mix, and the selected event window",
+		"curl -i \"$TENET_API_BASE/v1/overview/deployments/{deploymentName}/events?resourceType={type}&resourceName={name}&limit=10&source=controller\"",
 	} {
 		if !strings.Contains(runbookText, fragment) {
 			t.Fatalf("expected operator troubleshooting runbook to include resource-events fragment %q", fragment)
