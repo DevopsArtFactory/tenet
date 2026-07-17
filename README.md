@@ -190,6 +190,7 @@ Common bookmarkable routes:
 - `/?page=audit` and `/?page=applies`
 Primary operator APIs:
 - `GET /v1/overview/applications`
+- `GET /v1/overview/applications/{deploymentName}`; application-detail `rollout.execution[]` rows include additive `evidenceCapabilities` route hints for live inspection, recent logs, and related runtime events when Tenet knows a safe lazy evidence route. These hints do not perform live AWS/log reads and do not claim provider data is currently available; the linked evidence routes remain authoritative for `available`, `source`, `unavailableReason`, and empty states.
 - `GET /v1/overview/deployments/{deploymentName}`
 - `GET /v1/status/deployments` and `GET /v1/status/deployments/{deploymentName}` for raw persisted runtime snapshots
 - `GET /v1/overview/deployments/{deploymentName}/events` (or `GET /v1/overview/deployments/{deploymentName}/events?source={source}&limit={positiveInteger}` for exact source-filtered, bounded controller-history reads)

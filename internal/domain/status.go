@@ -92,11 +92,30 @@ type RolloutStepSummary struct {
 	Status  RolloutStepStatus `json:"status,omitempty"`
 }
 
+// ResourceEvidenceCapabilityRoute describes one route the UI can offer for a
+// rollout resource without performing the read while building application detail.
+type ResourceEvidenceCapabilityRoute struct {
+	Route string `json:"route"`
+}
+
+// ResourceEvidenceCapabilities summarizes which troubleshooting evidence
+// surfaces are expected to be meaningful for a rollout resource. These are
+// route/capability hints, not live AWS availability results.
+type ResourceEvidenceCapabilities struct {
+	LiveInspectionSupported       bool                             `json:"liveInspectionSupported"`
+	LiveInspectionRoute           *ResourceEvidenceCapabilityRoute `json:"liveInspectionRoute,omitempty"`
+	RecentLogsSupported           bool                             `json:"recentLogsSupported"`
+	RecentLogsRoute               *ResourceEvidenceCapabilityRoute `json:"recentLogsRoute,omitempty"`
+	RelatedRuntimeEventsSupported bool                             `json:"relatedRuntimeEventsSupported"`
+	RelatedRuntimeEventsRoute     *ResourceEvidenceCapabilityRoute `json:"relatedRuntimeEventsRoute,omitempty"`
+}
+
 // RolloutExecutionDetail captures one operator-facing execution resource detail.
 type RolloutExecutionDetail struct {
-	Resource    string `json:"resource"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
+	Resource             string                        `json:"resource"`
+	Name                 string                        `json:"name"`
+	Description          string                        `json:"description,omitempty"`
+	EvidenceCapabilities *ResourceEvidenceCapabilities `json:"evidenceCapabilities,omitempty"`
 }
 
 // ManagedDriftSeverity classifies how urgently operators should inspect a drift item.

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -516,7 +517,7 @@ func BuildApplicationOverviewDetail(c manifest.Catalog, snapshots []statusstore.
 		ManagedDrift:          cloneManagedDrift(detail.ManagedDrift),
 		ManagedDriftSummary:   detail.ManagedDriftSummary,
 		RuntimeSummary:        cloneRuntimeSummary(detail.RuntimeSummary),
-		Rollout:               cloneRolloutSummary(detail.Rollout),
+		Rollout:               cloneRolloutSummaryWithEvidence(detail.Rollout, detail.Name),
 		ResourceRelatedEvents: cloneResourceRelatedEventSummaries(detail.ResourceRelatedEvents),
 		Conditions:            append([]domain.Condition(nil), detail.Conditions...),
 		History:               cloneStatusHistory(detail.History),
@@ -1020,6 +1021,71 @@ func cloneRuntimeEventCue(cue *RuntimeEventCue) *RuntimeEventCue {
 	return &copy
 }
 
+func cloneRolloutSummaryWithEvidence(summary *domain.RolloutSummary, deploymentName string) *domain.RolloutSummary {
+	copy := cloneRolloutSummary(summary)
+	if copy == nil || len(copy.Execution) == 0 {
+		return copy
+	}
+	for i := range copy.Execution {
+		capabilities := resourceEvidenceCapabilities(deploymentName, copy.Execution[i])
+		if hasResourceEvidenceCapability(capabilities) {
+			copy.Execution[i].EvidenceCapabilities = &capabilities
+		}
+	}
+	return copy
+}
+
+func resourceEvidenceCapabilities(deploymentName string, resource domain.RolloutExecutionDetail) domain.ResourceEvidenceCapabilities {
+	resourceType := strings.TrimSpace(resource.Resource)
+	resourceName := strings.TrimSpace(resource.Name)
+	capabilities := domain.ResourceEvidenceCapabilities{}
+	if resourceType == "" || resourceName == "" {
+		return capabilities
+	}
+
+	if resourceSupportsLiveInspection(resourceType) {
+		capabilities.LiveInspectionSupported = true
+		capabilities.LiveInspectionRoute = &domain.ResourceEvidenceCapabilityRoute{Route: resourceEvidenceRoute(deploymentName, "resource-inspection", resourceType, resourceName)}
+	}
+	if resourceSupportsRecentLogs(resourceType) {
+		capabilities.RecentLogsSupported = true
+		capabilities.RecentLogsRoute = &domain.ResourceEvidenceCapabilityRoute{Route: resourceEvidenceRoute(deploymentName, "resource-logs", resourceType, resourceName)}
+	}
+	capabilities.RelatedRuntimeEventsSupported = true
+	capabilities.RelatedRuntimeEventsRoute = &domain.ResourceEvidenceCapabilityRoute{Route: resourceEvidenceRoute(deploymentName, "events", resourceType, resourceName)}
+	return capabilities
+}
+
+func hasResourceEvidenceCapability(capabilities domain.ResourceEvidenceCapabilities) bool {
+	return capabilities.LiveInspectionSupported || capabilities.RecentLogsSupported || capabilities.RelatedRuntimeEventsSupported
+}
+
+func resourceEvidenceRoute(deploymentName, routeName, resourceType, resourceName string) string {
+	deploymentName = url.PathEscape(strings.TrimSpace(deploymentName))
+	params := url.Values{}
+	params.Set("resourceType", strings.TrimSpace(resourceType))
+	params.Set("resourceName", strings.TrimSpace(resourceName))
+	return "/v1/overview/deployments/" + deploymentName + "/" + routeName + "?" + params.Encode()
+}
+
+func resourceSupportsLiveInspection(resourceType string) bool {
+	switch resourceType {
+	case "trafficShiftPlan", "codeDeployApplication", "codeDeployDeploymentGroup", "productionListener", "testListener", "productionListenerRule", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup", "activeTargetGroup", "candidateTargetGroup", "ecsService", "ecsTask", "candidateAutoScalingGroup", "serviceAutoScalingGroup", "userDataBootstrapSource":
+		return true
+	default:
+		return false
+	}
+}
+
+func resourceSupportsRecentLogs(resourceType string) bool {
+	switch resourceType {
+	case "ecsService", "ecsTask", "candidateAutoScalingGroup", "serviceAutoScalingGroup", "userDataBootstrapSource", "trafficShiftPlan", "productionListenerRule", "activeTargetGroup", "candidateTargetGroup", "codeDeployApplication", "codeDeployDeploymentGroup", "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
+		return true
+	default:
+		return false
+	}
+}
+
 func cloneRolloutSummary(summary *domain.RolloutSummary) *domain.RolloutSummary {
 	if summary == nil {
 		return nil
@@ -1027,6 +1093,24 @@ func cloneRolloutSummary(summary *domain.RolloutSummary) *domain.RolloutSummary 
 	copy := *summary
 	copy.Steps = append([]domain.RolloutStepSummary(nil), summary.Steps...)
 	copy.Execution = append([]domain.RolloutExecutionDetail(nil), summary.Execution...)
+	for i := range copy.Execution {
+		if summary.Execution[i].EvidenceCapabilities != nil {
+			capabilities := *summary.Execution[i].EvidenceCapabilities
+			if summary.Execution[i].EvidenceCapabilities.LiveInspectionRoute != nil {
+				route := *summary.Execution[i].EvidenceCapabilities.LiveInspectionRoute
+				capabilities.LiveInspectionRoute = &route
+			}
+			if summary.Execution[i].EvidenceCapabilities.RecentLogsRoute != nil {
+				route := *summary.Execution[i].EvidenceCapabilities.RecentLogsRoute
+				capabilities.RecentLogsRoute = &route
+			}
+			if summary.Execution[i].EvidenceCapabilities.RelatedRuntimeEventsRoute != nil {
+				route := *summary.Execution[i].EvidenceCapabilities.RelatedRuntimeEventsRoute
+				capabilities.RelatedRuntimeEventsRoute = &route
+			}
+			copy.Execution[i].EvidenceCapabilities = &capabilities
+		}
+	}
 	return &copy
 }
 
