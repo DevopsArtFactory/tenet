@@ -1019,6 +1019,7 @@ func TestPlanWorkspaceDocsMentionCopyableWorkspaceReadRoute(t *testing.T) {
 		"README":             readTextFile(t, "../README.md"),
 		"overview dashboard": readTextFile(t, "features/overview-dashboard.md"),
 		"overview UI":        readTextFile(t, "architecture/tenet-v1-overview-ui.md"),
+		"operator runbook":   readTextFile(t, "runbooks/operator-troubleshooting.md"),
 	}
 
 	for name, text := range docs {
@@ -1040,6 +1041,16 @@ func TestPlanWorkspaceDocsMentionCopyableWorkspaceReadRoute(t *testing.T) {
 	}
 	if !strings.Contains(docs["overview UI"], "exposes top-level `Workspace JSON` and `Copy workspace read route` handoffs") {
 		t.Fatalf("expected overview UI plan/apply docs to mention both workspace read handoffs")
+	}
+	for _, fragment := range []string{
+		"| Drift workspace | `/?page=drift&deployment={deploymentName}` | `GET /v1/overview/deployments/{deploymentName}` |",
+		"drift-source mode, managed-drift row counts, severity/query filters, and runtime context",
+		"filtered-empty rows mean the current query/severity controls are hiding evidence",
+		"`Workspace JSON` / `Copy workspace read route` handoffs to the current deployment-detail read",
+	} {
+		if !strings.Contains(docs["operator runbook"], fragment) {
+			t.Fatalf("expected operator runbook to include workspace troubleshooting fragment %q", fragment)
+		}
 	}
 }
 
