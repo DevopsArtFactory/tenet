@@ -1411,7 +1411,7 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 		"`Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search",
 		"visible/total impact and section-specific empty guidance alongside the inline",
 		"`Clear resource filter`. Their linked-resource summary also includes `Linked-resource source`, distinguishing controller-authored `rollout.execution[]` rows from canonical fallback rollout inventory when that array is missing or empty, plus compact resource-row `Evidence cues`:",
-		"`Live evidence available` / `Recent logs supported` `_self` handoffs to the final",
+		"`Live evidence available` / `Recent logs supported` / `Related runtime events supported` `_self` handoffs to the final",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README to include application-detail resource-filter summary %q", fragment)
