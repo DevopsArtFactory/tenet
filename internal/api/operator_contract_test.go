@@ -91,7 +91,7 @@ func TestReadmeStaysProductOverview(t *testing.T) {
 		"endpoint, read-model, auth, resource, and smoke-verification contracts formerly\n  kept in this README",
 		"`internal/statusstore`, `internal/planpreview`, `internal/applyrequest`, and\n  `internal/auditlog` - runtime status, plan/apply, and audit stores",
 		"`docs/features/resource-inspection.md` documents the focused live resource inspection route, selectors, lookup context, unavailable states, and detailed field contracts.",
-		"Resource drill-down Recent logs and Live inspection panels summarize lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract.",
+		"Resource drill-down Related runtime events, Recent logs, and Live inspection panels summarize controller history, lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract.",
 		"live ASG reads may add optional\n  `ec2InstanceStatus` status-check evidence",
 	} {
 		if !strings.Contains(readme, fragment) {
@@ -2669,7 +2669,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}`",
-		"both require a concrete resource type/name before provider lookup",
+		"each resource-scoped read requires a concrete resource type/name before provider lookup",
 		"ECS service and direct ASG inspection reads may add selectors such as `clusterArn` or a positive `limit`",
 		"bootstrap-source inspection uses `instanceId` for focused ASG-member troubleshooting rather than bounded `limit` sampling",
 		"Auto Scaling payloads add `autoScalingGroup`, including optional `launchTemplate` and `mixedInstancesPolicy` metadata",
