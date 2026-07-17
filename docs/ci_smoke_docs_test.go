@@ -597,17 +597,29 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 
 func TestOperatorTroubleshootingCallsOutRelatedRuntimeEvents(t *testing.T) {
 	runbookText := readTextFile(t, "runbooks/operator-troubleshooting.md")
+	contractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
-		"| Related runtime events | `#resource-related-runtime-events` | `GET /v1/overview/deployments/{deploymentName}/events?resourceType={type}&resourceName={name}` |",
+		"| Related runtime events | `#resource-related-runtime-events` | `GET /v1/overview/deployments/{deploymentName}/events?resourceType={type}&resourceName={name}&limit={n}[&source={source}]` |",
+		"the selected `Related event source`, and the selected event window",
 		"additive generic `events[].resourceRefs[]` rollout/execution references",
 		"managedDrift[].resourceRef",
 		"managedDrift[].source.resourceType/resourceName",
 		"controller history filtered by retained resource evidence; not Recent logs, Live inspection, or immutable audit evidence",
 		"no matching rollout, drift, or resource evidence",
-		"curl -i \"$TENET_API_BASE/v1/overview/deployments/{deploymentName}/events?resourceType={type}&resourceName={name}&limit=10\"",
+		"curl -i \"$TENET_API_BASE/v1/overview/deployments/{deploymentName}/events?resourceType={type}&resourceName={name}&limit=10&source=controller\"",
 	} {
 		if !strings.Contains(runbookText, fragment) {
 			t.Fatalf("expected operator troubleshooting runbook to include resource-events fragment %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"GET /v1/overview/deployments/{deploymentName}/events?resourceType={type}&resourceName={name}&limit={n}[&source={source}]",
+		"renders explicit loading/empty/source-filtered no-match/unavailable/denied/error states",
+		"compact `Related event source` and `Related event window` controls plus `Copy related events route` and `Refresh related events` actions",
+	} {
+		if !strings.Contains(contractsText, fragment) {
+			t.Fatalf("expected operator contracts to include resource-events fragment %q", fragment)
 		}
 	}
 }
