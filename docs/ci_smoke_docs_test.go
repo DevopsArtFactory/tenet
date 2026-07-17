@@ -1014,6 +1014,35 @@ func TestLocalRuntimeDocsSeparateShippedWriteRoutesFromDeferredAWSMutation(t *te
 	}
 }
 
+func TestPlanWorkspaceDocsMentionCopyableWorkspaceReadRoute(t *testing.T) {
+	docs := map[string]string{
+		"README":             readTextFile(t, "../README.md"),
+		"overview dashboard": readTextFile(t, "features/overview-dashboard.md"),
+		"overview UI":        readTextFile(t, "architecture/tenet-v1-overview-ui.md"),
+	}
+
+	for name, text := range docs {
+		for _, fragment := range []string{
+			"Current workspace read: GET /v1/overview/deployments/{deploymentName}.",
+			"Workspace JSON",
+			"Copy workspace read route",
+			"/v1/overview/deployments/{deploymentName}",
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s docs to include copyable workspace read route fragment %q", name, fragment)
+			}
+		}
+	}
+
+	planWorkspaceFragment := "the embedded `/?page=plan&deployment={deploymentName}&planId={planId}` workspace keeps the URL shareable/bookmarkable"
+	if !strings.Contains(docs["overview UI"], planWorkspaceFragment) {
+		t.Fatalf("expected overview UI docs to keep the plan/apply workspace route contract")
+	}
+	if !strings.Contains(docs["overview UI"], "exposes top-level `Workspace JSON` and `Copy workspace read route` handoffs") {
+		t.Fatalf("expected overview UI plan/apply docs to mention both workspace read handoffs")
+	}
+}
+
 func TestClaimedApplyTransitionGuardDocsAndSmoke(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	overviewDashboardText := readTextFile(t, "features/overview-dashboard.md")
