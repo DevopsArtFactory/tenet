@@ -9792,6 +9792,10 @@
             return 'The stored apply record does not include operation-level execution intent yet.';
           case 'aws_unavailable':
             return 'AWS credentials or provider access are unavailable in this local-safe environment.';
+          case 'permission_denied':
+            return 'IAM simulation did not allow this future executor capability for the configured deployer role.';
+          case 'missing_permission_actions':
+            return 'IAM permission simulation was skipped because no concrete AWS actions were available.';
           case 'missing_deployer_role':
           case 'deployer_role_missing':
           case 'deployer_role_not_configured':
@@ -9805,22 +9809,77 @@
             return textOrDash(reason);
         }
       };
-      const applyPreflightOperations = (readiness) => (readiness?.operations || []).map((operation, index) => ({
-        id: typeof operation?.operationId === 'string' ? operation.operationId.trim() : '',
-        anchorID: operation?.operationId ? `operation-preflight-${sectionIDSegment(operation.operationId, 'unknown')}` : '',
-        kind: operation?.operationId || `Preflight row ${index + 1}`,
-        status: operation?.ready ? 'succeeded' : 'failed',
-        statusLabel: operation?.ready ? 'Ready' : 'Blocked',
-        phase: textOrDash(operation?.phase),
-        target: textOrDash(operation?.target),
-        summary: [
-          textOrDash(operation?.summary),
-          operation?.requiredCapability ? `Capability · ${operation.requiredCapability}` : '',
-          operation?.requiredRole ? `Role · ${operation.requiredRole}` : '',
-          operation?.unavailableReason ? `Reason · ${applyPreflightUnavailableReasonLabel(operation.unavailableReason)}` : '',
-        ].filter(Boolean).join(' · '),
-        links: applyPreflightHandoffLinks(operation),
-      }));
+      const applyCapabilityChecks = (operation) => Array.isArray(operation?.capabilityChecks)
+        ? operation.capabilityChecks.filter((check) => check && typeof check === 'object')
+        : [];
+      const applyCapabilityCheckState = (check) => {
+        const raw = String(check?.state || '').trim().toLowerCase();
+        if (raw) return raw;
+        if (check?.allowed === true) return 'allowed';
+        if (check?.allowed === false) return check?.checkedWithAws ? 'denied' : 'unchecked';
+        return 'unchecked';
+      };
+      const applyCapabilityStatus = (operation) => {
+        const checks = applyCapabilityChecks(operation);
+        if (!checks.length) return { status: operation?.ready ? 'succeeded' : 'failed', label: operation?.ready ? 'Ready' : 'Blocked' };
+        const states = checks.map(applyCapabilityCheckState);
+        if (states.includes('denied')) return { status: 'failed', label: 'Permission denied' };
+        if (states.includes('unavailable')) return { status: 'pending', label: 'Permission unavailable' };
+        if (states.includes('unknown') || states.includes('unchecked')) return { status: 'pending', label: 'Permission unchecked' };
+        if (states.every((state) => state === 'allowed')) return { status: operation?.ready === false ? 'failed' : 'succeeded', label: operation?.ready === false ? 'Blocked' : 'Permission allowed' };
+        return { status: operation?.ready ? 'succeeded' : 'failed', label: operation?.ready ? 'Ready' : 'Blocked' };
+      };
+      const applyCapabilityCheckLabel = (check) => {
+        switch (applyCapabilityCheckState(check)) {
+          case 'allowed': return 'allowed';
+          case 'denied': return 'denied';
+          case 'unavailable': return 'unavailable';
+          case 'unknown':
+          case 'unchecked': return 'unchecked';
+          default: return applyCapabilityCheckState(check);
+        }
+      };
+      const applyCapabilityCheckSummary = (check) => {
+        const label = applyCapabilityCheckLabel(check);
+        const action = textOrDash(check?.action);
+        const resource = [check?.resourceType, check?.resourceName].filter(Boolean).join(' / ');
+        const reason = check?.reason ? applyPreflightUnavailableReasonLabel(check.reason) : '';
+        const summary = textOrDash(check?.summary);
+        const awsProbe = check?.checkedWithAws ? 'checked with AWS IAM simulation' : 'not checked with AWS';
+        return [
+          `${label} ${action}`,
+          resource ? `resource ${resource}` : '',
+          check?.requiredRole ? `role ${check.requiredRole}` : '',
+          awsProbe,
+          reason && reason !== '—' ? reason : '',
+          summary && summary !== '—' ? summary : '',
+        ].filter(Boolean).join(' — ');
+      };
+      const applyCapabilityReadinessSummary = (operation) => {
+        const checks = applyCapabilityChecks(operation);
+        if (!checks.length) return '';
+        return `Permission readiness · ${checks.map(applyCapabilityCheckSummary).join('; ')}`;
+      };
+      const applyPreflightOperations = (readiness) => (readiness?.operations || []).map((operation, index) => {
+        const capabilityStatus = applyCapabilityStatus(operation);
+        return {
+          id: typeof operation?.operationId === 'string' ? operation.operationId.trim() : '',
+          anchorID: operation?.operationId ? `operation-preflight-${sectionIDSegment(operation.operationId, 'unknown')}` : '',
+          kind: operation?.operationId || `Preflight row ${index + 1}`,
+          status: capabilityStatus.status,
+          statusLabel: capabilityStatus.label,
+          phase: textOrDash(operation?.phase),
+          target: textOrDash(operation?.target),
+          summary: [
+            textOrDash(operation?.summary),
+            operation?.requiredCapability ? `Capability · ${operation.requiredCapability}` : '',
+            operation?.requiredRole ? `Role · ${operation.requiredRole}` : '',
+            operation?.unavailableReason ? `Reason · ${applyPreflightUnavailableReasonLabel(operation.unavailableReason)}` : '',
+            applyCapabilityReadinessSummary(operation),
+          ].filter(Boolean).join(' · '),
+          links: applyPreflightHandoffLinks(operation),
+        };
+      });
       const applyPreflightNextActionSummary = (readiness) => {
         if (!readiness || typeof readiness !== 'object') return null;
         const operations = applyPreflightOperations(readiness);
@@ -9936,12 +9995,13 @@
         const blocker = operation?.blocker && typeof operation.blocker === 'object' ? operation.blocker : preview?.blocker;
         const blockerReason = blocker?.reason || operation?.unavailableReason || '';
         const ready = operation?.ready === true;
+        const capabilityStatus = applyCapabilityStatus(operation);
         return {
           id: operationID,
           anchorID: `operation-execution-preview-${sectionIDSegment(operationID, 'unknown')}`,
           kind: operationID || operation.action || 'Execution preview action',
-          status: blockerReason ? 'failed' : (ready ? 'succeeded' : 'pending'),
-          statusLabel: blockerReason ? 'Blocked' : (ready ? 'Ready' : 'Previewed'),
+          status: blockerReason ? 'failed' : (applyCapabilityChecks(operation).length ? capabilityStatus.status : (ready ? 'succeeded' : 'pending')),
+          statusLabel: blockerReason ? 'Blocked' : (applyCapabilityChecks(operation).length ? capabilityStatus.label : (ready ? 'Ready' : 'Previewed')),
           phase: textOrDash(operation.phase),
           target: textOrDash(operation.target),
           summary: [
@@ -9951,6 +10011,7 @@
             operation.requiredCapability ? `Capability · ${operation.requiredCapability}` : '',
             operation.requiredRole ? `Role · ${operation.requiredRole}` : '',
             blockerReason ? `Blocker · ${applyPreflightUnavailableReasonLabel(blockerReason)}` : '',
+            applyCapabilityReadinessSummary(operation),
           ].filter(Boolean).join(' · ') || 'No execution action is available yet.',
           links: applyPreflightHandoffLinks({ handoffs: operation.handoffs || preview?.handoffs || {} }),
         };
