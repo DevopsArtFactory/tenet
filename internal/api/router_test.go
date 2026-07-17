@@ -6145,9 +6145,12 @@ func TestRouterOverviewApplication(t *testing.T) {
 					Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"},
 					Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
 					RuntimeSummary:     &domain.RuntimeSummary{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", ObservedGeneration: 7, CurrentStep: "ShiftTrafficCanary", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups"},
-					Rollout:            &domain.RolloutSummary{DesiredGeneration: 8, ObservedGeneration: 7, Phase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary"},
-					Conditions:         []domain.Condition{{Type: "Progressing", Status: true, Reason: "RolloutInFlight", Message: "candidate receiving traffic"}},
-					History:            []domain.StatusHistoryEntry{{Timestamp: "2026-04-16T06:15:00Z", Source: "controller", Summary: "Created candidate capacity"}},
+					Rollout: &domain.RolloutSummary{DesiredGeneration: 8, ObservedGeneration: 7, Phase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary", Execution: []domain.RolloutExecutionDetail{
+						{Resource: "candidateAutoScalingGroup", Name: "payments-api-prod-candidate", EvidenceCapabilities: &domain.ResourceEvidenceCapabilities{LiveInspectionSupported: true, LiveInspectionRoute: &domain.ResourceEvidenceCapabilityRoute{Route: "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup"}, RecentLogsSupported: true, RecentLogsRoute: &domain.ResourceEvidenceCapabilityRoute{Route: "/v1/overview/deployments/payments-api-prod/resource-logs?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup"}, RelatedRuntimeEventsSupported: true, RelatedRuntimeEventsRoute: &domain.ResourceEvidenceCapabilityRoute{Route: "/v1/overview/deployments/payments-api-prod/events?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup"}}},
+						{Resource: "trafficShiftPlan", Name: "payments-api-prod-weighted-routing", EvidenceCapabilities: &domain.ResourceEvidenceCapabilities{LiveInspectionSupported: true, LiveInspectionRoute: &domain.ResourceEvidenceCapabilityRoute{Route: "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceName=payments-api-prod-weighted-routing&resourceType=trafficShiftPlan"}, RecentLogsSupported: true, RecentLogsRoute: &domain.ResourceEvidenceCapabilityRoute{Route: "/v1/overview/deployments/payments-api-prod/resource-logs?resourceName=payments-api-prod-weighted-routing&resourceType=trafficShiftPlan"}, RelatedRuntimeEventsSupported: true, RelatedRuntimeEventsRoute: &domain.ResourceEvidenceCapabilityRoute{Route: "/v1/overview/deployments/payments-api-prod/events?resourceName=payments-api-prod-weighted-routing&resourceType=trafficShiftPlan"}}},
+					}},
+					Conditions: []domain.Condition{{Type: "Progressing", Status: true, Reason: "RolloutInFlight", Message: "candidate receiving traffic"}},
+					History:    []domain.StatusHistoryEntry{{Timestamp: "2026-04-16T06:15:00Z", Source: "controller", Summary: "Created candidate capacity"}},
 				}, nil
 			},
 		})
@@ -6179,6 +6182,30 @@ func TestRouterOverviewApplication(t *testing.T) {
 		}
 		if payload["sourceFingerprint"] != "plan_1234abcd5678ef" {
 			t.Fatalf("expected sourceFingerprint field in raw overview application detail payload, got %#v", payload)
+		}
+		rollout, ok := payload["rollout"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected rollout object in raw overview application detail payload, got %#v", payload["rollout"])
+		}
+		execution, ok := rollout["execution"].([]any)
+		if !ok || len(execution) != 2 {
+			t.Fatalf("expected rollout.execution array in raw overview application detail payload, got %#v", rollout["execution"])
+		}
+		asgResource := execution[0].(map[string]any)
+		asgCapabilities := asgResource["evidenceCapabilities"].(map[string]any)
+		if asgCapabilities["liveInspectionSupported"] != true || asgCapabilities["recentLogsSupported"] != true || asgCapabilities["relatedRuntimeEventsSupported"] != true {
+			t.Fatalf("expected supported evidence capability booleans for ASG resource, got %#v", asgCapabilities)
+		}
+		if asgCapabilities["liveInspectionRoute"].(map[string]any)["route"] != "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup" {
+			t.Fatalf("expected concrete live inspection route, got %#v", asgCapabilities["liveInspectionRoute"])
+		}
+		trafficResource := execution[1].(map[string]any)
+		trafficCapabilities := trafficResource["evidenceCapabilities"].(map[string]any)
+		if trafficCapabilities["liveInspectionSupported"] != true || trafficCapabilities["recentLogsSupported"] != true || trafficCapabilities["relatedRuntimeEventsSupported"] != true {
+			t.Fatalf("expected summary inspection/recent logs/runtime events route hints for trafficShiftPlan, got %#v", trafficCapabilities)
+		}
+		if trafficCapabilities["recentLogsRoute"].(map[string]any)["route"] != "/v1/overview/deployments/payments-api-prod/resource-logs?resourceName=payments-api-prod-weighted-routing&resourceType=trafficShiftPlan" {
+			t.Fatalf("expected concrete recent logs route, got %#v", trafficCapabilities["recentLogsRoute"])
 		}
 	})
 

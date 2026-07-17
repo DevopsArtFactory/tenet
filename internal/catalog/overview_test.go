@@ -12,6 +12,48 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
+func TestBuildApplicationOverviewDetailAddsResourceEvidenceCapabilityHints(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", DesiredArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64"}}},
+	}
+	snapshots := []statusstore.Snapshot{{DeploymentName: "payments-api-prod", Status: domain.DeploymentStatus{Rollout: &domain.RolloutSummary{Execution: []domain.RolloutExecutionDetail{
+		{Resource: "candidateAutoScalingGroup", Name: "payments-api-prod-candidate", Description: "Candidate Auto Scaling Group Tenet will create for weighted target group rollout"},
+		{Resource: "trafficShiftPlan", Name: "payments-api-prod-weighted-routing", Description: "Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group"},
+	}}}}}
+
+	detail, err := BuildApplicationOverviewDetail(catalog, snapshots, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildApplicationOverviewDetail returned error: %v", err)
+	}
+	if detail.Rollout == nil || len(detail.Rollout.Execution) != 2 {
+		t.Fatalf("expected rollout execution hints, got %+v", detail.Rollout)
+	}
+
+	asg := detail.Rollout.Execution[0].EvidenceCapabilities
+	if asg == nil || !asg.LiveInspectionSupported || !asg.RecentLogsSupported || !asg.RelatedRuntimeEventsSupported {
+		t.Fatalf("expected ASG evidence capability hints, got %+v", asg)
+	}
+	if asg.LiveInspectionRoute == nil || asg.LiveInspectionRoute.Route != "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup" {
+		t.Fatalf("unexpected ASG live-inspection route: %+v", asg.LiveInspectionRoute)
+	}
+	if asg.RecentLogsRoute == nil || asg.RecentLogsRoute.Route != "/v1/overview/deployments/payments-api-prod/resource-logs?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup" {
+		t.Fatalf("unexpected ASG recent-logs route: %+v", asg.RecentLogsRoute)
+	}
+	if asg.RelatedRuntimeEventsRoute == nil || asg.RelatedRuntimeEventsRoute.Route != "/v1/overview/deployments/payments-api-prod/events?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup" {
+		t.Fatalf("unexpected ASG runtime-events route: %+v", asg.RelatedRuntimeEventsRoute)
+	}
+
+	traffic := detail.Rollout.Execution[1].EvidenceCapabilities
+	if traffic == nil || !traffic.LiveInspectionSupported || !traffic.RecentLogsSupported || !traffic.RelatedRuntimeEventsSupported {
+		t.Fatalf("expected trafficShiftPlan summary inspection/log/events route hints, got %+v", traffic)
+	}
+	if traffic.RecentLogsRoute == nil || traffic.RecentLogsRoute.Route != "/v1/overview/deployments/payments-api-prod/resource-logs?resourceName=payments-api-prod-weighted-routing&resourceType=trafficShiftPlan" {
+		t.Fatalf("unexpected trafficShiftPlan recent-log route: %+v", traffic.RecentLogsRoute)
+	}
+}
+
 func TestBuildAccountOverviewsGroupsDeploymentsByAccount(t *testing.T) {
 	snapshots := []statusstore.Snapshot{
 		{DeploymentName: "payments-api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "stable"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"}, DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64"}, Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity"}, {Kind: "ShiftTrafficCanary"}, {Kind: "PromoteCandidateCapacity", Current: true}}, Execution: []domain.RolloutExecutionDetail{{Resource: "candidateAutoScalingGroup", Name: "payments-api-prod-candidate", Description: "Candidate Auto Scaling Group Tenet will create for weighted target group rollout"}, {Resource: "activeTargetGroup", Name: "payments-api-prod-active", Description: "Currently active target group receiving production traffic"}, {Resource: "candidateTargetGroup", Name: "payments-api-prod-candidate", Description: "Candidate target group Tenet will register and warm before traffic shifting"}, {Resource: "productionListenerRule", Name: "payments-api-prod-prod-listener", Description: "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout"}, {Resource: "trafficShiftPlan", Name: "payments-api-prod-weighted-routing", Description: "Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group"}, {Resource: "userDataBootstrapSource", Name: "file:userdata/payments-api-prod.sh", Description: "Normalized userdata bootstrap source for candidate EC2 capacity"}}}}},
@@ -1925,7 +1967,7 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 		ManagedDrift:          cloneManagedDrift(deploymentDetail.ManagedDrift),
 		ManagedDriftSummary:   deploymentDetail.ManagedDriftSummary,
 		RuntimeSummary:        cloneRuntimeSummary(deploymentDetail.RuntimeSummary),
-		Rollout:               cloneRolloutSummary(deploymentDetail.Rollout),
+		Rollout:               cloneRolloutSummaryWithEvidence(deploymentDetail.Rollout, deploymentDetail.Name),
 		ResourceRelatedEvents: cloneResourceRelatedEventSummaries(deploymentDetail.ResourceRelatedEvents),
 		Conditions:            append([]domain.Condition(nil), deploymentDetail.Conditions...),
 		History:               cloneStatusHistory(deploymentDetail.History),
