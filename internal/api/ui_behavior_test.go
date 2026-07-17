@@ -14011,8 +14011,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/audit-logs?deployment=payments-api-prod&action=apply.transitioned') throw new Error('expected transition-filtered audit route');
-  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action Apply lifecycle transitioned (apply.transitioned)')) throw new Error('expected transition filter label, got ' + toolbarText);
-  if (!accountsText.includes('Apply lifecycle transitioned (apply.transitioned)')) throw new Error('expected transition row label');
+  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action Apply lifecycle transitioned')) throw new Error('expected transition filter label, got ' + toolbarText);
+  if (!accountsText.includes('Apply lifecycle transitioned')) throw new Error('expected transition row label');
   if (!accountsText.includes('Apply transitions | 1')) throw new Error('expected transition summary count');
   if (!accountsText.includes('Apply requests | 0')) throw new Error('expected apply-request count to stay separate from transition count');
   if (!accountsText.includes('Transition · queued → running')) throw new Error('expected previous/new transition metadata');
@@ -14078,8 +14078,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!contextApplicationLink || contextApplicationLink.rel) throw new Error('expected deployment context application handoff link');
   const contextPlanLink = deploymentContextLinks.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Open plan/apply workspace' && node.target === '_self');
   if (!contextPlanLink || contextPlanLink.rel) throw new Error('expected deployment context plan/apply handoff link');
-  if (!accountsText.includes('Apply requested (apply.requested)')) throw new Error('expected newest audit entry label');
-  if (!accountsText.includes('Plan preview created (plan.created)')) throw new Error('expected older audit entry label');
+  if (!accountsText.includes('Apply requested')) throw new Error('expected newest audit entry label');
+  if (!accountsText.includes('Plan preview created')) throw new Error('expected older audit entry label');
   if (!accountsText.includes('Visible audit entries | 2 entries')) throw new Error('expected visible audit summary count label/value');
   if (!accountsText.includes('Returned entries | 2 entries')) throw new Error('expected audit resultScope returned count');
   if (!accountsText.includes('Matching entries | 5 entries')) throw new Error('expected audit resultScope total matching count');
@@ -14132,7 +14132,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const rows = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'DIV' && node.className === 'row');
   if (rows.length < 2) throw new Error('expected audit page rows');
   const rowTexts = rows.map((node) => collectText(node).join(' | '));
-  if (!rowTexts[0].includes('Apply requested (apply.requested)')) throw new Error('expected newest audit entry first, got ' + rowTexts.join(' || '));
+  if (!rowTexts[0].includes('Apply requested')) throw new Error('expected newest audit entry first, got ' + rowTexts.join(' || '));
   if (rows[0].getAttribute('id') !== 'audit-entry-apply-apply-failed-123') throw new Error('expected apply row to expose stable apply anchor, got ' + rows[0].getAttribute('id'));
   if (rows[1].getAttribute('id') !== 'audit-entry-plan-plan-ready-123') throw new Error('expected plan row to expose stable plan anchor, got ' + rows[1].getAttribute('id'));
   if (!accountsText.includes('Share or continue in app')) throw new Error('expected audit row share grouping');
@@ -14146,8 +14146,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const quickNavAuditLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2' && node.textContent === 'Audit log');
   const quickNavDeploymentContextLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-deployment-context' && node.textContent === 'Deployment context');
   const quickNavTimelineLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-timeline' && node.textContent === 'Audit timeline');
-  const quickNavApplyEntryLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-apply-apply-failed-123' && node.textContent === 'Apply requested (apply.requested) · apply apply_failed_123 · 2026-04-18T08:00:00Z');
-  const quickNavPlanEntryLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-plan-plan-ready-123' && node.textContent === 'Plan preview created (plan.created) · plan plan_ready_123 · 2026-04-17T09:00:00Z');
+  const quickNavApplyEntryLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-apply-apply-failed-123' && node.textContent === 'Apply requested · apply apply_failed_123 · 2026-04-18T08:00:00Z');
+  const quickNavPlanEntryLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-plan-plan-ready-123' && node.textContent === 'Plan preview created · plan plan_ready_123 · 2026-04-17T09:00:00Z');
   const newestEntryLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-apply-apply-failed-123' && node.textContent === 'Jump to newest entry');
   const oldestVisibleEntryLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-plan-plan-ready-123' && node.textContent === 'Jump to oldest visible entry');
   const quickNavChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
@@ -14183,8 +14183,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!breadcrumbChips.find((node) => node.textContent === 'Audit log')) throw new Error('expected audit current breadcrumb chip');
   if (!accountsText.includes('Quick navigation')) throw new Error('expected deployment-scoped audit quick navigation strip');
   if (!accountsText.includes('Audit timeline navigation')) throw new Error('expected audit timeline navigation cue');
-  if (!accountsText.includes('Newest visible entry · 2026-04-18T08:00:00Z · Apply requested (apply.requested) · apply apply_failed_123')) throw new Error('expected newest visible audit cue');
-  if (!accountsText.includes('Oldest visible entry · 2026-04-17T09:00:00Z · Plan preview created (plan.created) · plan plan_ready_123')) throw new Error('expected oldest visible audit cue');
+  if (!accountsText.includes('Newest visible entry · 2026-04-18T08:00:00Z · Apply requested · apply apply_failed_123')) throw new Error('expected newest visible audit cue');
+  if (!accountsText.includes('Oldest visible entry · 2026-04-17T09:00:00Z · Plan preview created · plan plan_ready_123')) throw new Error('expected oldest visible audit cue');
   if (!accountsText.includes('Deployment workspaces')) throw new Error('expected deployment-scoped audit quick navigation group label');
   if (!accountsText.includes('Current section')) throw new Error('expected deployment-scoped audit current-section quick-nav group');
   if (!accountsText.includes('No section is currently targeted.')) throw new Error('expected deployment-scoped audit empty current-section copy without hash');
@@ -14245,8 +14245,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle();
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
-  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action Apply requested (apply.requested) · Limit cap: latest 1')) throw new Error('expected active audit filters in toolbar');
-  if (!accountsText.includes('No audit entries match the current filters (deployment payments-api-prod · action Apply requested (apply.requested); Limit cap: latest 1). Clear action/limit to stay scoped to this deployment, or clear audit controls to remove the deployment scope.')) throw new Error('expected filtered audit empty-state recovery copy, got ' + accountsText);
+  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action Apply requested · Limit cap: latest 1')) throw new Error('expected active audit filters in toolbar');
+  if (!accountsText.includes('No audit entries match the current filters (deployment payments-api-prod · action Apply requested; Limit cap: latest 1). Clear action/limit to stay scoped to this deployment, or clear audit controls to remove the deployment scope.')) throw new Error('expected filtered audit empty-state recovery copy, got ' + accountsText);
   if (accountsText.includes('No audit activity has been persisted yet for deployment payments-api-prod.')) throw new Error('expected filtered empty state to avoid unfiltered no-activity copy');
   const clearScopedButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear action/limit');
   if (!clearScopedButton) throw new Error('expected clear action/limit button for deployment-scoped audit filters');
@@ -14325,7 +14325,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   window.dispatchHashChange();
   await settle();
   const rowAnchorChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
-  const applyRowChip = rowAnchorChips.find((node) => node.getAttribute('aria-label') === 'Current section: Apply requested (apply.requested) · apply apply_failed_123 · 2026-04-18T08:00:00Z');
+  const applyRowChip = rowAnchorChips.find((node) => node.getAttribute('aria-label') === 'Current section: Apply requested · apply apply_failed_123 · 2026-04-18T08:00:00Z');
   if (!applyRowChip) throw new Error('expected audit row hash to update the current-section chip');
   const isOnThisPageLink = (node) => {
     let parent = node.parentNode;
@@ -14513,11 +14513,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle();
   if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/audit-logs?deployment=payments-api-prod&action=apply.requested&limit=2') throw new Error('expected initial deployment and action filtered audit fetch');
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
-  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action Apply requested (apply.requested) · Limit cap: latest 2')) throw new Error('expected deployment, action, and limit filters in toolbar');
+  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action Apply requested · Limit cap: latest 2')) throw new Error('expected deployment, action, and limit filters in toolbar');
   let clearScopedButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear action/limit');
   if (!clearScopedButton || clearScopedButton.disabled) throw new Error('expected enabled clear action/limit recovery action while scoped controls are active');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
-  if (!accountsText.includes('1 entry · newest record first · deployment payments-api-prod · action Apply requested (apply.requested) · Limit cap: latest 2')) throw new Error('expected active deployment, action, and limit filter copy in audit timeline');
+  if (!accountsText.includes('1 entry · newest record first · deployment payments-api-prod · action Apply requested · Limit cap: latest 2')) throw new Error('expected active deployment, action, and limit filter copy in audit timeline');
   if (accountsText.includes('capped audit window')) throw new Error('did not expect capped-window hint when visible entries are below the selected limit');
   const auditQuickNavLink = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A').find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&action=apply.requested&limit=2' && node.textContent === 'Audit log');
   const auditQuickNavChip = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip').find((node) => node.textContent === 'Audit log');
@@ -14570,7 +14570,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const scopedAccountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (!scopedAccountsText.includes('Active deployment context')) throw new Error('expected deployment-scoped callout after clearing action/limit');
   if (!scopedAccountsText.includes('deployment payments-api-prod')) throw new Error('expected deployment filter copy after clearing action/limit');
-  if (scopedAccountsText.includes('action Plan preview created (plan.created)')) throw new Error('did not expect action filter copy after clearing action/limit');
+  if (scopedAccountsText.includes('action Plan preview created')) throw new Error('did not expect action filter copy after clearing action/limit');
   if (scopedAccountsText.includes('Limit cap: latest 5')) throw new Error('did not expect limit cap copy after clearing action/limit');
   globalButton.dispatch('click');
   await settle();
@@ -14622,7 +14622,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle();
   let toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   if (!toolbarText.includes('Deployment: payments-api-prod')) throw new Error('expected deployment chip label');
-  if (!toolbarText.includes('Action: Apply requested (apply.requested)')) throw new Error('expected action chip label');
+  if (!toolbarText.includes('Action: Apply requested')) throw new Error('expected action chip label');
   if (!toolbarText.includes('Limit: latest 2')) throw new Error('expected limit chip label');
   const chips = collectNodes(document.getElementById('toolbar'), (node) => node.className === 'toolbar-chips');
   if (chips.length !== 1 || chips[0].getAttribute('aria-label') !== 'Active audit controls') throw new Error('expected active audit controls chip group');
@@ -14638,10 +14638,10 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (window.location.pathname !== '/console') throw new Error('expected deployment chip clear to preserve pathname');
   toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   if (toolbarText.includes('Deployment: payments-api-prod')) throw new Error('did not expect deployment chip after clearing deployment');
-  if (!toolbarText.includes('Action: Apply requested (apply.requested)') || !toolbarText.includes('Limit: latest 2')) throw new Error('expected action and limit chips after clearing deployment');
+  if (!toolbarText.includes('Action: Apply requested') || !toolbarText.includes('Limit: latest 2')) throw new Error('expected action and limit chips after clearing deployment');
 
   window.location.hash = '#audit-entry-apply-failed';
-  const clearAction = activeChipClear('Clear action filter Apply requested (apply.requested)');
+  const clearAction = activeChipClear('Clear action filter Apply requested');
   if (!clearAction) throw new Error('expected accessible action chip clear button');
   clearAction.dispatch('click');
   await settle();
@@ -14650,7 +14650,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (window.location.search !== '?page=audit&q=payments&sync=OutOfSync&account=210987654321&limit=2') throw new Error('expected action chip clear to preserve q/sync/account/limit, got ' + window.location.search);
   if (window.location.hash !== '') throw new Error('expected action chip clear to remove stale audit hash');
   toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
-  if (toolbarText.includes('Action: Apply requested (apply.requested)')) throw new Error('did not expect action chip after clearing action');
+  if (toolbarText.includes('Action: Apply requested')) throw new Error('did not expect action chip after clearing action');
   if (!toolbarText.includes('Limit: latest 2')) throw new Error('expected limit chip after clearing action');
 
   window.location.hash = '#audit-timeline';
@@ -14721,7 +14721,7 @@ async function renderWithFetch(fetchImpl, search = '?page=audit') {
   await settle();
   await settle();
   const actionToolbarText = collectText(actionOnlyRun.document.getElementById('toolbar')).join(' | ');
-  if (!actionToolbarText.includes('Audit filters: action Apply requested (apply.requested)')) throw new Error('expected action-only audit toolbar to show active action filter');
+  if (!actionToolbarText.includes('Audit filters: action Apply requested')) throw new Error('expected action-only audit toolbar to show active action filter');
   const actionClearControlsButton = collectNodes(actionOnlyRun.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit controls');
   if (!actionClearControlsButton || actionClearControlsButton.disabled) throw new Error('expected action-only audit toolbar to offer clear audit controls');
   actionClearControlsButton.dispatch('click');

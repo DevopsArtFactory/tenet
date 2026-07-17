@@ -1290,7 +1290,7 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		"`X-User-Email`",
 		"Add `&action=plan.created|apply.requested|apply.transitioned|controller.refresh.requested` to narrow the embedded timeline to one action",
 		"actor information is unavailable because no authenticated request context was available for this local request",
-		"`Audit filters: action Apply requested (apply.requested) · Limit cap: latest 2`",
+		"`Audit filters: action Apply requested · Limit cap: latest 2`",
 		"`/v1/audit-logs` is the preferred v1 route shape for this local timeline",
 		"full `GET /v1/audit-logs` collection with expected `plan.created`, `apply.requested`, lifecycle `apply.transitioned`, and manual `controller.refresh.requested` action support present",
 		"fetching the full `GET /v1/audit-logs` collection",
@@ -1332,7 +1332,7 @@ func TestAuditLogOperatorContract(t *testing.T) {
 	overviewUIDoc := readRepoFile(t, "docs/architecture/tenet-v1-overview-ui.md")
 	for _, fragment := range []string{
 		"`/?page=audit` route now renders that audit timeline directly",
-		"`Audit filters: action Apply requested (apply.requested) · Limit cap: latest 2`",
+		"`Audit filters: action Apply requested · Limit cap: latest 2`",
 		"`apply.transitioned` rows with previous/new status and step metadata",
 		"accepts optional `&action={action}` / `&limit={n}`",
 		"`Clear action/limit`",
