@@ -526,11 +526,10 @@ When changing the overview UI, preserve all of the following:
 
 ## Near-term next steps
 
-Likely next UI slices:
-- richer runtime history navigation and event timelines
-- real AWS mutation execution from reviewed plan/apply operations
-- account/group summary sparklines or event cues
-- deeper drift diagnostics once the backend exposes richer live drift sources beyond the current derived read model
+Already-shipped dashboard surfaces should not be reopened as generic roadmap items: controller runtime-event timelines, resource-scoped event navigation, account/group runtime-event cues, and local-safe apply/executor metadata are current operator surfaces. The next small UI/docs slices should point at the remaining concrete seams instead:
+- render backend-authored `managedDriftSourceCoverage[]` in the drift workspace so operators can see which drift sources were checked, unavailable, or fallback-derived before interpreting field-level rows
+- keep future drift-source coverage wording tied to backend evidence rather than inventing UI-only drift telemetry
+- keep local-safe apply/executor docs explicit that queued, claimed, preflight, execution-preview, heartbeat, and transition records are Tenet control-plane evidence only; real CodeDeploy, ECS, ALB, ASG, or EC2 mutation execution remains a separate future live-AWS executor lane
 - eventual extraction into a dedicated frontend only if the current read-model/UI surface becomes too large for embedded HTML
 
 `GET /v1/applies?status=active` follows the same collection contract for executor-facing active immutable apply records and returns `200 OK` with `[]` when no queued or running records are visible. `GET /v1/applies?status=active&claim=stale` returns only stale running claims and also returns `200 OK` with `[]` when none are visible. `GET /v1/applies?status=queued` remains the exact queued subset; `GET /v1/applies?status=running` is the exact running subset; `/?page=applies` defaults to queued work, `/?page=applies&appliesView=active` is the bookmarkable embedded active-handoff monitor view, and `/?page=applies&appliesView=stale` is the bookmarkable stale active-claim view.
