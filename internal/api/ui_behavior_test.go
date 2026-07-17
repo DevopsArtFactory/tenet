@@ -10010,6 +10010,35 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 				"severity": "medium",
 			},
 		},
+		"managedDriftSourceCoverage": []map[string]any{
+			{
+				"sourceKind":   "traffic_routing_aws",
+				"label":        "Traffic routing live inspection",
+				"coverage":     "rows_reported",
+				"rowCount":     2,
+				"resourceType": "productionListener",
+				"resourceName": "prod-router",
+				"route":        "/v1/overview/deployments/api-managed/resource-inspection?resourceType=productionListener&resourceName=prod-router",
+				"summary":      "Listener and target-group evidence produced managed drift rows.",
+			},
+			{
+				"sourceKind":      "aws_autoscaling",
+				"label":           "Auto Scaling live inspection",
+				"coverage":        "unavailable",
+				"rowCount":        0,
+				"resourceType":    "candidateAutoScalingGroup",
+				"resourceName":    "api-managed-candidate",
+				"unavailableHint": "Configure an observer role before live ASG coverage can be checked.",
+				"summary":         "ASG launch-template coverage is unavailable in the local read model.",
+			},
+			{
+				"sourceKind": "runtime_summary",
+				"label":      "Runtime summary fallback",
+				"coverage":   "checked_no_rows",
+				"rowCount":   0,
+				"summary":    "Runtime summary was checked but did not add additional rows.",
+			},
+		},
 		"runtimeSummary": map[string]any{
 			"source":             "deployment-controller",
 			"timestamp":          "2026-04-16T06:48:00Z",
@@ -10328,6 +10357,13 @@ async function render(detail, search, hash = '') {
   if (!managedText.includes('Total rows')) throw new Error('expected managed drift total-row summary');
   if (!managedText.includes('Visible rows')) throw new Error('expected managed drift visible-row summary');
   if (!managedText.includes('Showing all 5 drift rows.')) throw new Error('expected managed drift summary copy');
+  if (!managedText.includes('Drift source coverage')) throw new Error('expected backend-authored drift source coverage panel');
+  if (!managedText.includes('3 drift sources reported · 2 checked · 1 with rows · 1 unavailable or unsupported · 2 field-level rows attributed')) throw new Error('expected drift source coverage aggregate summary');
+  if (!managedText.includes('Traffic routing live inspection') || !managedText.includes('Rows reported')) throw new Error('expected rows-reported source coverage entry');
+  if (!managedText.includes('Auto Scaling live inspection') || !managedText.includes('Unavailable') || !managedText.includes('Configure an observer role before live ASG coverage can be checked.')) throw new Error('expected unavailable source coverage entry with guidance');
+  if (!managedText.includes('Runtime summary fallback') || !managedText.includes('Checked, no rows')) throw new Error('expected checked-no-rows source coverage entry');
+  const coverageLink = managedLinks.find((node) => node.textContent === 'Coverage route');
+  if (!coverageLink || coverageLink.href !== '/v1/overview/deployments/api-managed/resource-inspection?resourceType=productionListener&resourceName=prod-router' || coverageLink.target !== '_self') throw new Error('expected source coverage route handoff to stay in the embedded shell, got ' + (coverageLink ? coverageLink.href + ' target=' + coverageLink.target : 'none'));
   if (!/Visible high \| 2(?: \||$)/.test(managedText)) throw new Error('expected managed drift visible high-severity summary count');
   if (!/Visible medium \| 2(?: \||$)/.test(managedText)) throw new Error('expected managed drift visible medium-severity summary count');
   if (!/Visible low \| 1(?: \||$)/.test(managedText)) throw new Error('expected managed drift visible low-severity summary count');
@@ -10373,6 +10409,8 @@ async function render(detail, search, hash = '') {
   const managedEmptyRows = collectNodes(managedEmptyRun.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1);
   if (!managedEmptyText.includes('No controller-authored field-level drift was reported for this deployment.')) throw new Error('expected explicit controller-authored empty drift message');
   if (!managedEmptyText.includes('No field-level drift rows are currently reported.')) throw new Error('expected empty managed drift summary copy');
+  if (!managedEmptyText.includes('No drift source coverage entries are currently reported by this deployment detail.')) throw new Error('expected empty drift source coverage copy');
+  if (!managedEmptyText.includes('Coverage context appears only when the backend reports which drift sources were checked; field-level rows below still render from the active drift source.')) throw new Error('expected empty drift source coverage explanation');
   if (managedEmptyText.includes('condition.DriftDetected')) throw new Error('expected empty managed drift state to suppress fallback condition rows');
   if (managedEmptyRows.length !== 0) throw new Error('expected empty managed drift state to suppress fallback drift table rows');
 

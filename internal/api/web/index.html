@@ -847,6 +847,112 @@
           empty: 'No derived fallback field-level drift was detected from the deployment read model.',
         };
       };
+      const driftSourceCoverageEntries = (detail) => (Array.isArray(detail?.managedDriftSourceCoverage) ? detail.managedDriftSourceCoverage : [])
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') return null;
+          const sourceKind = String(entry.sourceKind || '').trim();
+          const label = String(entry.label || '').trim() || sourceKind;
+          const coverage = String(entry.coverage || '').trim();
+          if (!label && !coverage) return null;
+          const rowCount = Number(entry.rowCount || 0);
+          return {
+            sourceKind,
+            label: label || 'Drift source',
+            coverage,
+            rowCount: Number.isFinite(rowCount) && rowCount > 0 ? rowCount : 0,
+            resourceType: String(entry.resourceType || '').trim(),
+            resourceName: String(entry.resourceName || '').trim(),
+            route: String(entry.route || '').trim(),
+            unavailableHint: String(entry.unavailableHint || '').trim(),
+            summary: String(entry.summary || '').trim(),
+          };
+        })
+        .filter(Boolean);
+      const driftSourceCoverageLabel = (coverage) => {
+        switch (coverage) {
+          case 'rows_reported':
+            return 'Rows reported';
+          case 'checked_no_rows':
+            return 'Checked, no rows';
+          case 'unavailable':
+            return 'Unavailable';
+          case 'unsupported':
+            return 'Unsupported';
+          default:
+            return coverage ? coverage.replace(/[_-]+/g, ' ') : 'Not reported';
+        }
+      };
+      const driftSourceCoveragePillClass = (coverage) => {
+        switch (coverage) {
+          case 'rows_reported':
+            return 'pill target';
+          case 'checked_no_rows':
+            return 'pill mode';
+          case 'unavailable':
+          case 'unsupported':
+            return 'pill warning';
+          default:
+            return 'pill';
+        }
+      };
+      const driftSourceCoverageSummary = (entries) => {
+        if (!entries.length) return 'No drift source coverage entries are currently reported by this deployment detail.';
+        const checked = entries.filter((entry) => entry.coverage === 'rows_reported' || entry.coverage === 'checked_no_rows').length;
+        const reported = entries.filter((entry) => entry.coverage === 'rows_reported').length;
+        const unavailable = entries.filter((entry) => entry.coverage === 'unavailable' || entry.coverage === 'unsupported').length;
+        const rowCount = entries.reduce((sum, entry) => sum + entry.rowCount, 0);
+        const parts = [`${entries.length} drift source${entries.length === 1 ? '' : 's'} reported`];
+        if (checked) parts.push(`${checked} checked`);
+        if (reported) parts.push(`${reported} with rows`);
+        if (unavailable) parts.push(`${unavailable} unavailable or unsupported`);
+        parts.push(`${rowCount} field-level row${rowCount === 1 ? '' : 's'} attributed`);
+        return parts.join(' · ');
+      };
+      const driftSourceCoverageResourceText = (entry) => [entry.resourceType, entry.resourceName].filter(Boolean).join(' · ');
+      const createDriftSourceCoveragePanel = (detail, workspaceState = null) => {
+        const entries = driftSourceCoverageEntries(detail);
+        const panel = createElement('div', 'workspace-callout drift-source-coverage');
+        const head = createElement('div', 'workspace-callout-head');
+        head.append(
+          createElement('span', 'workspace-callout-label', 'Drift source coverage'),
+          createElement('span', 'pill target', entries.length ? `${entries.length} sources` : 'No coverage'),
+        );
+        panel.append(head);
+        if (workspaceState?.status === 'loading') {
+          panel.append(createElement('div', 'workspace-callout-copy', 'Refreshing drift source coverage from the deployment detail read model…'));
+        }
+        panel.append(createElement('div', 'workspace-callout-copy', driftSourceCoverageSummary(entries)));
+        if (!entries.length) {
+          panel.append(createElement('div', 'workspace-callout-factors', 'Coverage context appears only when the backend reports which drift sources were checked; field-level rows below still render from the active drift source.'));
+          return panel;
+        }
+        const list = createElement('ul', 'detail-list drift-source-coverage-list');
+        entries.forEach((entry) => {
+          const item = createElement('li');
+          const titleRow = createElement('div', 'workspace-callout-head');
+          titleRow.append(
+            createElement('strong', '', entry.label),
+            createElement('span', driftSourceCoveragePillClass(entry.coverage), driftSourceCoverageLabel(entry.coverage)),
+          );
+          item.append(titleRow);
+          const meta = createElement('div', 'detail-execution-meta');
+          meta.append(createElement('span', 'detail-condition-meta', `${entry.rowCount} row${entry.rowCount === 1 ? '' : 's'} attributed`));
+          const resourceText = driftSourceCoverageResourceText(entry);
+          if (resourceText) meta.append(createElement('span', 'detail-condition-meta', `Resource · ${resourceText}`));
+          if (entry.sourceKind) meta.append(createElement('span', 'detail-condition-meta', `Source kind · ${entry.sourceKind}`));
+          item.append(meta);
+          if (entry.summary) item.append(createElement('div', 'workspace-callout-copy', entry.summary));
+          if (entry.unavailableHint) item.append(createElement('div', 'workspace-callout-factors', `Unavailable guidance · ${entry.unavailableHint}`));
+          if (entry.route) {
+            const routeLinks = createElement('div', 'row-links');
+            routeLinks.append(createNavLink(entry.route, 'Coverage route', entry.route.startsWith('/') ? '_self' : '_blank'));
+            item.append(routeLinks);
+          }
+          list.append(item);
+        });
+        panel.append(list);
+        return panel;
+      };
       const rolloutPhaseForStepKind = (stepKind) => {
         switch (stepKind) {
           case 'CreateCandidateCapacity':
@@ -11371,7 +11477,7 @@
             createElement('div', 'workspace-callout-copy', driftSource.summary),
             createElement('div', 'workspace-callout-factors', driftSource.factors),
           );
-          driftSection.append(driftSourceCallout);
+          driftSection.append(driftSourceCallout, createDriftSourceCoveragePanel(detail, workspaceState));
           driftSection.append(driftControls, driftToolbarActions, driftSummary, driftTableWrap);
           renderDriftRows();
           sections.push(driftSection);

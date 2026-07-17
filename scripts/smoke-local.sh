@@ -2337,6 +2337,11 @@ assert 'Breadcrumbs' in ui, ui
 assert 'No linked resources are available in this workspace yet.' in ui, ui
 assert 'Current source: controller-authored managedDrift rows.' in ui, ui
 assert 'managedDrift is present in the deployment detail payload, so fallback read-model heuristics stay suppressed for this deployment.' in ui, ui
+assert 'Drift source coverage' in ui, ui
+assert 'No drift source coverage entries are currently reported by this deployment detail.' in ui, ui
+assert 'Coverage context appears only when the backend reports which drift sources were checked; field-level rows below still render from the active drift source.' in ui, ui
+assert "const driftSourceCoverageEntries = (detail) => (Array.isArray(detail?.managedDriftSourceCoverage) ? detail.managedDriftSourceCoverage : [])" in ui, ui
+assert "const createDriftSourceCoveragePanel = (detail, workspaceState = null) => {" in ui, ui
 assert 'Current source: derived fallback read-model heuristics.' in ui, ui
 assert 'managedDrift is absent in the deployment detail payload, so Tenet is deriving field-level drift from artifact, generation, runtime-context, and unhealthy-condition read-model signals.' in ui, ui
 assert 'Severity' in ui, ui
