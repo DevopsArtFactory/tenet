@@ -814,9 +814,9 @@ func TestResourceUnavailableSmokeMatrixDocsAndScripts(t *testing.T) {
 		},
 		{
 			name:      "traffic routing no log source",
-			local:     []string{"traffic_resource_logs", "production_listener_rule_resource_logs", "active_target_group_resource_logs", "candidate_target_group_resource_logs", "no_log_source"},
-			docker:    []string{"traffic_resource_logs", "production_listener_rule_resource_logs", "active_target_group_resource_logs", "candidate_target_group_resource_logs", "no_log_source"},
-			docs:      []string{"Traffic-routing no-log-source", "resultScope.truncationStatus=not_applicable"},
+			local:     []string{"traffic_resource_logs", "production_listener_rule_resource_logs", "active_target_group_resource_logs", "candidate_target_group_resource_logs", "no_log_source", "assert_related_log_routes", "relatedLogRoutes"},
+			docker:    []string{"traffic_resource_logs", "production_listener_rule_resource_logs", "active_target_group_resource_logs", "candidate_target_group_resource_logs", "no_log_source", "assert_related_log_routes", "relatedLogRoutes"},
+			docs:      []string{"Traffic-routing no-log-source", "resultScope.truncationStatus=not_applicable", "`relatedLogRoutes[]` handoffs"},
 			uiHarness: []string{"Recent logs are unavailable for this resource.", "This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet."},
 		},
 		{
