@@ -227,6 +227,7 @@
     <script>
       const detailStateByDeployment = new Map();
       const deploymentEventsStateByDeployment = new Map();
+      const resourceEventsStateByResource = new Map();
       const resourceLogStateByKey = new Map();
       const resourceLogLimitByResourceKey = new Map();
       const resourceInspectionLimitByResourceKey = new Map();
@@ -4087,7 +4088,7 @@
         createClearSelectedInstanceButton(detail, resource, resourceState),
       ];
       const createCurrentResourceReadCue = (deploymentName) =>
-        createElement('div', 'workspace-callout-factors resource-read-route resource-current-read-cue', `Current resource read: ${resourceDetailReadRoute(deploymentName)}. Loaded before focused Recent logs and Live inspection reads.`);
+        createElement('div', 'workspace-callout-factors resource-read-route resource-current-read-cue', `Current resource read: ${resourceDetailReadRoute(deploymentName)}. Loaded before focused Related runtime events, Recent logs, and Live inspection reads.`);
       const createResourceLinkedSourceCue = (detail, resource) =>
         createElement('div', 'workspace-callout-factors resource-linked-source-cue', `Linked-resource source: ${resource?.linkedResourceSource || applicationLinkedResourceSourceText(detail)}`);
       const createSelectedResourceContextCallout = (detail, resource) => {
@@ -5179,6 +5180,10 @@
           conditionsSection.append(conditionList);
         }
 
+        const relatedEventsSection = createDetailSection('Related runtime events');
+        pushResourceSection(relatedEventsSection, 'resource-related-runtime-events', 'Related runtime events');
+        renderResourceRelatedEventsSection(relatedEventsSection, deploymentName, resource).catch(() => {});
+
         const inspectionSection = createDetailSection('Live inspection');
         pushResourceSection(inspectionSection, 'resource-live-inspection', 'Live inspection');
         renderResourceInspectionSection(inspectionSection, detail, resource).catch(() => {});
@@ -5198,7 +5203,7 @@
         } else if (refreshState?.message) {
           page.append(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.message));
         }
-        page.append(quickNav, troubleshootingSection, shell, historySection, executionSection, conditionsSection, inspectionSection, logsSection);
+        page.append(quickNav, troubleshootingSection, shell, historySection, executionSection, conditionsSection, relatedEventsSection, inspectionSection, logsSection);
         root.replaceChildren(page);
         activeResourceQuickNavSync = typeof quickNav.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
         syncActiveResourceQuickNav();
@@ -7529,20 +7534,32 @@
       const deploymentEventsRoutePath = (deploymentName) => deploymentName === '{deploymentName}'
         ? '/v1/overview/deployments/{deploymentName}/events'
         : `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`;
-      const buildDeploymentEventsReadRoute = (deploymentName, { limit = defaultDeploymentEventsLimit, source = currentPageState.eventSource } = {}) => {
+      const buildDeploymentEventsReadRoute = (deploymentName, { limit = defaultDeploymentEventsLimit, source = currentPageState.eventSource, resourceType = '', resourceName = '' } = {}) => {
         const route = deploymentEventsRoutePath(deploymentName);
         const normalizedLimit = normalizeDeploymentEventsLimit(limit);
         const normalizedSource = normalizeDeploymentEventsSource(source);
         const params = new URLSearchParams();
+        const selectedResourceType = String(resourceType || '').trim();
+        const selectedResourceName = String(resourceName || '').trim();
+        if (selectedResourceType && selectedResourceName) {
+          params.set('resourceType', selectedResourceType);
+          params.set('resourceName', selectedResourceName);
+        }
         params.set('limit', String(normalizedLimit));
         if (normalizedSource) params.set('source', normalizedSource);
         return `${route}?${params.toString()}`;
       };
       const deploymentEventsReadRoute = (deploymentName, limit = currentPageState.eventLimit, source = currentPageState.eventSource) => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit, source })}`;
+      const resourceEventsReadRoute = (deploymentName, resource, limit = defaultDeploymentEventsLimit) => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit, resourceType: resource?.type || '', resourceName: resource?.name || '' })}`;
       const deploymentEventsCacheKey = (deploymentName, limit = currentPageState.eventLimit, source = currentPageState.eventSource) => `${deploymentName || ''}::limit=${normalizeDeploymentEventsLimit(limit)}::source=${normalizeDeploymentEventsSource(source) || 'all'}`;
+      const resourceEventsCacheKey = (deploymentName, resource, limit = defaultDeploymentEventsLimit) => `${deploymentName || ''}::${resource?.type || ''}::${resource?.name || ''}::limit=${normalizeDeploymentEventsLimit(limit)}`;
       const fetchDeploymentEvents = (deploymentName, limit = currentPageState.eventLimit, source = currentPageState.eventSource) => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName, { limit, source }), {
         unavailable: 'deployment events unavailable',
         failure: 'deployment events request failed',
+      });
+      const fetchResourceRelatedEvents = (deploymentName, resource, limit = defaultDeploymentEventsLimit) => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName, { limit, resourceType: resource?.type || '', resourceName: resource?.name || '' }), {
+        unavailable: 'related runtime events unavailable',
+        failure: 'related runtime events request failed',
       });
       const fetchDeploymentDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`, {
         unavailable: 'deployment detail unavailable',
@@ -7852,6 +7869,144 @@
           actions.push(createNavLink(buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }), 'Open field-level drift', '_self'));
         }
         return actions;
+      };
+      const createResourceRelatedEventsIntro = (deploymentName, resource, limit = defaultDeploymentEventsLimit) => createElement('div', 'detail-section-copy', `Controller-derived runtime events that mention ${textOrDash(resource?.name)} from ${resourceEventsReadRoute(deploymentName || '{deploymentName}', resource || { type: '{selectedType}', name: '{selectedName}' }, limit)}. This resource-depth panel is refresh-based and does not poll; it keeps the bookmarkable resource URL unchanged.`);
+      const createResourceRelatedEventsActions = (section, deploymentName, resource, isLoading = false, result = null, limit = defaultDeploymentEventsLimit) => [
+        createRefreshButton(
+          'Refresh related events',
+          isLoading || !deploymentName || !resource?.type || !resource?.name,
+          () => renderResourceRelatedEventsSection(section, deploymentName, resource, { force: true, limit }).catch(() => {}),
+        ),
+        createCopyReadRouteButton(
+          resourceEventsReadRoute(deploymentName, resource, limit),
+          'Copy related events route',
+        ),
+      ];
+      const renderResourceRelatedEventsState = (section, deploymentName, resource, text, className = '', detailText = '', isLoading = false, limit = defaultDeploymentEventsLimit) => {
+        const heading = createDetailSectionHeader('Related runtime events', createResourceRelatedEventsActions(section, deploymentName, resource, isLoading, null, limit));
+        const intro = createResourceRelatedEventsIntro(deploymentName, resource, limit);
+        const stateNode = createElement('div', 'detail-state', text);
+        markPoliteStatusNode(stateNode);
+        if (className) stateNode.classList.add(className);
+        if (detailText) {
+          section.replaceChildren(heading, intro, stateNode, createElement('div', 'detail-condition-meta', detailText));
+          return;
+        }
+        section.replaceChildren(heading, intro, stateNode);
+      };
+      const resourceRelatedEventsEmptyStateText = (resource, result, selectedLimit) => {
+        const scope = result?.resultScope || {};
+        const retainedCount = Number(scope.retainedEventCount ?? result?.retention?.retainedEventCount);
+        if (Number.isFinite(retainedCount) && retainedCount === 0) {
+          return `No retained runtime events are available for this deployment yet, so none can mention ${textOrDash(resource?.name)}.`;
+        }
+        return `No retained runtime events mention ${textOrDash(resource?.name)} in the latest ${selectedLimit}-event resource-filtered window. Refresh related events or inspect the application-level runtime events before treating controller history as absent.`;
+      };
+      const renderResourceRelatedEventsPayload = (section, deploymentName, resource, result, limit = defaultDeploymentEventsLimit) => {
+        const selectedLimit = normalizeDeploymentEventsLimit(limit);
+        const events = sortTimelineEvents(result?.events || []);
+        const scopeSummary = createDeploymentEventsResultScopeSummary(result);
+        const freshnessMeta = createDeploymentEventsFreshnessMeta(result);
+        const heading = createDetailSectionHeader('Related runtime events', createResourceRelatedEventsActions(section, deploymentName, resource, false, result, selectedLimit));
+        const intro = createResourceRelatedEventsIntro(deploymentName, resource, selectedLimit);
+        if (!events.length) {
+          const stateNode = createElement('div', 'detail-state', resourceRelatedEventsEmptyStateText(resource, result, selectedLimit));
+          markPoliteStatusNode(stateNode);
+          section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), stateNode);
+          return;
+        }
+        const ordering = createElement('div', 'detail-condition-meta', `${events.length} related runtime event${events.length === 1 ? '' : 's'} in latest ${selectedLimit}-event resource-filtered window · newest controller event first`);
+        const eventList = createElement('ol', 'detail-list');
+        const seenEventAnchors = new Map();
+        events.forEach((event) => {
+          const eventID = `resource-runtime-event-${sectionIDSegment(uniqueRuntimeEventAnchorID(event, seenEventAnchors), 'unknown')}`;
+          const summaryText = textOrDash(event.summary) === '—' ? 'Related runtime event' : textOrDash(event.summary);
+          const item = createElement('li');
+          item.id = eventID;
+          item.setAttribute('id', eventID);
+          const eventHeading = createElement('div', 'detail-history-meta');
+          const shareURL = currentPageSectionURL(eventID);
+          eventHeading.append(
+            createElement('strong', '', summaryText),
+            createNavLink(shareURL, 'Share related event', '_self'),
+            createCopyLinkButton(shareURL, 'Copy related event link', 'Copy related runtime event link'),
+          );
+          item.append(eventHeading);
+          const eventMeta = createElement('div', 'detail-history-meta');
+          eventMeta.append(createElement('span', 'detail-condition-meta', `Time · ${textOrDash(event.timestamp)}`));
+          const syncContext = [event.sync?.state, event.sync?.reason].filter(Boolean).join(' · ');
+          if (syncContext) eventMeta.append(createElement('span', 'detail-condition-meta', `Sync · ${syncContext}`));
+          if (event.health?.overall || event.health?.summary) eventMeta.append(createElement('span', 'detail-condition-meta', `Health · ${healthLabel(event.health)}${event.health?.summary ? ` · ${event.health.summary}` : ''}`));
+          const rolloutContext = rolloutContextText(event);
+          if (rolloutContext) eventMeta.append(createElement('span', 'detail-condition-meta', `Context · ${rolloutContext}`));
+          if (event.rolloutPhase) eventMeta.append(createElement('span', 'detail-condition-meta', `Rollout phase · ${event.rolloutPhase}`));
+          if (event.currentStep) eventMeta.append(createElement('span', 'detail-condition-meta', `Rollout step · ${event.currentStep}`));
+          if (changeDetailLabels(event.changeDetails).length) eventMeta.append(createElement('span', 'detail-condition-meta', `Event details · ${changeDetailsText(event.changeDetails)}`));
+          const matchingRows = (Array.isArray(event.managedDrift) ? event.managedDrift : []).filter((row) => (
+            (row?.resourceRef?.resourceType === resource?.type && row?.resourceRef?.resourceName === resource?.name) ||
+            (row?.source?.resourceType === resource?.type && row?.source?.resourceName === resource?.name)
+          ));
+          if (matchingRows.length) eventMeta.append(createElement('span', 'detail-condition-meta', `Resource drift references · ${matchingRows.length}`));
+          if (event.source) eventMeta.append(createElement('span', 'detail-condition-meta', `Source · ${event.source}`));
+          item.append(eventMeta);
+          eventList.append(item);
+        });
+        section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), ordering, eventList);
+        scrollToCurrentHashTarget();
+      };
+      const renderResourceRelatedEventsSection = (section, deploymentName, resource, options = {}) => {
+        const force = Boolean(options?.force);
+        const limit = normalizeDeploymentEventsLimit(options?.limit ?? defaultDeploymentEventsLimit);
+        const cacheKey = resourceEventsCacheKey(deploymentName, resource, limit);
+        const cached = resourceEventsStateByResource.get(cacheKey);
+        if (!deploymentName || !resource?.type || !resource?.name) {
+          renderResourceRelatedEventsState(section, deploymentName, resource, 'Related runtime events are currently unavailable.', 'error', 'Resource detail is missing deployment, resource type, or resource name for GET /v1/overview/deployments/{deploymentName}/events?resourceType={selectedType}&resourceName={selectedName}.', false, limit);
+          return Promise.resolve(null);
+        }
+        if (!force && cached?.status === 'ready') {
+          renderResourceRelatedEventsPayload(section, deploymentName, resource, cached.result, limit);
+          return Promise.resolve(cached.result);
+        }
+        if (cached?.status === 'loading') {
+          resourceEventsStateByResource.set(cacheKey, { ...cached, sections: [...(cached.sections || []), section] });
+          renderResourceRelatedEventsState(section, deploymentName, resource, 'Loading related runtime events…', '', '', true, limit);
+          return cached.promise;
+        }
+        if (!force && cached?.status === 'error') {
+          if (cached.error?.kind === 'unavailable') {
+            renderResourceRelatedEventsState(section, deploymentName, resource, 'Related runtime events are currently unavailable.', 'error', cached.error.message, false, limit);
+          } else if (renderOperatorReadFailurePanel(section, 'Related runtime events', createResourceRelatedEventsActions(section, deploymentName, resource, false, null, limit), resourceEventsReadRoute(deploymentName, resource, limit), cached.error)) {
+            return Promise.reject(cached.error);
+          } else {
+            renderResourceRelatedEventsState(section, deploymentName, resource, `Failed to load related runtime events: ${cached.error?.message || 'unknown error'}`, 'error', '', false, limit);
+          }
+          return Promise.reject(cached.error);
+        }
+        renderResourceRelatedEventsState(section, deploymentName, resource, 'Loading related runtime events…', '', '', true, limit);
+        const promise = Promise.resolve()
+          .then(() => fetchResourceRelatedEvents(deploymentName, resource, limit))
+          .then((rawResult) => {
+            const result = withDeploymentEventsFetchedAt(rawResult);
+            const current = resourceEventsStateByResource.get(cacheKey);
+            resourceEventsStateByResource.set(cacheKey, { status: 'ready', result });
+            (current?.sections || []).forEach((container) => renderResourceRelatedEventsPayload(container, deploymentName, resource, result, limit));
+            return result;
+          })
+          .catch((error) => {
+            const current = resourceEventsStateByResource.get(cacheKey);
+            resourceEventsStateByResource.set(cacheKey, { status: 'error', error });
+            (current?.sections || []).forEach((container) => {
+              if (error?.kind === 'unavailable') {
+                renderResourceRelatedEventsState(container, deploymentName, resource, 'Related runtime events are currently unavailable.', 'error', error.message, false, limit);
+                return;
+              }
+              if (renderOperatorReadFailurePanel(container, 'Related runtime events', createResourceRelatedEventsActions(container, deploymentName, resource, false, null, limit), resourceEventsReadRoute(deploymentName, resource, limit), error)) return;
+              renderResourceRelatedEventsState(container, deploymentName, resource, `Failed to load related runtime events: ${error.message}`, 'error', '', false, limit);
+            });
+            throw error;
+          });
+        resourceEventsStateByResource.set(cacheKey, { status: 'loading', promise, sections: [section] });
+        return promise;
       };
       const renderDeploymentEventsState = (section, deploymentName, text, className = '', detailText = '', isLoading = false, limit = currentPageState.eventLimit) => {
         const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, isLoading));

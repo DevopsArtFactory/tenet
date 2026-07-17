@@ -2438,7 +2438,7 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
         "workspace-callout-factors resource-read-route resource-current-read-cue",
         "workspace-callout-factors resource-linked-source-cue",
         "Linked-resource source: ${resource?.linkedResourceSource || applicationLinkedResourceSourceText(detail)}",
-        "Current resource read: ${resourceDetailReadRoute(deploymentName)}. Loaded before focused Recent logs and Live inspection reads.",
+        "Current resource read: ${resourceDetailReadRoute(deploymentName)}. Loaded before focused Related runtime events, Recent logs, and Live inspection reads.",
         "Refresh resource detail",
         "Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…",
         "Current resource detail remains visible below.",

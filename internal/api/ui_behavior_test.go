@@ -2228,6 +2228,16 @@ async function render(search, fetchImpl, clipboardImpl) {
         ],
       },
     }) });
+    if (url === '/v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      deploymentName: 'payments-api-staging',
+      resultScope: { requestedLimit: 10, effectiveLimit: 10, returnedEventCount: 1, totalEventCount: 1, retainedEventCount: 3, resourceFilter: { resourceType: 'ecsService', resourceName: 'payments-api-staging-service' } },
+      events: [{
+        timestamp: '2026-06-28T10:01:00Z',
+        summary: 'Resource drift reconciled for payments-api-staging-service',
+        sync: { state: 'Reconciling', reason: 'ResourceDrift' },
+        managedDrift: [{ resourceRef: { resourceType: 'ecsService', resourceName: 'payments-api-staging-service' }, severity: 'medium' }],
+      }],
+    }) });
     if (url === '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, unavailableReason: 'no_log_source', entries: [] }) });
     throw new Error('unexpected resource fetch url: ' + url);
   });
@@ -2247,7 +2257,11 @@ async function render(search, fetchImpl, clipboardImpl) {
   if (!recentLogsCopyButton || recentLogsCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-staging') throw new Error('expected recent logs copy button');
   recentLogsCopyButton.dispatch('click');
   await settle();
-  if (resourceView.clipboardWrites.join(', ') !== 'GET /v1/overview/deployments/payments-api-staging, GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-staging&limit=5, GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-staging') throw new Error('expected resource copy routes, got ' + resourceView.clipboardWrites.join(', '));
+  const relatedEventsCopyButton = collectNodes(resourceView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Copy related events route');
+  if (!relatedEventsCopyButton || relatedEventsCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10') throw new Error('expected related events copy button');
+  relatedEventsCopyButton.dispatch('click');
+  await settle();
+  if (resourceView.clipboardWrites.join(', ') !== 'GET /v1/overview/deployments/payments-api-staging, GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-staging&limit=5, GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-staging, GET /v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10') throw new Error('expected resource copy routes, got ' + resourceView.clipboardWrites.join(', '));
   const resourceLinks = collectNodes(resourceView.document.getElementById('accounts'), (node) => node.tagName === 'A');
   const encodedResourceID = encodeURIComponent(resourceID);
   const encodedClusterArn = encodeURIComponent(clusterArn);
@@ -2280,7 +2294,7 @@ async function render(search, fetchImpl, clipboardImpl) {
   if (!resourceBodyText.includes('Linked-resource source: Fallback rollout inventory')) throw new Error('expected resource detail body to preserve fallback linked-resource source cue, got ' + resourceBodyText);
   if (resourceToolbarText.includes('Current resource read: GET /v1/overview/deployments/payments-api-staging')) throw new Error('expected current resource read route outside toolbar');
   if (resourceToolbarText.includes('Linked-resource source: Fallback rollout inventory')) throw new Error('expected linked-resource source cue outside toolbar');
-  const resourceReadRouteCue = collectNodes(resourceView.document.getElementById('accounts'), (node) => String(node.className || '').split(/\s+/).includes('resource-read-route')).find((node) => node.textContent === 'Current resource read: GET /v1/overview/deployments/payments-api-staging. Loaded before focused Recent logs and Live inspection reads.');
+  const resourceReadRouteCue = collectNodes(resourceView.document.getElementById('accounts'), (node) => String(node.className || '').split(/\s+/).includes('resource-read-route')).find((node) => node.textContent === 'Current resource read: GET /v1/overview/deployments/payments-api-staging. Loaded before focused Related runtime events, Recent logs, and Live inspection reads.');
   if (!resourceReadRouteCue) throw new Error('expected resource detail body read-route cue node');
   const resourceLinkedSourceCue = collectNodes(resourceView.document.getElementById('accounts'), (node) => String(node.className || '').split(/\s+/).includes('resource-linked-source-cue')).find((node) => node.textContent.includes('Linked-resource source: Fallback rollout inventory'));
   if (!resourceLinkedSourceCue) throw new Error('expected resource detail body linked-source cue node');
@@ -6374,7 +6388,7 @@ async function renderScenario(hash, fetchImpl) {
   if (recentLogsRun.window.location.hash !== '#resource-recent-logs') throw new Error('expected recent logs hash to stay stable, got ' + recentLogsRun.window.location.hash);
   const recentLogsRoot = recentLogsRun.document.getElementById('accounts');
   const sectionIDs = collectNodes(recentLogsRoot, (node) => typeof node.id === 'string' && node.id.startsWith('resource-')).map((node) => node.id).sort();
-  const expectedSectionIDs = ['resource-live-inspection', 'resource-recent-logs', 'resource-rollout-execution', 'resource-runtime-history', 'resource-status-conditions', 'resource-troubleshooting-summary'];
+  const expectedSectionIDs = ['resource-live-inspection', 'resource-recent-logs', 'resource-related-runtime-events', 'resource-rollout-execution', 'resource-runtime-history', 'resource-status-conditions', 'resource-troubleshooting-summary'];
   if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected resource section ids: ' + JSON.stringify(sectionIDs));
   const recentLogsChip = collectNodes(recentLogsRoot, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip').find((node) => node.getAttribute('aria-label') === 'Current section: Recent logs');
   if (!recentLogsChip) throw new Error('expected recent logs hash to render the current-section chip');
@@ -8718,14 +8732,18 @@ const assertStatusRegion = (node, label) => {
 async function settle(count = 1) { for (let i = 0; i < count; i += 1) { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); } }
 const resourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
 const deploymentURL = '/v1/overview/deployments/payments-api-staging';
+const eventsURL = '/v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10';
 const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service';
 const inspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10';
 const initialSearch = '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID);
 const fetchCalls = [];
+let eventsFetchCount = 0;
 let logsFetchCount = 0;
 let inspectionFetchCount = 0;
+let resolveInitialEvents;
 let resolveInitialLogs;
 let resolveInitialInspection;
+let resolveRefreshEvents;
 let resolveRefreshLogs;
 let resolveRefreshInspection;
 const window = { location: { pathname: '/', search: initialSearch, hash: '' } };
@@ -8733,6 +8751,13 @@ const history = { replaceState(_state, _title, url) { const [pathname, query = '
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === eventsURL) {
+    eventsFetchCount += 1;
+    if (eventsFetchCount === 1) return new Promise((resolve) => { resolveInitialEvents = resolve; });
+    if (eventsFetchCount === 2) return new Promise((resolve) => { resolveRefreshEvents = resolve; });
+    if (eventsFetchCount === 3) return Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({ error: 'deployment access denied' }) });
+    throw new Error('unexpected events fetch count: ' + eventsFetchCount);
+  }
   if (url === logsURL) {
     logsFetchCount += 1;
     if (logsFetchCount === 1) return new Promise((resolve) => { resolveInitialLogs = resolve; });
@@ -8753,22 +8778,30 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const root = document.getElementById('accounts');
   let text = collectText(root).join(' | ');
   let buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  let refreshEvents = buttons.find((node) => node.textContent === 'Refresh related events');
   let refreshLogs = buttons.find((node) => node.textContent === 'Refresh recent logs');
   let refreshInspection = buttons.find((node) => node.textContent === 'Refresh live inspection');
-  if (!refreshLogs || !refreshInspection) throw new Error('expected resource refresh buttons while sections are loading');
-  if (!refreshLogs.disabled || !refreshInspection.disabled) throw new Error('expected resource refresh buttons disabled while initial fetches are in flight');
+  if (!refreshEvents || !refreshLogs || !refreshInspection) throw new Error('expected resource refresh buttons while sections are loading');
+  if (!refreshEvents.disabled || !refreshLogs.disabled || !refreshInspection.disabled) throw new Error('expected resource refresh buttons disabled while initial fetches are in flight');
   const readCue = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('resource-current-read-cue'))[0];
   if (!readCue) throw new Error('expected current resource read cue before lazy panels resolve');
-  if (readCue.textContent !== 'Current resource read: GET /v1/overview/deployments/payments-api-staging. Loaded before focused Recent logs and Live inspection reads.') throw new Error('expected current resource read cue to show deployment-detail route before lazy panels resolve');
+  if (readCue.textContent !== 'Current resource read: GET /v1/overview/deployments/payments-api-staging. Loaded before focused Related runtime events, Recent logs, and Live inspection reads.') throw new Error('expected current resource read cue to show deployment-detail route before lazy panels resolve');
   const linkedSourceCue = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('resource-linked-source-cue'))[0];
   if (!linkedSourceCue) throw new Error('expected linked-resource source cue before lazy panels resolve');
   if (!linkedSourceCue.textContent.includes('Linked-resource source: Controller-authored rollout execution')) throw new Error('expected linked-resource source cue to preserve selected resource provenance before lazy panels resolve');
+  if (!text.includes('Loading related runtime events…')) throw new Error('expected initial loading state for related runtime events');
   if (!text.includes('Loading recent logs…')) throw new Error('expected initial loading state for recent logs');
   if (!text.includes('Loading live inspection…')) throw new Error('expected initial loading state for live inspection');
   const initialStatusNodes = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('detail-state'));
+  assertStatusRegion(initialStatusNodes.find((node) => node.textContent === 'Loading related runtime events…'), 'Related runtime events loading state');
   assertStatusRegion(initialStatusNodes.find((node) => node.textContent === 'Loading recent logs…'), 'Recent logs loading state');
   assertStatusRegion(initialStatusNodes.find((node) => node.textContent === 'Loading live inspection…'), 'Live inspection loading state');
 
+  resolveInitialEvents({ ok: true, json: () => Promise.resolve({
+    deploymentName: 'payments-api-staging',
+    resultScope: { requestedLimit: 10, effectiveLimit: 10, returnedEventCount: 1, totalEventCount: 1, retainedEventCount: 3, resourceFilter: { resourceType: 'ecsService', resourceName: 'payments-api-staging-service' } },
+    events: [{ timestamp: '2026-04-18T00:14:00Z', summary: 'Initial related runtime event', sync: { state: 'Reconciling', reason: 'ResourceDrift' }, managedDrift: [{ resourceRef: { resourceType: 'ecsService', resourceName: 'payments-api-staging-service' }, severity: 'medium' }] }],
+  }) });
   resolveInitialLogs({ ok: true, json: () => Promise.resolve({
     available: true,
     source: 'cloudwatch',
@@ -8780,10 +8813,13 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 
   text = collectText(root).join(' | ');
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshEvents = buttons.find((node) => node.textContent === 'Refresh related events');
   refreshLogs = buttons.find((node) => node.textContent === 'Refresh recent logs');
   refreshInspection = buttons.find((node) => node.textContent === 'Refresh live inspection');
-  if (!refreshLogs || !refreshInspection) throw new Error('expected resource refresh buttons after initial responses');
-  if (refreshLogs.disabled || refreshInspection.disabled) throw new Error('expected resource refresh buttons enabled after initial terminal states');
+  if (!refreshEvents || !refreshLogs || !refreshInspection) throw new Error('expected resource refresh buttons after initial responses');
+  if (refreshEvents.disabled || refreshLogs.disabled || refreshInspection.disabled) throw new Error('expected resource refresh buttons enabled after initial terminal states');
+  if (!text.includes('Initial related runtime event')) throw new Error('expected initial related runtime event payload before refresh');
+  if (!text.includes('Resource drift references') || !text.includes('1')) throw new Error('expected related runtime event to summarize matching resource drift rows');
   if (!text.includes('Initial recent log line')) throw new Error('expected initial recent log payload before refresh');
   if (!text.includes('Provider lookup context')) throw new Error('expected recent logs to label returned provider lookup context');
   if (!text.includes('Lookup region') || !text.includes('ap-northeast-2')) throw new Error('expected recent logs provider lookup context to include region');
@@ -8794,6 +8830,43 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   assertStatusRegion(failedInspectionStatus, 'Live inspection error state');
   if (!text.match(/Evidence freshness \| Recent logs refreshed .+ · Live inspection not refreshed yet/)) throw new Error('expected troubleshooting summary to surface only completed evidence freshness after initial reads: ' + text);
 
+  refreshEvents.dispatch('click');
+  await settle(1);
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshEvents = buttons.find((node) => node.textContent === 'Refresh related events');
+  refreshLogs = buttons.find((node) => node.textContent === 'Refresh recent logs');
+  refreshInspection = buttons.find((node) => node.textContent === 'Refresh live inspection');
+  if (!refreshEvents || !refreshLogs || !refreshInspection) throw new Error('expected refresh buttons during related-events refresh');
+  if (!refreshEvents.disabled) throw new Error('expected related-events refresh button disabled while its fetch is in flight');
+  if (refreshLogs.disabled || refreshInspection.disabled) throw new Error('expected sibling resource panel refreshes to stay enabled during related-events refresh');
+  const refreshingEventsStatus = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('detail-state')).find((node) => node.textContent === 'Loading related runtime events…');
+  assertStatusRegion(refreshingEventsStatus, 'Related runtime events refresh loading state');
+  if (eventsFetchCount !== 2) throw new Error('expected related-events refresh to bypass cached ready state');
+  if (window.location.search !== initialSearch) throw new Error('expected related-events refresh to preserve bookmarkable URL');
+
+  resolveRefreshEvents({ ok: true, json: () => Promise.resolve({
+    deploymentName: 'payments-api-staging',
+    resultScope: { requestedLimit: 10, effectiveLimit: 10, returnedEventCount: 0, totalEventCount: 0, retainedEventCount: 3, resourceFilter: { resourceType: 'ecsService', resourceName: 'payments-api-staging-service' } },
+    events: [],
+  }) });
+  await settle(3);
+  text = collectText(root).join(' | ');
+  if (!text.includes('No retained runtime events mention payments-api-staging-service in the latest 10-event resource-filtered window.')) throw new Error('expected filtered-empty related runtime events copy after refresh: ' + text);
+  if (text.includes('Initial related runtime event')) throw new Error('expected related-events refresh to replace stale payload');
+
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshEvents = buttons.find((node) => node.textContent === 'Refresh related events');
+  if (!refreshEvents || refreshEvents.disabled) throw new Error('expected related-events refresh button re-enabled after filtered empty response');
+  refreshEvents.dispatch('click');
+  await settle(3);
+  text = collectText(root).join(' | ');
+  if (!text.includes('Operator access denied')) throw new Error('expected shared 403 operator-read guidance for related events refresh');
+  if (!text.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10 after recognizing the caller')) throw new Error('expected related events 403 guidance to name the filtered events route');
+  if (window.location.search !== initialSearch) throw new Error('expected denied related-events refresh to preserve bookmarkable URL');
+
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshLogs = buttons.find((node) => node.textContent === 'Refresh recent logs');
+  if (!refreshLogs || refreshLogs.disabled) throw new Error('expected recent-logs refresh to stay enabled after related-events denial');
   refreshLogs.dispatch('click');
   await settle(1);
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
@@ -8866,6 +8939,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Inspection path · ap-northeast-2 · account 210987654321 · same-account lookup · observer role configured')) throw new Error('expected live inspection provider lookup context summary');
   if (text.includes('Failed to load live inspection: resource inspection request failed (503)')) throw new Error('expected refreshed live inspection payload to replace stale error state');
   if (fetchCalls.filter((url) => url === deploymentURL).length !== 1) throw new Error('expected in-place refresh controls not to reload deployment detail');
+  if (fetchCalls.filter((url) => url === eventsURL).length !== 3) throw new Error('expected exactly three related-events fetches');
   if (fetchCalls.filter((url) => url === logsURL).length !== 2) throw new Error('expected exactly two recent-logs fetches');
   if (fetchCalls.filter((url) => url === inspectionURL).length !== 2) throw new Error('expected exactly two live-inspection fetches');
   if (window.location.search !== initialSearch) throw new Error('expected bookmarkable URL to remain unchanged after both refreshes');
@@ -8877,11 +8951,16 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const unavailableWindow = { location: { pathname: '/', search: initialSearch, hash: '' } };
   const unavailableHistory = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); unavailableWindow.location.pathname = pathname || '/'; unavailableWindow.location.search = query ? '?' + query : ''; } };
   const unavailableFetchCalls = [];
+  let unavailableEventsFetchCount = 0;
   let unavailableLogsFetchCount = 0;
   let unavailableInspectionFetchCount = 0;
   const unavailableFetch = (url) => {
     unavailableFetchCalls.push(String(url));
     if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === eventsURL) {
+      unavailableEventsFetchCount += 1;
+      return Promise.resolve({ ok: false, status: 503, json: () => Promise.resolve({ error: 'events unavailable' }) });
+    }
     if (url === logsURL) {
       unavailableLogsFetchCount += 1;
       return Promise.resolve({ ok: true, json: () => Promise.resolve({
@@ -8906,6 +8985,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle(3);
   const unavailableRoot = unavailableDocument.getElementById('accounts');
   let unavailableText = collectText(unavailableRoot).join(' | ');
+  if (!unavailableText.includes('Related runtime events are currently unavailable.')) throw new Error('expected unavailable related runtime events state');
+  if (!unavailableText.includes('events unavailable')) throw new Error('expected related runtime events unavailable detail');
   if (!unavailableText.includes('Live inspection is unavailable for this resource.')) throw new Error('expected explicit unavailable payload mapping for live inspection');
   if (!unavailableText.includes('AWS access is currently unavailable for live inspection.')) throw new Error('expected unavailable payload to use friendly reason mapping');
   let unavailableButtons = collectNodes(unavailableRoot, (node) => node.tagName === 'BUTTON');
@@ -8917,6 +8998,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle(3);
   unavailableText = collectText(unavailableRoot).join(' | ');
   if (!unavailableText.includes('No running tasks were found for this ECS service.')) throw new Error('expected unavailable refresh to render refreshed friendly reason mapping');
+  if (unavailableEventsFetchCount !== 1) throw new Error('expected unavailable related-events state not to refetch during live-inspection refresh, got ' + unavailableEventsFetchCount);
   if (unavailableLogsFetchCount !== 1) throw new Error('expected unavailable live-inspection refresh not to refetch sibling recent logs, got ' + unavailableLogsFetchCount);
   if (unavailableInspectionFetchCount !== 2) throw new Error('expected unavailable live-inspection refresh to refetch inspection exactly once, got ' + unavailableInspectionFetchCount);
   if (unavailableFetchCalls.filter((url) => url === deploymentURL).length !== 1) throw new Error('expected unavailable live-inspection refresh not to reload deployment detail');

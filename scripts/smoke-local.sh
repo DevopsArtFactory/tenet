@@ -2601,6 +2601,8 @@ assert "pushResourceSection(historySection, 'resource-runtime-history', 'Runtime
 assert "pushResourceSection(executionSection, 'resource-rollout-execution', 'Rollout execution');" in ui, ui
 assert "pushResourceSection(conditionsSection, 'resource-status-conditions', 'Conditions');" in ui, ui
 assert "pushResourceSection(inspectionSection, 'resource-live-inspection', 'Live inspection');" in ui, ui
+assert "pushResourceSection(relatedEventsSection, 'resource-related-runtime-events', 'Related runtime events');" in ui, ui
+assert "Copy related events route" in ui, ui
 assert "pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');" in ui, ui
 assert "const resourceLogsLimitOptions = [" in ui, ui
 assert "Log entry cap · ${resourceLogsLimitText(limit)}" in ui, ui
@@ -2872,7 +2874,7 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "workspace-callout-factors resource-read-route resource-current-read-cue" in body, body
     assert "workspace-callout-factors resource-linked-source-cue" in body, body
     assert "Linked-resource source: ${resource?.linkedResourceSource || applicationLinkedResourceSourceText(detail)}" in body, body
-    assert "Current resource read: ${resourceDetailReadRoute(deploymentName)}. Loaded before focused Recent logs and Live inspection reads." in body, body
+    assert "Current resource read: ${resourceDetailReadRoute(deploymentName)}. Loaded before focused Related runtime events, Recent logs, and Live inspection reads." in body, body
     assert "const selectedResourceEvidenceCalloutText = (supportsInspection, supportsLogs, routeBits) => {" in body, body
     assert 'Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection.' in body, body
     assert 'Use the Live inspection handoff below to refresh focused evidence for this exact resource selection.' in body, body
@@ -2909,6 +2911,8 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "pushResourceSection(executionSection, 'resource-rollout-execution', 'Rollout execution');" in body, body
     assert "pushResourceSection(conditionsSection, 'resource-status-conditions', 'Conditions');" in body, body
     assert "pushResourceSection(inspectionSection, 'resource-live-inspection', 'Live inspection');" in body, body
+    assert "pushResourceSection(relatedEventsSection, 'resource-related-runtime-events', 'Related runtime events');" in body, body
+    assert "Copy related events route" in body, body
     assert "pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');" in body, body
     assert "const renderOperatorReadFailurePanel = (container, title, actions, route, error) => {" in body, body
     assert "const resourceLogsReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceLogsRoute(deploymentName, resource, limit)}`;" in body, body
@@ -3094,7 +3098,7 @@ assert 'Open application drill-down' in audit_ui, audit_ui
 assert 'Open drift view' in audit_ui, audit_ui
 assert 'Open plan/apply workspace' in audit_ui, audit_ui
 assert "const defaultDeploymentEventsLimit = 10;" in ui, ui
-assert "const buildDeploymentEventsReadRoute = (deploymentName, { limit = defaultDeploymentEventsLimit, source = currentPageState.eventSource } = {}) => {" in ui, ui
+assert "const buildDeploymentEventsReadRoute = (deploymentName, { limit = defaultDeploymentEventsLimit, source = currentPageState.eventSource, resourceType = '', resourceName = '' } = {}) => {" in ui, ui
 assert "if (normalizedSource) params.set('source', normalizedSource);" in ui, ui
 assert "const fetchDeploymentEvents = (deploymentName, limit = currentPageState.eventLimit, source = currentPageState.eventSource) => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName, { limit, source }), {" in ui, ui
 assert "const ifMatch = workspaceDetail.sourceFingerprint || await derivePlanSourceFingerprint(workspaceDetail).catch(() => '') || fallbackIfMatch;" in ui, ui
