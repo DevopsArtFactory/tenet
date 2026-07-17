@@ -3404,6 +3404,10 @@ func TestSmokeScriptsLockDriftSourceCalloutCopy(t *testing.T) {
 		"managedDrift is present in the deployment detail payload, so fallback read-model heuristics stay suppressed for this deployment.",
 		"Current source: derived fallback read-model heuristics.",
 		"managedDrift is absent in the deployment detail payload, so Tenet is deriving field-level drift from artifact, generation, runtime-context, and unhealthy-condition read-model signals.",
+		"Drift source coverage",
+		"No drift source coverage entries are currently reported by this deployment detail.",
+		"const driftSourceCoverageEntries = (detail) => (Array.isArray(detail?.managedDriftSourceCoverage) ? detail.managedDriftSourceCoverage : [])",
+		"const createDriftSourceCoveragePanel = (detail, workspaceState = null) => {",
 	}
 
 	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
