@@ -1097,6 +1097,18 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if detail.ManagedDrift[2].Source == nil || !reflect.DeepEqual(detail.ManagedDrift[2].Source, taskDefinitionImageSource) {
 		t.Fatalf("expected managed drift source to be surfaced on deployment detail, got %+v", detail.ManagedDrift[2])
 	}
+	if len(detail.ManagedDriftSourceCoverage) != 8 {
+		t.Fatalf("expected rollout and drift source coverage entries, got %+v", detail.ManagedDriftSourceCoverage)
+	}
+	if got := detail.ManagedDriftSourceCoverage[0]; got.SourceKind != "resourceInspection" || got.ResourceType != "candidateAutoScalingGroup" || got.ResourceName != "payments-api-prod-candidate" || got.Coverage != ManagedDriftCoverageCheckedNoRows || got.RowCount != 0 || got.Route != "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup" {
+		t.Fatalf("expected checked rollout source coverage for candidate ASG, got %+v", got)
+	}
+	if got := detail.ManagedDriftSourceCoverage[6]; got.SourceKind != "currentStatus" || got.Label != "Current runtime status" || got.Coverage != ManagedDriftCoverageRowsReported || got.RowCount != 2 {
+		t.Fatalf("expected current status drift source coverage, got %+v", got)
+	}
+	if got := detail.ManagedDriftSourceCoverage[7]; got.SourceKind != "resourceInspection" || got.Label != "ecsService payments-api-prod-service" || got.ResourceType != "ecsService" || got.ResourceName != "payments-api-prod-service" || got.Coverage != ManagedDriftCoverageRowsReported || got.RowCount != 1 || got.Route != "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service" {
+		t.Fatalf("expected source-backed drift source coverage, got %+v", got)
+	}
 	if detail.RuntimeSummary == nil || len(detail.RuntimeSummary.ManagedDrift) != 3 || detail.RuntimeSummary.ManagedDrift[0].Field != "artifact" || detail.RuntimeSummary.ManagedDrift[1].Field != "generation" || detail.RuntimeSummary.ManagedDrift[2].Field != "runtimeContext.taskDefinition.image" {
 		t.Fatalf("expected managed drift in runtime summary, got %+v", detail.RuntimeSummary)
 	}
@@ -1197,6 +1209,21 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if !ok || source["kind"] != "resourceInspection" || source["label"] != "ecsService payments-api-prod-service" || source["route"] != "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service" || source["resourceType"] != "ecsService" || source["resourceName"] != "payments-api-prod-service" {
 		t.Fatalf("expected deployment detail managed drift source metadata, got %#v", sourceDriftItem["source"])
 	}
+	coverage, ok := decoded["managedDriftSourceCoverage"].([]any)
+	if !ok || len(coverage) != 8 {
+		t.Fatalf("expected managedDriftSourceCoverage array, got %#v", decoded["managedDriftSourceCoverage"])
+	}
+	coverageEntry, ok := coverage[0].(map[string]any)
+	if !ok || coverageEntry["sourceKind"] != "resourceInspection" || coverageEntry["resourceType"] != "candidateAutoScalingGroup" || coverageEntry["resourceName"] != "payments-api-prod-candidate" || coverageEntry["coverage"] != ManagedDriftCoverageCheckedNoRows || coverageEntry["rowCount"] != float64(0) || coverageEntry["route"] != "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup" {
+		t.Fatalf("expected checked rollout coverage JSON fields, got %#v", coverageEntry)
+	}
+	sourceCoverageEntry, ok := coverage[7].(map[string]any)
+	if !ok || sourceCoverageEntry["sourceKind"] != "resourceInspection" || sourceCoverageEntry["label"] != "ecsService payments-api-prod-service" || sourceCoverageEntry["coverage"] != ManagedDriftCoverageRowsReported || sourceCoverageEntry["rowCount"] != float64(1) || sourceCoverageEntry["route"] != "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service" {
+		t.Fatalf("expected source-backed coverage JSON fields, got %#v", sourceCoverageEntry)
+	}
+	if _, exists := decoded["ManagedDriftSourceCoverage"]; exists {
+		t.Fatalf("unexpected Go-style managed drift source coverage field in %#v", decoded)
+	}
 	runtimeSummary, ok := decoded["runtimeSummary"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected runtimeSummary object, got %#v", decoded["runtimeSummary"])
@@ -1243,6 +1270,46 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	}
 	if _, exists := decoded["ManagedDrift"]; exists {
 		t.Fatalf("unexpected Go-style managed drift field name in %#v", decoded)
+	}
+}
+
+func TestBuildDeploymentOverviewDetailManagedDriftSourceCoverageEmptyAndUnsupportedStates(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments: []domain.Deployment{{
+			Name:           "payments-api-prod",
+			AppRef:         "payments-api",
+			EnvironmentRef: "prod-apne2",
+		}},
+	}
+
+	detail, err := BuildDeploymentOverviewDetail(catalog, nil, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildDeploymentOverviewDetail returned error: %v", err)
+	}
+	if len(detail.ManagedDriftSourceCoverage) != 1 || detail.ManagedDriftSourceCoverage[0].Coverage != ManagedDriftCoverageUnavailable || detail.ManagedDriftSourceCoverage[0].UnavailableHint == "" {
+		t.Fatalf("expected explicit unavailable coverage entry for empty snapshot, got %+v", detail.ManagedDriftSourceCoverage)
+	}
+
+	snapshots := []statusstore.Snapshot{{
+		DeploymentName: "payments-api-prod",
+		Status: domain.DeploymentStatus{Rollout: &domain.RolloutSummary{Execution: []domain.RolloutExecutionDetail{{
+			Resource:    "unsupportedWidget",
+			Name:        "payments-api-widget",
+			Description: "Widget without managed drift binding",
+		}}}},
+	}}
+	detail, err = BuildDeploymentOverviewDetail(catalog, snapshots, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildDeploymentOverviewDetail returned error: %v", err)
+	}
+	if len(detail.ManagedDriftSourceCoverage) != 1 {
+		t.Fatalf("expected one unsupported coverage entry, got %+v", detail.ManagedDriftSourceCoverage)
+	}
+	entry := detail.ManagedDriftSourceCoverage[0]
+	if entry.SourceKind != "resourceInspection" || entry.ResourceType != "unsupportedWidget" || entry.ResourceName != "payments-api-widget" || entry.Coverage != ManagedDriftCoverageUnsupported || entry.RowCount != 0 || entry.UnavailableHint == "" {
+		t.Fatalf("expected unsupported rollout coverage entry, got %+v", entry)
 	}
 }
 
@@ -1946,31 +2013,32 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 		t.Fatalf("expected history for application page, got %+v", detail.History)
 	}
 	expected := ApplicationOverviewDetail{
-		Name:                  deploymentDetail.Name,
-		AppRef:                deploymentDetail.AppRef,
-		EnvironmentRef:        deploymentDetail.EnvironmentRef,
-		AccountName:           deploymentDetail.AccountName,
-		AWSAccountID:          deploymentDetail.AWSAccountID,
-		AllowedRegions:        append([]string(nil), deploymentDetail.AllowedRegions...),
-		Region:                deploymentDetail.Region,
-		TargetType:            deploymentDetail.TargetType,
-		Strategy:              deploymentDetail.Strategy,
-		ExecutionMode:         deploymentDetail.ExecutionMode,
-		DesiredArtifact:       deploymentDetail.DesiredArtifact,
-		UserData:              deploymentDetail.UserData,
-		RolloutConfig:         cloneDeploymentRolloutConfig(deploymentDetail.RolloutConfig),
-		DeployedArtifact:      deploymentDetail.DeployedArtifact,
-		ObservedGeneration:    deploymentDetail.ObservedGeneration,
-		SourceFingerprint:     deploymentDetail.SourceFingerprint,
-		Sync:                  deploymentDetail.Sync,
-		Health:                deploymentDetail.Health,
-		ManagedDrift:          cloneManagedDrift(deploymentDetail.ManagedDrift),
-		ManagedDriftSummary:   deploymentDetail.ManagedDriftSummary,
-		RuntimeSummary:        cloneRuntimeSummary(deploymentDetail.RuntimeSummary),
-		Rollout:               cloneRolloutSummaryWithEvidence(deploymentDetail.Rollout, deploymentDetail.Name),
-		ResourceRelatedEvents: cloneResourceRelatedEventSummaries(deploymentDetail.ResourceRelatedEvents),
-		Conditions:            append([]domain.Condition(nil), deploymentDetail.Conditions...),
-		History:               cloneStatusHistory(deploymentDetail.History),
+		Name:                       deploymentDetail.Name,
+		AppRef:                     deploymentDetail.AppRef,
+		EnvironmentRef:             deploymentDetail.EnvironmentRef,
+		AccountName:                deploymentDetail.AccountName,
+		AWSAccountID:               deploymentDetail.AWSAccountID,
+		AllowedRegions:             append([]string(nil), deploymentDetail.AllowedRegions...),
+		Region:                     deploymentDetail.Region,
+		TargetType:                 deploymentDetail.TargetType,
+		Strategy:                   deploymentDetail.Strategy,
+		ExecutionMode:              deploymentDetail.ExecutionMode,
+		DesiredArtifact:            deploymentDetail.DesiredArtifact,
+		UserData:                   deploymentDetail.UserData,
+		RolloutConfig:              cloneDeploymentRolloutConfig(deploymentDetail.RolloutConfig),
+		DeployedArtifact:           deploymentDetail.DeployedArtifact,
+		ObservedGeneration:         deploymentDetail.ObservedGeneration,
+		SourceFingerprint:          deploymentDetail.SourceFingerprint,
+		Sync:                       deploymentDetail.Sync,
+		Health:                     deploymentDetail.Health,
+		ManagedDrift:               cloneManagedDrift(deploymentDetail.ManagedDrift),
+		ManagedDriftSummary:        deploymentDetail.ManagedDriftSummary,
+		ManagedDriftSourceCoverage: cloneManagedDriftSourceCoverage(deploymentDetail.ManagedDriftSourceCoverage),
+		RuntimeSummary:             cloneRuntimeSummary(deploymentDetail.RuntimeSummary),
+		Rollout:                    cloneRolloutSummaryWithEvidence(deploymentDetail.Rollout, deploymentDetail.Name),
+		ResourceRelatedEvents:      cloneResourceRelatedEventSummaries(deploymentDetail.ResourceRelatedEvents),
+		Conditions:                 append([]domain.Condition(nil), deploymentDetail.Conditions...),
+		History:                    cloneStatusHistory(deploymentDetail.History),
 	}
 	if !reflect.DeepEqual(detail, expected) {
 		t.Fatalf("expected application detail to preserve deployment detail semantics, got application=%+v expected=%+v", detail, expected)

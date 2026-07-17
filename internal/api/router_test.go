@@ -2386,6 +2386,16 @@ func TestRouterOverviewDetailManagedDriftSummaryJSON(t *testing.T) {
 							{Field: "runtimeContext.capacity.desired", Severity: domain.ManagedDriftSeverityLow},
 						},
 						ManagedDriftSummary: catalog.ManagedDriftSummary{Total: 3, High: 1, Medium: 1, Low: 1},
+						ManagedDriftSourceCoverage: []catalog.ManagedDriftSourceCoverageEntry{{
+							SourceKind:   "resourceInspection",
+							Label:        "ecsService payments-api-prod-service",
+							Coverage:     catalog.ManagedDriftCoverageRowsReported,
+							RowCount:     1,
+							ResourceType: "ecsService",
+							ResourceName: "payments-api-prod-service",
+							Route:        "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service",
+							Summary:      "1 managed drift row(s) were reported from this source.",
+						}},
 						ResourceRelatedEvents: []catalog.ResourceRelatedEventSummary{{
 							ResourceType:         "ecsService",
 							ResourceName:         "payments-api-prod-service",
@@ -2409,6 +2419,16 @@ func TestRouterOverviewDetailManagedDriftSummaryJSON(t *testing.T) {
 							{Field: "runtimeContext.capacity.desired", Severity: domain.ManagedDriftSeverityLow},
 						},
 						ManagedDriftSummary: catalog.ManagedDriftSummary{Total: 3, High: 1, Medium: 1, Low: 1},
+						ManagedDriftSourceCoverage: []catalog.ManagedDriftSourceCoverageEntry{{
+							SourceKind:   "resourceInspection",
+							Label:        "ecsService payments-api-prod-service",
+							Coverage:     catalog.ManagedDriftCoverageRowsReported,
+							RowCount:     1,
+							ResourceType: "ecsService",
+							ResourceName: "payments-api-prod-service",
+							Route:        "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service",
+							Summary:      "1 managed drift row(s) were reported from this source.",
+						}},
 						ResourceRelatedEvents: []catalog.ResourceRelatedEventSummary{{
 							ResourceType:         "ecsService",
 							ResourceName:         "payments-api-prod-service",
@@ -2443,6 +2463,17 @@ func TestRouterOverviewDetailManagedDriftSummaryJSON(t *testing.T) {
 			items, ok := payload["managedDrift"].([]any)
 			if !ok || len(items) != 3 {
 				t.Fatalf("expected managedDrift rows to be preserved, got %#v", payload["managedDrift"])
+			}
+			coverage, ok := payload["managedDriftSourceCoverage"].([]any)
+			if !ok || len(coverage) != 1 {
+				t.Fatalf("expected managedDriftSourceCoverage row to be preserved, got %#v", payload["managedDriftSourceCoverage"])
+			}
+			coverageEntry, ok := coverage[0].(map[string]any)
+			if !ok || coverageEntry["sourceKind"] != "resourceInspection" || coverageEntry["label"] != "ecsService payments-api-prod-service" || coverageEntry["coverage"] != catalog.ManagedDriftCoverageRowsReported || coverageEntry["rowCount"] != float64(1) || coverageEntry["resourceType"] != "ecsService" || coverageEntry["resourceName"] != "payments-api-prod-service" || coverageEntry["route"] != "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service" {
+				t.Fatalf("expected managedDriftSourceCoverage JSON fields, got %#v", coverageEntry)
+			}
+			if _, exists := payload["ManagedDriftSourceCoverage"]; exists {
+				t.Fatalf("unexpected Go-style managed drift source coverage field in %#v", payload)
 			}
 			related, ok := payload["resourceRelatedEvents"].([]any)
 			if !ok || len(related) != 1 {
