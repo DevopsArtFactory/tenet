@@ -3212,7 +3212,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('Application detail read refreshed ·')) throw new Error('expected application route read freshness cue, got ' + summaryText);
   if (!summaryText.includes('Current application read: GET /v1/overview/applications/payments-api-staging')) throw new Error('expected application route summary to show exact backing read route, got ' + summaryText);
   if (summaryText.includes('Application detail read not refreshed yet')) throw new Error('expected loaded application route to replace not-refreshed fallback');
-  if (!summaryText.includes('Application detail page: show only application-linked resources before the final resource-detail page.')) throw new Error('expected application route drill-down guidance');
+  if (!summaryText.includes('Current application status summarizes the selected deployment before resource drill-downs.')) throw new Error('expected application route status-first guidance');
+  if (!summaryText.includes('Rollout context')) throw new Error('expected summary status block to include rollout context metric');
+  if (!summaryText.includes('Generations')) throw new Error('expected summary status block to include generation metric');
+  if (summaryText.includes('Application detail page: show only application-linked resources before the final resource-detail page.')) throw new Error('expected application route to remove placeholder drill-down prose');
   if (!accountsText.includes('Application resources')) throw new Error('expected application route resources body');
   if (!accountsText.includes('Linked-resource source')) throw new Error('expected application route linked-resource source label');
   if (!accountsText.includes('Fallback rollout inventory')) throw new Error('expected application route to explain fallback linked-resource source, got ' + accountsText);

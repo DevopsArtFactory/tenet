@@ -136,7 +136,7 @@ The application-detail route now loads `GET /v1/overview/applications/{deploymen
 
 Current behavior:
 - breadcrumb/back-link to the applications overview, with an additive account step when `awsAccountId` is already known from the loaded deployment detail
-- top-level application summary for account/region context
+- top-level application summary for account/region context plus a status-first overview sourced from the application detail payload rather than implementation-placeholder prose
 - visible backing-read copy in that summary, for example `Current application read: GET /v1/overview/applications/{deploymentName}`, so operators can see the exact route behind the embedded detail page
 - `Application JSON` and `Copy read route` handoffs in the page toolbar targeting the exact `GET /v1/overview/applications/{deploymentName}` read model behind the current application detail page
 - compact `Current application status` block near the top of the page so operators can quickly scan sync, health, rollout context, artifact, linked-resource count, linked-resource source, managed-drift severity totals, runtime-event availability, and last update before drilling further

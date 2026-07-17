@@ -1318,7 +1318,8 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"createElement('div', 'quick-nav-label', 'Current section')",
 		"createElement('div', 'quick-nav-empty', 'No section is currently targeted.')",
 		"createElement('div', 'quick-nav-empty', 'No additional section links are available for this application.')",
-		"Open drift, plan/apply, or audit log from here before the final resource page.",
+		"Current application status summarizes the selected deployment before resource drill-downs.",
+		"createApplicationStatusOverview(detail)",
 		"const eventsSection = createDetailSection('Controller runtime events');",
 		"renderDeploymentEventsSection(eventsSection, eventsDeploymentName).catch(() => {});",
 		"activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;",
@@ -4179,8 +4180,8 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createCopyReadRouteButton(applicationDetailReadRoute(applicationState?.detail?.name || currentPageState.deployment))\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application detail copy route contract")
 	}
-	if !strings.Contains(text, "assert 'Grouped linked resources for the selected application. Open drift, plan/apply, or audit log from here before the final resource page.' in application_ui, application_ui") {
-		t.Fatalf("expected smoke-local.sh to assert embedded html contains complete application workspace handoff copy")
+	if !strings.Contains(text, "assert 'Grouped linked resources for the selected application. Open a resource for focused rollout, log, and inspection evidence.' in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains focused application resource handoff copy")
 	}
 	if !strings.Contains(text, "assert 'Refresh resource detail' in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh resource detail")
