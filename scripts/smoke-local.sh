@@ -2828,6 +2828,10 @@ assert "const syncApplicationResourceFilterQueryParam = (value) => {" in applica
 assert "const createClearApplicationResourceFilterButton = (detail, applicationState = null) => {" in application_ui, application_ui
 assert "createInput('Filter linked resources', currentPageState.resourceFilter, 'Filter by type, name, description, or source'," in application_ui, application_ui
 assert "createElement('div', 'account-topology resource-filter-summary')" in application_ui, application_ui
+assert "const applicationResourceInventorySummaryText = (groups, totalResourceCount, visibleResourceCount, resourceFilter = '') => {" in application_ui, application_ui
+assert 'Linked resource inventory:' in application_ui, application_ui
+assert "createElement('div', 'account-topology application-resource-inventory-summary'" in application_ui, application_ui
+assert "const inventorySummary = createApplicationResourceInventorySummary(resourceGroups, totalResourceCount, visibleResourceCount, resourceFilter);" in application_ui, application_ui
 assert "createClearApplicationResourceFilterButton(detail, applicationState)" in application_ui, application_ui
 assert "const applicationResourceSectionLinkLabel = (group, resourceFilter = '') => {" in application_ui, application_ui
 assert "const applicationLinkedResourceSourceText = (detail) => {" in application_ui, application_ui

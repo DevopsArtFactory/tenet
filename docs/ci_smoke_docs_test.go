@@ -1409,7 +1409,7 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{
 		"`Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search",
-		"visible/total impact and section-specific empty guidance alongside the inline",
+		"with visible/total impact, a compact `Linked resource inventory` summary with per-group counts, and section-specific empty guidance alongside the inline",
 		"`Clear resource filter`. Their linked-resource summary also includes `Linked-resource source`, distinguishing controller-authored `rollout.execution[]` rows from canonical fallback rollout inventory when that array is missing or empty, plus compact resource-row `Evidence cues`:",
 		"`Live evidence available` / `Recent logs supported` / `Related runtime events supported` `_self` handoffs to the final",
 	} {
@@ -1433,6 +1433,7 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 		"It matches normalized linked-resource `resource` type, `name`, `description`, and visible source-cue text",
 		"Filtering never changes the backing read route: application detail still reads `GET /v1/overview/applications/{deploymentName}`",
 		"deeper resource/drift/plan links still preserve their existing route contracts",
+		"The resource list starts with a compact `Linked resource inventory` line that shows total/visible resources and per-group counts",
 		"When `resourceFilter` hides rows in one or more reported resource groups, the UI keeps those sections visible with section-specific filtered-empty copy",
 		"Active filters also switch section quick-nav labels to visible/total counts such as `Traffic routing (1 of 3)`.",
 		"When the application read reports no linked resources at all, the page keeps the separate no-resource state `No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.`",
