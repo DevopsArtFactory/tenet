@@ -117,31 +117,32 @@ type DeploymentOverview struct {
 
 // DeploymentOverviewDetail joins one deployment's desired intent, placement, and observed state.
 type DeploymentOverviewDetail struct {
-	Name                  string                         `json:"name"`
-	AppRef                string                         `json:"appRef"`
-	EnvironmentRef        string                         `json:"environmentRef"`
-	AccountName           string                         `json:"accountName"`
-	AWSAccountID          string                         `json:"awsAccountId"`
-	AllowedRegions        []string                       `json:"allowedRegions,omitempty"`
-	Region                string                         `json:"region"`
-	TargetType            string                         `json:"targetType,omitempty"`
-	Strategy              string                         `json:"strategy,omitempty"`
-	ExecutionMode         string                         `json:"executionMode,omitempty"`
-	DesiredArtifact       domain.DeploymentArtifact      `json:"desiredArtifact,omitempty"`
-	UserData              domain.DeploymentUserData      `json:"userData,omitempty"`
-	RolloutConfig         domain.DeploymentRolloutConfig `json:"rolloutConfig,omitempty"`
-	DeployedArtifact      domain.DeploymentArtifact      `json:"deployedArtifact,omitempty"`
-	ObservedGeneration    int64                          `json:"observedGeneration,omitempty"`
-	SourceFingerprint     string                         `json:"sourceFingerprint,omitempty"`
-	Sync                  domain.Sync                    `json:"sync"`
-	Health                domain.Health                  `json:"health"`
-	ManagedDrift          []domain.ManagedDriftItem      `json:"managedDrift,omitempty"`
-	ManagedDriftSummary   ManagedDriftSummary            `json:"managedDriftSummary"`
-	RuntimeSummary        *domain.RuntimeSummary         `json:"runtimeSummary,omitempty"`
-	Rollout               *domain.RolloutSummary         `json:"rollout,omitempty"`
-	ResourceRelatedEvents []ResourceRelatedEventSummary  `json:"resourceRelatedEvents"`
-	Conditions            []domain.Condition             `json:"conditions,omitempty"`
-	History               []domain.StatusHistoryEntry    `json:"history,omitempty"`
+	Name                       string                            `json:"name"`
+	AppRef                     string                            `json:"appRef"`
+	EnvironmentRef             string                            `json:"environmentRef"`
+	AccountName                string                            `json:"accountName"`
+	AWSAccountID               string                            `json:"awsAccountId"`
+	AllowedRegions             []string                          `json:"allowedRegions,omitempty"`
+	Region                     string                            `json:"region"`
+	TargetType                 string                            `json:"targetType,omitempty"`
+	Strategy                   string                            `json:"strategy,omitempty"`
+	ExecutionMode              string                            `json:"executionMode,omitempty"`
+	DesiredArtifact            domain.DeploymentArtifact         `json:"desiredArtifact,omitempty"`
+	UserData                   domain.DeploymentUserData         `json:"userData,omitempty"`
+	RolloutConfig              domain.DeploymentRolloutConfig    `json:"rolloutConfig,omitempty"`
+	DeployedArtifact           domain.DeploymentArtifact         `json:"deployedArtifact,omitempty"`
+	ObservedGeneration         int64                             `json:"observedGeneration,omitempty"`
+	SourceFingerprint          string                            `json:"sourceFingerprint,omitempty"`
+	Sync                       domain.Sync                       `json:"sync"`
+	Health                     domain.Health                     `json:"health"`
+	ManagedDrift               []domain.ManagedDriftItem         `json:"managedDrift,omitempty"`
+	ManagedDriftSummary        ManagedDriftSummary               `json:"managedDriftSummary"`
+	ManagedDriftSourceCoverage []ManagedDriftSourceCoverageEntry `json:"managedDriftSourceCoverage"`
+	RuntimeSummary             *domain.RuntimeSummary            `json:"runtimeSummary,omitempty"`
+	Rollout                    *domain.RolloutSummary            `json:"rollout,omitempty"`
+	ResourceRelatedEvents      []ResourceRelatedEventSummary     `json:"resourceRelatedEvents"`
+	Conditions                 []domain.Condition                `json:"conditions,omitempty"`
+	History                    []domain.StatusHistoryEntry       `json:"history,omitempty"`
 }
 
 // ResourceRelatedEventSummary summarizes retained controller-history evidence for one rollout resource.
@@ -161,6 +162,28 @@ type ManagedDriftSummary struct {
 	High   int `json:"high"`
 	Medium int `json:"medium"`
 	Low    int `json:"low"`
+}
+
+const (
+	ManagedDriftCoverageCheckedNoRows = "checked_no_rows"
+	ManagedDriftCoverageRowsReported  = "rows_reported"
+	ManagedDriftCoverageUnavailable   = "unavailable"
+	ManagedDriftCoverageUnsupported   = "unsupported"
+)
+
+// ManagedDriftSourceCoverageEntry describes which drift evidence sources were
+// represented in a deployment detail payload. It is coverage context for the
+// controller-derived managedDrift[] rows, not proof of comprehensive cloud diffing.
+type ManagedDriftSourceCoverageEntry struct {
+	SourceKind      string `json:"sourceKind"`
+	Label           string `json:"label"`
+	Coverage        string `json:"coverage"`
+	RowCount        int    `json:"rowCount"`
+	ResourceType    string `json:"resourceType,omitempty"`
+	ResourceName    string `json:"resourceName,omitempty"`
+	Route           string `json:"route,omitempty"`
+	UnavailableHint string `json:"unavailableHint,omitempty"`
+	Summary         string `json:"summary"`
 }
 
 // DeploymentOverviewEvents exposes controller-derived runtime history for one deployment.
@@ -230,31 +253,32 @@ type DeploymentEventsResultScope struct {
 
 // ApplicationOverviewDetail makes the application page contract explicit while preserving deployment detail semantics.
 type ApplicationOverviewDetail struct {
-	Name                  string                         `json:"name"`
-	AppRef                string                         `json:"appRef"`
-	EnvironmentRef        string                         `json:"environmentRef"`
-	AccountName           string                         `json:"accountName"`
-	AWSAccountID          string                         `json:"awsAccountId"`
-	AllowedRegions        []string                       `json:"allowedRegions,omitempty"`
-	Region                string                         `json:"region"`
-	TargetType            string                         `json:"targetType,omitempty"`
-	Strategy              string                         `json:"strategy,omitempty"`
-	ExecutionMode         string                         `json:"executionMode,omitempty"`
-	DesiredArtifact       domain.DeploymentArtifact      `json:"desiredArtifact,omitempty"`
-	UserData              domain.DeploymentUserData      `json:"userData,omitempty"`
-	RolloutConfig         domain.DeploymentRolloutConfig `json:"rolloutConfig,omitempty"`
-	DeployedArtifact      domain.DeploymentArtifact      `json:"deployedArtifact,omitempty"`
-	ObservedGeneration    int64                          `json:"observedGeneration,omitempty"`
-	SourceFingerprint     string                         `json:"sourceFingerprint,omitempty"`
-	Sync                  domain.Sync                    `json:"sync"`
-	Health                domain.Health                  `json:"health"`
-	ManagedDrift          []domain.ManagedDriftItem      `json:"managedDrift,omitempty"`
-	ManagedDriftSummary   ManagedDriftSummary            `json:"managedDriftSummary"`
-	RuntimeSummary        *domain.RuntimeSummary         `json:"runtimeSummary,omitempty"`
-	Rollout               *domain.RolloutSummary         `json:"rollout,omitempty"`
-	ResourceRelatedEvents []ResourceRelatedEventSummary  `json:"resourceRelatedEvents"`
-	Conditions            []domain.Condition             `json:"conditions,omitempty"`
-	History               []domain.StatusHistoryEntry    `json:"history,omitempty"`
+	Name                       string                            `json:"name"`
+	AppRef                     string                            `json:"appRef"`
+	EnvironmentRef             string                            `json:"environmentRef"`
+	AccountName                string                            `json:"accountName"`
+	AWSAccountID               string                            `json:"awsAccountId"`
+	AllowedRegions             []string                          `json:"allowedRegions,omitempty"`
+	Region                     string                            `json:"region"`
+	TargetType                 string                            `json:"targetType,omitempty"`
+	Strategy                   string                            `json:"strategy,omitempty"`
+	ExecutionMode              string                            `json:"executionMode,omitempty"`
+	DesiredArtifact            domain.DeploymentArtifact         `json:"desiredArtifact,omitempty"`
+	UserData                   domain.DeploymentUserData         `json:"userData,omitempty"`
+	RolloutConfig              domain.DeploymentRolloutConfig    `json:"rolloutConfig,omitempty"`
+	DeployedArtifact           domain.DeploymentArtifact         `json:"deployedArtifact,omitempty"`
+	ObservedGeneration         int64                             `json:"observedGeneration,omitempty"`
+	SourceFingerprint          string                            `json:"sourceFingerprint,omitempty"`
+	Sync                       domain.Sync                       `json:"sync"`
+	Health                     domain.Health                     `json:"health"`
+	ManagedDrift               []domain.ManagedDriftItem         `json:"managedDrift,omitempty"`
+	ManagedDriftSummary        ManagedDriftSummary               `json:"managedDriftSummary"`
+	ManagedDriftSourceCoverage []ManagedDriftSourceCoverageEntry `json:"managedDriftSourceCoverage"`
+	RuntimeSummary             *domain.RuntimeSummary            `json:"runtimeSummary,omitempty"`
+	Rollout                    *domain.RolloutSummary            `json:"rollout,omitempty"`
+	ResourceRelatedEvents      []ResourceRelatedEventSummary     `json:"resourceRelatedEvents"`
+	Conditions                 []domain.Condition                `json:"conditions,omitempty"`
+	History                    []domain.StatusHistoryEntry       `json:"history,omitempty"`
 }
 
 // BuildAccountOverviews groups placement-aware deployment state by account.
@@ -496,31 +520,32 @@ func BuildApplicationOverviewDetail(c manifest.Catalog, snapshots []statusstore.
 	}
 
 	return ApplicationOverviewDetail{
-		Name:                  detail.Name,
-		AppRef:                detail.AppRef,
-		EnvironmentRef:        detail.EnvironmentRef,
-		AccountName:           detail.AccountName,
-		AWSAccountID:          detail.AWSAccountID,
-		AllowedRegions:        append([]string(nil), detail.AllowedRegions...),
-		Region:                detail.Region,
-		TargetType:            detail.TargetType,
-		Strategy:              detail.Strategy,
-		ExecutionMode:         detail.ExecutionMode,
-		DesiredArtifact:       detail.DesiredArtifact,
-		UserData:              detail.UserData,
-		RolloutConfig:         cloneDeploymentRolloutConfig(detail.RolloutConfig),
-		DeployedArtifact:      detail.DeployedArtifact,
-		ObservedGeneration:    detail.ObservedGeneration,
-		SourceFingerprint:     detail.SourceFingerprint,
-		Sync:                  detail.Sync,
-		Health:                detail.Health,
-		ManagedDrift:          cloneManagedDrift(detail.ManagedDrift),
-		ManagedDriftSummary:   detail.ManagedDriftSummary,
-		RuntimeSummary:        cloneRuntimeSummary(detail.RuntimeSummary),
-		Rollout:               cloneRolloutSummaryWithEvidence(detail.Rollout, detail.Name),
-		ResourceRelatedEvents: cloneResourceRelatedEventSummaries(detail.ResourceRelatedEvents),
-		Conditions:            append([]domain.Condition(nil), detail.Conditions...),
-		History:               cloneStatusHistory(detail.History),
+		Name:                       detail.Name,
+		AppRef:                     detail.AppRef,
+		EnvironmentRef:             detail.EnvironmentRef,
+		AccountName:                detail.AccountName,
+		AWSAccountID:               detail.AWSAccountID,
+		AllowedRegions:             append([]string(nil), detail.AllowedRegions...),
+		Region:                     detail.Region,
+		TargetType:                 detail.TargetType,
+		Strategy:                   detail.Strategy,
+		ExecutionMode:              detail.ExecutionMode,
+		DesiredArtifact:            detail.DesiredArtifact,
+		UserData:                   detail.UserData,
+		RolloutConfig:              cloneDeploymentRolloutConfig(detail.RolloutConfig),
+		DeployedArtifact:           detail.DeployedArtifact,
+		ObservedGeneration:         detail.ObservedGeneration,
+		SourceFingerprint:          detail.SourceFingerprint,
+		Sync:                       detail.Sync,
+		Health:                     detail.Health,
+		ManagedDrift:               cloneManagedDrift(detail.ManagedDrift),
+		ManagedDriftSummary:        detail.ManagedDriftSummary,
+		ManagedDriftSourceCoverage: cloneManagedDriftSourceCoverage(detail.ManagedDriftSourceCoverage),
+		RuntimeSummary:             cloneRuntimeSummary(detail.RuntimeSummary),
+		Rollout:                    cloneRolloutSummaryWithEvidence(detail.Rollout, detail.Name),
+		ResourceRelatedEvents:      cloneResourceRelatedEventSummaries(detail.ResourceRelatedEvents),
+		Conditions:                 append([]domain.Condition(nil), detail.Conditions...),
+		History:                    cloneStatusHistory(detail.History),
 	}, nil
 }
 
@@ -555,30 +580,31 @@ func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.S
 	status := statusByDeployment[deploymentName]
 
 	detail := DeploymentOverviewDetail{
-		Name:                  deployment.Name,
-		AppRef:                deployment.AppRef,
-		EnvironmentRef:        deployment.EnvironmentRef,
-		AccountName:           resolved.AccountName,
-		AWSAccountID:          resolved.AccountID,
-		AllowedRegions:        append([]string(nil), account.AllowedRegions...),
-		Region:                resolved.Region,
-		TargetType:            deployment.TargetType,
-		Strategy:              deployment.Strategy,
-		ExecutionMode:         deployment.ExecutionMode,
-		DesiredArtifact:       deployment.DesiredArtifact,
-		UserData:              deployment.UserData,
-		RolloutConfig:         cloneDeploymentRolloutConfig(deployment.RolloutConfig),
-		DeployedArtifact:      status.DeployedArtifact,
-		ObservedGeneration:    status.ObservedGeneration,
-		Sync:                  status.Sync,
-		Health:                status.Health,
-		ManagedDrift:          cloneManagedDrift(status.ManagedDrift),
-		ManagedDriftSummary:   summarizeManagedDriftItems(status.ManagedDrift),
-		RuntimeSummary:        cloneRuntimeSummary(deriveRuntimeSummary(status)),
-		Rollout:               cloneRolloutSummary(status.Rollout),
-		ResourceRelatedEvents: BuildResourceRelatedEventSummaries(status.Rollout, status.History),
-		Conditions:            append([]domain.Condition(nil), status.Conditions...),
-		History:               cloneStatusHistory(status.History),
+		Name:                       deployment.Name,
+		AppRef:                     deployment.AppRef,
+		EnvironmentRef:             deployment.EnvironmentRef,
+		AccountName:                resolved.AccountName,
+		AWSAccountID:               resolved.AccountID,
+		AllowedRegions:             append([]string(nil), account.AllowedRegions...),
+		Region:                     resolved.Region,
+		TargetType:                 deployment.TargetType,
+		Strategy:                   deployment.Strategy,
+		ExecutionMode:              deployment.ExecutionMode,
+		DesiredArtifact:            deployment.DesiredArtifact,
+		UserData:                   deployment.UserData,
+		RolloutConfig:              cloneDeploymentRolloutConfig(deployment.RolloutConfig),
+		DeployedArtifact:           status.DeployedArtifact,
+		ObservedGeneration:         status.ObservedGeneration,
+		Sync:                       status.Sync,
+		Health:                     status.Health,
+		ManagedDrift:               cloneManagedDrift(status.ManagedDrift),
+		ManagedDriftSummary:        summarizeManagedDriftItems(status.ManagedDrift),
+		ManagedDriftSourceCoverage: BuildManagedDriftSourceCoverage(deployment.Name, status.Rollout, status.ManagedDrift),
+		RuntimeSummary:             cloneRuntimeSummary(deriveRuntimeSummary(status)),
+		Rollout:                    cloneRolloutSummary(status.Rollout),
+		ResourceRelatedEvents:      BuildResourceRelatedEventSummaries(status.Rollout, status.History),
+		Conditions:                 append([]domain.Condition(nil), status.Conditions...),
+		History:                    cloneStatusHistory(status.History),
 	}
 	fingerprint, err := DeriveDeploymentSourceFingerprint(detail)
 	if err != nil {
@@ -586,6 +612,162 @@ func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.S
 	}
 	detail.SourceFingerprint = fingerprint
 	return detail, nil
+}
+
+// BuildManagedDriftSourceCoverage returns operator-facing context for the
+// controller/read-model evidence sources represented by managedDrift[]. It is
+// intentionally derived from already-persisted rollout and drift metadata; it
+// does not perform live AWS reads and must not be interpreted as comprehensive
+// cloud-diff coverage.
+func BuildManagedDriftSourceCoverage(deploymentName string, rollout *domain.RolloutSummary, items []domain.ManagedDriftItem) []ManagedDriftSourceCoverageEntry {
+	entries := make([]ManagedDriftSourceCoverageEntry, 0)
+	rowCounts := make(map[string]int)
+	for _, item := range items {
+		key := managedDriftCoverageKeyFromItem(item)
+		rowCounts[key]++
+	}
+
+	seen := make(map[string]struct{})
+	if rollout != nil {
+		for _, resource := range rollout.Execution {
+			resourceType := strings.TrimSpace(resource.Resource)
+			resourceName := strings.TrimSpace(resource.Name)
+			if resourceType == "" && resourceName == "" {
+				continue
+			}
+			key := managedDriftCoverageKey("resourceInspection", resourceType, resourceName)
+			seen[key] = struct{}{}
+			rowCount := rowCounts[key]
+			coverage := ManagedDriftCoverageCheckedNoRows
+			if rowCount > 0 {
+				coverage = ManagedDriftCoverageRowsReported
+			} else if !resourceSupportsLiveInspection(resourceType) && !resourceSupportsRecentLogs(resourceType) {
+				coverage = ManagedDriftCoverageUnsupported
+			}
+			entry := ManagedDriftSourceCoverageEntry{
+				SourceKind:   "resourceInspection",
+				Label:        managedDriftCoverageLabel(resourceType, resourceName),
+				Coverage:     coverage,
+				RowCount:     rowCount,
+				ResourceType: resourceType,
+				ResourceName: resourceName,
+				Summary:      managedDriftCoverageSummary(coverage, rowCount),
+			}
+			if resourceSupportsLiveInspection(resourceType) {
+				entry.Route = resourceEvidenceRoute(deploymentName, "resource-inspection", resourceType, resourceName)
+			}
+			if coverage == ManagedDriftCoverageUnsupported {
+				entry.UnavailableHint = "this rollout resource does not currently have a Tenet drift source binding"
+			}
+			entries = append(entries, entry)
+		}
+	}
+
+	for _, item := range items {
+		key := managedDriftCoverageKeyFromItem(item)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		entry := managedDriftCoverageEntryFromItem(item, rowCounts[key])
+		entries = append(entries, entry)
+	}
+
+	if len(entries) == 0 {
+		return []ManagedDriftSourceCoverageEntry{{
+			SourceKind:      "managedDrift",
+			Label:           "Managed drift source coverage",
+			Coverage:        ManagedDriftCoverageUnavailable,
+			UnavailableHint: "no rollout execution resources or managed drift rows were present in this snapshot",
+			Summary:         "No managed drift source coverage was available in this deployment snapshot.",
+		}}
+	}
+
+	return entries
+}
+
+func managedDriftCoverageEntryFromItem(item domain.ManagedDriftItem, rowCount int) ManagedDriftSourceCoverageEntry {
+	entry := ManagedDriftSourceCoverageEntry{
+		SourceKind: "currentStatus",
+		Label:      "Current runtime status",
+		Coverage:   ManagedDriftCoverageRowsReported,
+		RowCount:   rowCount,
+		Summary:    managedDriftCoverageSummary(ManagedDriftCoverageRowsReported, rowCount),
+	}
+	if item.Source != nil {
+		entry.SourceKind = strings.TrimSpace(item.Source.Kind)
+		if entry.SourceKind == "" {
+			entry.SourceKind = "managedDriftSource"
+		}
+		entry.Label = strings.TrimSpace(item.Source.Label)
+		entry.ResourceType = strings.TrimSpace(item.Source.ResourceType)
+		entry.ResourceName = strings.TrimSpace(item.Source.ResourceName)
+		entry.Route = strings.TrimSpace(item.Source.Route)
+	}
+	if entry.Label == "" && item.ResourceRef != nil {
+		entry.ResourceType = strings.TrimSpace(item.ResourceRef.ResourceType)
+		entry.ResourceName = strings.TrimSpace(item.ResourceRef.ResourceName)
+		entry.Label = managedDriftCoverageLabel(entry.ResourceType, entry.ResourceName)
+	}
+	if entry.Label == "" {
+		entry.Label = "Current runtime status"
+	}
+	return entry
+}
+
+func managedDriftCoverageKeyFromItem(item domain.ManagedDriftItem) string {
+	if item.Source != nil {
+		kind := strings.TrimSpace(item.Source.Kind)
+		if kind == "" {
+			kind = "managedDriftSource"
+		}
+		return managedDriftCoverageKey(kind, strings.TrimSpace(item.Source.ResourceType), strings.TrimSpace(item.Source.ResourceName))
+	}
+	if item.ResourceRef != nil {
+		return managedDriftCoverageKey("resourceInspection", strings.TrimSpace(item.ResourceRef.ResourceType), strings.TrimSpace(item.ResourceRef.ResourceName))
+	}
+	return managedDriftCoverageKey("currentStatus", "", "")
+}
+
+func managedDriftCoverageKey(sourceKind, resourceType, resourceName string) string {
+	return strings.TrimSpace(sourceKind) + "\x00" + strings.TrimSpace(resourceType) + "\x00" + strings.TrimSpace(resourceName)
+}
+
+func managedDriftCoverageLabel(resourceType, resourceName string) string {
+	resourceType = strings.TrimSpace(resourceType)
+	resourceName = strings.TrimSpace(resourceName)
+	if resourceType == "" && resourceName == "" {
+		return "Current runtime status"
+	}
+	if resourceName == "" {
+		return resourceType
+	}
+	if resourceType == "" {
+		return resourceName
+	}
+	return resourceType + " " + resourceName
+}
+
+func managedDriftCoverageSummary(coverage string, rowCount int) string {
+	switch coverage {
+	case ManagedDriftCoverageRowsReported:
+		return fmt.Sprintf("%d managed drift row(s) were reported from this source.", rowCount)
+	case ManagedDriftCoverageCheckedNoRows:
+		return "This source is represented in the rollout evidence and reported no managed drift rows in the current snapshot."
+	case ManagedDriftCoverageUnsupported:
+		return "This rollout resource is present, but Tenet does not currently bind it to managed drift comparisons."
+	case ManagedDriftCoverageUnavailable:
+		return "Tenet did not have persisted source coverage for managed drift comparisons in this snapshot."
+	default:
+		return "Managed drift source coverage context is available for this source."
+	}
+}
+
+func cloneManagedDriftSourceCoverage(entries []ManagedDriftSourceCoverageEntry) []ManagedDriftSourceCoverageEntry {
+	if len(entries) == 0 {
+		return []ManagedDriftSourceCoverageEntry{}
+	}
+	return append([]ManagedDriftSourceCoverageEntry(nil), entries...)
 }
 
 // BuildResourceRelatedEventSummaries returns one compact retained-history summary per rollout execution resource.
