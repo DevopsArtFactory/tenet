@@ -3289,6 +3289,28 @@ func TestSmokeScriptsLockApplicationsOverviewInitialLoadingCopy(t *testing.T) {
 	}
 }
 
+func TestSmokeScriptsLockDriftSourceCalloutCopy(t *testing.T) {
+	fragments := []string{
+		"Current source: controller-authored managedDrift rows.",
+		"managedDrift is present in the deployment detail payload, so fallback read-model heuristics stay suppressed for this deployment.",
+		"Current source: derived fallback read-model heuristics.",
+		"managedDrift is absent in the deployment detail payload, so Tenet is deriving field-level drift from artifact, generation, runtime-context, and unhealthy-condition read-model signals.",
+	}
+
+	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
+		body, err := os.ReadFile("../../scripts/" + script)
+		if err != nil {
+			t.Fatalf("read %s: %v", script, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to lock drift-source callout copy %q", script, fragment)
+			}
+		}
+	}
+}
+
 func TestSmokeScriptsLockApplicationLinkedResourceSourceCopy(t *testing.T) {
 	fragments := []string{
 		"const applicationLinkedResourceSourceText = (detail) => {",
