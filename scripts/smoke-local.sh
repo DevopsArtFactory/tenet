@@ -2839,12 +2839,13 @@ assert "const applicationStatusSectionID = 'application-current-status';" in app
 assert "applicationStatusSection.id = applicationStatusSectionID;" in application_ui, application_ui
 assert "pushApplicationSectionLink(applicationStatusSectionID, 'Current application status');" in application_ui, application_ui
 assert "createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')" in application_ui, application_ui
-assert "const resourceSupportsLiveInspection = (resource) => {" in application_ui, application_ui
-assert "const resourceSupportsRecentLogs = (resource) => {" in application_ui, application_ui
+assert "const resourceSupportsLiveInspectionByType = (resource) => {" in application_ui, application_ui
+assert "const resourceSupportsRecentLogsByType = (resource) => {" in application_ui, application_ui
 assert "'codeDeployApplication',\n          'codeDeployDeploymentGroup'" in application_ui, application_ui
 assert "'trafficShiftPlan',\n          'productionListenerRule',\n          'activeTargetGroup',\n          'candidateTargetGroup'" in application_ui, application_ui
-assert "createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Live evidence available', '_self')" in application_ui, application_ui
-assert "createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Recent logs supported', '_self')" in application_ui, application_ui
+assert "createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', routeParams), 'Live evidence available', '_self')" in application_ui, application_ui
+assert "createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', routeParams), 'Recent logs supported', '_self')" in application_ui, application_ui
+assert "createNavLink(buildPageSectionURL('resource', 'resource-related-runtime-events', routeParams), 'Related runtime events supported', '_self')" in application_ui, application_ui
 assert "const trafficRoutingIdentifierTokens = (value) => {" in application_ui, application_ui
 assert "const rolloutResourceDetailURL = (detail, resourceTypes, identifiers) => {" in application_ui, application_ui
 assert "const createRolloutResourceDetailLink = (detail, resourceTypes, identifiers) => {" in application_ui, application_ui
@@ -2852,6 +2853,7 @@ assert "return href ? createNavLink(href, 'Open resource detail', '_self') : nul
 assert 'Evidence cues' in application_ui, application_ui
 assert 'Live evidence available' in application_ui, application_ui
 assert 'Recent logs supported' in application_ui, application_ui
+assert 'Related runtime events supported' in application_ui, application_ui
 assert "const runtimeEventMatchesApplicationResource = (event, resource) => Boolean(resource?.type && resource?.name)" in application_ui, application_ui
 assert "const createApplicationResourceRelatedEventsCue = (deploymentName, resource, result) => {" in application_ui, application_ui
 assert "const createApplicationResourceRelatedEventsSummaryCue = (deploymentName, resource, detail) => {" in application_ui, application_ui

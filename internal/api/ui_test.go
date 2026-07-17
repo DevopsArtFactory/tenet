@@ -885,8 +885,11 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"const createResourceLinkedSourceCue = (detail, resource) =>",
 		"workspace-callout-factors resource-linked-source-cue",
 		"Linked-resource source: ${resource?.linkedResourceSource || applicationLinkedResourceSourceText(detail)}",
-		"resourceInspectionReadRoute(deploymentName, resource)",
-		"resourceLogsReadRoute(deploymentName, resource)",
+		"const selectedResourceEvidenceHintText = (resource) => {",
+		"Evidence hints: ${hints.join(' · ')}",
+		"selected-resource-evidence-hints",
+		"resourceEvidenceCapabilityRoute(resource, 'liveInspectionRoute') || resourceInspectionReadRoute(deploymentName, resource)",
+		"resourceEvidenceCapabilityRoute(resource, 'recentLogsRoute') || resourceLogsReadRoute(deploymentName, resource)",
 		"const selectedResourceEvidenceCalloutText = (supportsInspection, supportsLogs, routeBits) => {",
 		"Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection.",
 		"Use the Live inspection handoff below to refresh focused evidence for this exact resource selection.",
@@ -1295,17 +1298,22 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"Traffic routing",
 		"Config and access",
 		"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
-		"const resourceSupportsLiveInspection = (resource) => {",
+		"const resourceEvidenceCapabilities = (resource) => (resource?.evidenceCapabilities && typeof resource.evidenceCapabilities === 'object')",
+		"const resourceSupportsLiveInspectionByType = (resource) => {",
 		"'codeDeployApplication',\n          'codeDeployDeploymentGroup'",
 		"'trafficShiftPlan',\n          'productionListenerRule',\n          'activeTargetGroup',\n          'candidateTargetGroup'",
 		"const trafficRoutingIdentifierTokens = (value) => {",
 		"const rolloutResourceDetailURL = (detail, resourceTypes, identifiers) => {",
 		"const createRolloutResourceDetailLink = (detail, resourceTypes, identifiers) => {",
 		"return href ? createNavLink(href, 'Open resource detail', '_self') : null;",
-		"const resourceSupportsRecentLogs = (resource) => {",
+		"const resourceSupportsRecentLogsByType = (resource) => {",
+		"const resourceSupportsLiveInspection = (resource) => resourceEvidenceCapabilitySupported(resource, 'liveInspectionSupported', resourceSupportsLiveInspectionByType(resource));",
+		"const resourceSupportsRecentLogs = (resource) => resourceEvidenceCapabilitySupported(resource, 'recentLogsSupported', resourceSupportsRecentLogsByType(resource));",
+		"const resourceSupportsRelatedRuntimeEvents = (resource) => resourceEvidenceCapabilitySupported(resource, 'relatedRuntimeEventsSupported', Boolean(resource?.type && resource?.name));",
 		"'Evidence cues'",
-		"createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Live evidence available', '_self')",
-		"createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Recent logs supported', '_self')",
+		"createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', routeParams), 'Live evidence available', '_self')",
+		"createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', routeParams), 'Recent logs supported', '_self')",
+		"createNavLink(buildPageSectionURL('resource', 'resource-related-runtime-events', routeParams), 'Related runtime events supported', '_self')",
 		"const renderApplicationDetailPage = (detail, applicationState = null, focusState = null) => {",
 		"const applicationSectionIDs = {",
 		"const createApplicationQuickNav = (detail, sectionLinks = []) => {",
@@ -4348,22 +4356,25 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page resource link contract")
 	}
-	if !strings.Contains(text, "assert \"const resourceSupportsLiveInspection = (resource) => {\" in application_ui, application_ui") {
+	if !strings.Contains(text, "assert \"const resourceSupportsLiveInspectionByType = (resource) => {\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page live inspection support helper")
 	}
-	if !strings.Contains(text, "assert \"const resourceSupportsRecentLogs = (resource) => {\" in application_ui, application_ui") || !strings.Contains(text, "assert \"'codeDeployApplication',\\n          'codeDeployDeploymentGroup'\" in application_ui, application_ui") || !strings.Contains(text, "assert \"'trafficShiftPlan',\\n          'productionListenerRule',\\n          'activeTargetGroup',\\n          'candidateTargetGroup'\" in application_ui, application_ui") {
+	if !strings.Contains(text, "assert \"const resourceSupportsRecentLogsByType = (resource) => {\" in application_ui, application_ui") || !strings.Contains(text, "assert \"'codeDeployApplication',\\n          'codeDeployDeploymentGroup'\" in application_ui, application_ui") || !strings.Contains(text, "assert \"'trafficShiftPlan',\\n          'productionListenerRule',\\n          'activeTargetGroup',\\n          'candidateTargetGroup'\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page recent logs support helper and route-stable resource types")
 	}
-	if !strings.Contains(text, "assert \"createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Live evidence available', '_self')\" in application_ui, application_ui") {
+	if !strings.Contains(text, "assert \"createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', routeParams), 'Live evidence available', '_self')\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page live inspection handoff contract")
 	}
-	if !strings.Contains(text, "assert \"createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Recent logs supported', '_self')\" in application_ui, application_ui") {
+	if !strings.Contains(text, "assert \"createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', routeParams), 'Recent logs supported', '_self')\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page recent logs handoff contract")
+	}
+	if !strings.Contains(text, "assert \"createNavLink(buildPageSectionURL('resource', 'resource-related-runtime-events', routeParams), 'Related runtime events supported', '_self')\" in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page related runtime-events handoff contract")
 	}
 	if !strings.Contains(text, "assert \"const rolloutResourceDetailURL = (detail, resourceTypes, identifiers) => {\" in application_ui, application_ui") || !strings.Contains(text, "assert \"return href ? createNavLink(href, 'Open resource detail', '_self') : null;\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert traffic-routing resource-detail handoff contract")
 	}
-	if !strings.Contains(text, "assert 'Evidence cues' in application_ui, application_ui") || !strings.Contains(text, "assert 'Live evidence available' in application_ui, application_ui") || !strings.Contains(text, "assert 'Recent logs supported' in application_ui, application_ui") {
+	if !strings.Contains(text, "assert 'Evidence cues' in application_ui, application_ui") || !strings.Contains(text, "assert 'Live evidence available' in application_ui, application_ui") || !strings.Contains(text, "assert 'Recent logs supported' in application_ui, application_ui") || !strings.Contains(text, "assert 'Related runtime events supported' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page evidence handoff copy")
 	}
 	if !strings.Contains(text, "assert \"const applicationResourceSectionLinkLabel = (group, resourceFilter = '') => {\" in application_ui, application_ui") {

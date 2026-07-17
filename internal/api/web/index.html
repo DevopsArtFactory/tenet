@@ -2572,12 +2572,16 @@
         const description = resource.description || '—';
         const resourceId = stableResourceIdentity({ type, name, description });
         const containerName = String(resource.containerName || '').trim();
+        const evidenceCapabilities = resource?.evidenceCapabilities && typeof resource.evidenceCapabilities === 'object'
+          ? resource.evidenceCapabilities
+          : null;
         return {
           id: resourceId,
           type,
           name,
           description,
           ...(containerName ? { containerName } : {}),
+          ...(evidenceCapabilities ? { evidenceCapabilities } : {}),
         };
       };
       const parseResourceIdentity = (resourceId) => {
@@ -4178,14 +4182,22 @@
         createElement('div', 'workspace-callout-factors resource-read-route resource-current-read-cue', `Current resource read: ${resourceDetailReadRoute(deploymentName)}. Loaded before focused Related runtime events, Recent logs, and Live inspection reads.`);
       const createResourceLinkedSourceCue = (detail, resource) =>
         createElement('div', 'workspace-callout-factors resource-linked-source-cue', `Linked-resource source: ${resource?.linkedResourceSource || applicationLinkedResourceSourceText(detail)}`);
+      const selectedResourceEvidenceHintText = (resource) => {
+        const hints = [
+          resourceSupportsLiveInspection(resource) ? 'Live inspection supported' : 'Live inspection unsupported',
+          resourceSupportsRecentLogs(resource) ? 'Recent logs supported' : 'Recent logs unsupported',
+          resourceSupportsRelatedRuntimeEvents(resource) ? 'Related runtime events supported' : 'Related runtime events unsupported',
+        ];
+        return `Evidence hints: ${hints.join(' · ')}`;
+      };
       const createSelectedResourceContextCallout = (detail, resource) => {
         const deploymentName = detail.name || currentPageState.deployment || '';
         const scopeText = selectedResourceScopeText(resource);
         const supportsInspection = resourceSupportsLiveInspection(resource);
         const supportsLogs = resourceSupportsRecentLogs(resource);
         const routeBits = [
-          supportsInspection ? resourceInspectionReadRoute(deploymentName, resource) : '',
-          supportsLogs ? resourceLogsReadRoute(deploymentName, resource) : '',
+          supportsInspection ? (resourceEvidenceCapabilityRoute(resource, 'liveInspectionRoute') || resourceInspectionReadRoute(deploymentName, resource)) : '',
+          supportsLogs ? (resourceEvidenceCapabilityRoute(resource, 'recentLogsRoute') || resourceLogsReadRoute(deploymentName, resource)) : '',
         ].filter(Boolean);
         const callout = createElement('div', 'workspace-callout selected-resource-context');
         const head = createElement('div', 'workspace-callout-head');
@@ -4216,6 +4228,7 @@
           createElement('div', 'workspace-callout-copy', summaryParts.length ? summaryParts.join(' · ') : 'Resource selection is derived from the current bookmarkable route.'),
           createCurrentResourceReadCue(deploymentName),
           createResourceLinkedSourceCue(detail, resource),
+          createElement('div', 'workspace-callout-factors selected-resource-evidence-hints', selectedResourceEvidenceHintText(resource)),
           createElement('div', 'workspace-callout-factors', selectedResourceEvidenceCalloutText(supportsInspection, supportsLogs, routeBits)),
         );
         if (evidenceLinks.children.length) {
@@ -4399,7 +4412,21 @@
         }
         return null;
       };
-      const resourceSupportsLiveInspection = (resource) => {
+      const resourceEvidenceCapabilities = (resource) => (resource?.evidenceCapabilities && typeof resource.evidenceCapabilities === 'object')
+        ? resource.evidenceCapabilities
+        : null;
+      const resourceEvidenceCapabilitySupported = (resource, key, fallback) => {
+        const capabilities = resourceEvidenceCapabilities(resource);
+        if (capabilities && Object.prototype.hasOwnProperty.call(capabilities, key)) {
+          return capabilities[key] === true;
+        }
+        return fallback;
+      };
+      const resourceEvidenceCapabilityRoute = (resource, key) => {
+        const route = resourceEvidenceCapabilities(resource)?.[key];
+        return typeof route?.route === 'string' ? route.route.trim() : '';
+      };
+      const resourceSupportsLiveInspectionByType = (resource) => {
         const type = String(resource?.type || '').trim();
         return new Set([
           'ecsService',
@@ -4419,7 +4446,7 @@
           'ecsTask',
         ]).has(type);
       };
-      const resourceSupportsRecentLogs = (resource) => {
+      const resourceSupportsRecentLogsByType = (resource) => {
         const type = String(resource?.type || '').trim();
         return new Set([
           'ecsService',
@@ -4439,6 +4466,9 @@
           'greenTaskSetTargetGroup',
         ]).has(type);
       };
+      const resourceSupportsLiveInspection = (resource) => resourceEvidenceCapabilitySupported(resource, 'liveInspectionSupported', resourceSupportsLiveInspectionByType(resource));
+      const resourceSupportsRecentLogs = (resource) => resourceEvidenceCapabilitySupported(resource, 'recentLogsSupported', resourceSupportsRecentLogsByType(resource));
+      const resourceSupportsRelatedRuntimeEvents = (resource) => resourceEvidenceCapabilitySupported(resource, 'relatedRuntimeEventsSupported', Boolean(resource?.type && resource?.name));
       const runtimeEventManagedDriftMatchesResource = (event, resource) => (Array.isArray(event?.managedDrift) ? event.managedDrift : []).some((row) => (
         (row?.resourceRef?.resourceType === resource?.type && row?.resourceRef?.resourceName === resource?.name) ||
         (row?.source?.resourceType === resource?.type && row?.source?.resourceName === resource?.name)
@@ -4525,12 +4555,16 @@
         if (!container || !deploymentName || !resource?.type || !resource?.id) {
           return;
         }
+        const routeParams = { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id };
         const evidenceLinks = [];
         if (resourceSupportsLiveInspection(resource)) {
-          evidenceLinks.push(createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Live evidence available', '_self'));
+          evidenceLinks.push(createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', routeParams), 'Live evidence available', '_self'));
         }
         if (resourceSupportsRecentLogs(resource)) {
-          evidenceLinks.push(createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Recent logs supported', '_self'));
+          evidenceLinks.push(createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', routeParams), 'Recent logs supported', '_self'));
+        }
+        if (resourceSupportsRelatedRuntimeEvents(resource)) {
+          evidenceLinks.push(createNavLink(buildPageSectionURL('resource', 'resource-related-runtime-events', routeParams), 'Related runtime events supported', '_self'));
         }
         if (evidenceLinks.length) {
           container.append(createElement('span', 'row-link-label', 'Evidence cues'), ...evidenceLinks);
