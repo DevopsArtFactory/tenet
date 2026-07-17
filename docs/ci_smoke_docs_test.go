@@ -500,7 +500,7 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 		"direct-process smoke covers that validation while Compose smoke keeps the bounded `?limit=1` runtime-events `resultScope` and `sourceSummary` contract exercised",
 		"`eventLimit` and optional `eventSource`",
 		"`Copy runtime events route` handoff for the exact selected read",
-		"the selector offers `All sources`, `controller`, `deployment-controller`, and `github`",
+		"The selector keeps backend values in the route while showing operator-readable labels such as `Controller history`, `Deployment controller history`, and `GitHub refresh`",
 		"exact bookmarked custom source values remain visible instead of being discarded",
 		"`retention.limit` may still be non-zero",
 		"`sourceSummary` array of `{source, count}` entries computed from the retained window before optional source filtering and before positive limit truncation (blank persisted sources are bucketed as `unknown`, and `?source=unknown` selects those legacy entries)",
@@ -526,7 +526,7 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 		"writes `eventLimit` and optional `eventSource` into `/?page=application&deployment=...`",
 		"`GET /v1/overview/deployments/{deploymentName}/events?limit={n}[&source={source}]`",
 		"`Copy runtime events route` handoff for the exact selected read",
-		"The selector offers `All sources`, `controller`, `deployment-controller`, and `github`",
+		"The selector keeps backend values in the route while showing operator-readable labels such as `Controller history`, `Deployment controller history`, and `GitHub refresh`",
 		"exact bookmarked custom source values remain visible instead of being discarded",
 	} {
 		if !strings.Contains(overviewText, fragment) {
