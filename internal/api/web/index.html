@@ -5791,6 +5791,29 @@
         );
         return handoffSection;
       };
+      const relatedLogRouteHandoffs = (result) => Array.isArray(result?.relatedLogRoutes)
+        ? result.relatedLogRoutes
+            .filter((handoff) => handoff && typeof handoff === 'object' && String(handoff.route || '').trim())
+            .map((handoff) => ({
+              label: String(handoff.label || '').trim() || 'Open related recent-log read',
+              route: String(handoff.route || '').trim(),
+            }))
+        : [];
+      const createRelatedLogRoutesHandoffSection = (result) => {
+        const handoffs = relatedLogRouteHandoffs(result);
+        if (!handoffs.length) return null;
+        const handoffSection = createElement('section', 'detail-section related-log-routes');
+        const handoffLinks = createElement('div', 'row-links');
+        handoffs.forEach((handoff) => {
+          handoffLinks.append(createNavLink(handoff.route, handoff.label, '_blank'));
+        });
+        handoffSection.append(
+          createElement('h4', '', 'Related recent-log reads'),
+          createElement('p', 'detail-section-copy', 'This selected resource has no independent log stream. Use these backend-provided read-only handoffs to inspect nearby resources that usually carry the next useful troubleshooting evidence.'),
+          handoffLinks,
+        );
+        return handoffSection;
+      };
       const renderResourceLogsPayload = (section, deploymentName, resource, result, detail = null, limit = 0) => {
         const selectedLimit = normalizeResourceLogsLimit(limit);
         const actions = createResourceLogsActions(section, deploymentName, resource, false, detail);
@@ -5798,7 +5821,9 @@
         const backingResourceFields = resourceLogsBackingResourceFields(result);
         const lookupContextNodes = createResourceLogsLookupContextNodes(result?.lookupContext);
         const handoffSection = createResourceLogsBackingResourceHandoffSection(detail, result);
-        const beforeNodes = (metadata) => handoffSection ? [capNote, ...lookupContextNodes, metadata, handoffSection] : [capNote, ...lookupContextNodes, metadata];
+        const relatedLogRoutesHandoffSection = createRelatedLogRoutesHandoffSection(result);
+        const supplementalSections = [handoffSection, relatedLogRoutesHandoffSection].filter(Boolean);
+        const beforeNodes = (metadata) => [capNote, ...lookupContextNodes, metadata, ...supplementalSections];
         const scopeFields = resourceLogsResultScopeFields(result?.resultScope);
         const requestRouteFields = resourceLogsRequestRouteFields(deploymentName, resource, selectedLimit);
         if (!result?.available) {
