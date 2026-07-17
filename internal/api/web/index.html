@@ -10685,6 +10685,25 @@
             !hasActiveDriftFilters(),
             clearDriftFilters,
           );
+          const describeClearDriftFiltersAction = (activeFilters) => {
+            if (!activeFilters.length) {
+              return {
+                label: 'Clear drift filters',
+                description: 'Clear drift filters (no active drift filters)',
+              };
+            }
+            const countLabel = `${activeFilters.length} drift filter${activeFilters.length === 1 ? '' : 's'}`;
+            return {
+              label: `Clear ${countLabel}`,
+              description: `Clear active drift filters: ${activeFilters.join(', ')}`,
+            };
+          };
+          const applyClearDriftFiltersCopy = (button, activeFilters) => {
+            const copy = describeClearDriftFiltersAction(activeFilters);
+            button.textContent = copy.label;
+            button.setAttribute('aria-label', copy.description);
+            button.setAttribute('title', copy.description);
+          };
           const renderDriftRows = () => {
             const driftAnchorIDs = new Map();
             const seenAllDriftAnchors = new Map();
@@ -10709,6 +10728,7 @@
             if (driftSeverity !== defaultDriftFilters.severity) activeDriftFilters.push(`severity ${driftSeverity}`);
             if (driftSort !== defaultDriftFilters.sort) activeDriftFilters.push(`sort ${driftSort}`);
             clearDriftFiltersButton.disabled = !hasActiveDriftFilters();
+            applyClearDriftFiltersCopy(clearDriftFiltersButton, activeDriftFilters);
             driftToolbarActions.replaceChildren(
               createElement('div', 'toolbar-active', activeDriftFilters.length ? `Drift filters: ${activeDriftFilters.join(' · ')}` : 'Drift filters: defaults'),
               clearDriftFiltersButton,
@@ -10730,7 +10750,9 @@
               markPoliteStatusNode(stateNode);
               if (driftRows.length) {
                 const emptyActions = createElement('div', 'toolbar-actions');
-                emptyActions.append(createRefreshButton('Clear drift filters', false, clearDriftFilters));
+                const emptyClearButton = createRefreshButton('Clear drift filters', false, clearDriftFilters);
+                applyClearDriftFiltersCopy(emptyClearButton, activeDriftFilters);
+                emptyActions.append(emptyClearButton);
                 driftTableWrap.replaceChildren(stateNode, emptyActions);
               } else {
                 driftTableWrap.replaceChildren(stateNode);

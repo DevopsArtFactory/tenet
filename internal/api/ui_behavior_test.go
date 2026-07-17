@@ -10210,6 +10210,8 @@ async function render(detail, search, hash = '') {
   const clearDriftFiltersButton = buttons.find((node) => node.textContent === 'Clear drift filters');
   if (!clearDriftFiltersButton) throw new Error('expected drift clear-filters control');
   if (!clearDriftFiltersButton.disabled) throw new Error('expected drift clear-filters control disabled with default controls');
+  if (clearDriftFiltersButton.getAttribute('aria-label') !== 'Clear drift filters (no active drift filters)') throw new Error('expected disabled drift clear-filters aria-label to explain no active filters');
+  if (clearDriftFiltersButton.getAttribute('title') !== 'Clear drift filters (no active drift filters)') throw new Error('expected disabled drift clear-filters tooltip to explain no active filters');
   if (run.window.location.search !== '?page=drift&deployment=api-prod') throw new Error('expected default drift route to stay bookmarkable');
 
   const severityField = run.document.querySelector('[data-toolbar-field="Severity"]');
@@ -10222,6 +10224,9 @@ async function render(detail, search, hash = '') {
   if (highOnlyText.includes('condition.Healthy')) throw new Error('expected high severity filter to remove low-severity condition row');
   if (!highOnlyText.includes('Showing 2 drift rows out of 7 drift rows after filters.')) throw new Error('expected high severity summary to reflect visible fallback rows');
   if (clearDriftFiltersButton.disabled) throw new Error('expected drift clear-filters control enabled after severity change');
+  if (clearDriftFiltersButton.textContent !== 'Clear 1 drift filter') throw new Error('expected drift clear-filters label to count one active filter, got ' + clearDriftFiltersButton.textContent);
+  if (clearDriftFiltersButton.getAttribute('aria-label') !== 'Clear active drift filters: severity high') throw new Error('expected drift clear-filters aria-label to name severity filter, got ' + clearDriftFiltersButton.getAttribute('aria-label'));
+  if (clearDriftFiltersButton.getAttribute('title') !== 'Clear active drift filters: severity high') throw new Error('expected drift clear-filters tooltip to name severity filter, got ' + clearDriftFiltersButton.getAttribute('title'));
   if (run.window.location.search !== '?page=drift&deployment=api-prod&driftSeverity=high') throw new Error('expected severity change to update bookmarkable drift URL, got ' + run.window.location.search);
 
   const queryField = run.document.querySelector('[data-toolbar-field="Filter drift rows"]');
@@ -10261,6 +10266,9 @@ async function render(detail, search, hash = '') {
   await settle();
   let controlsText = collectText(run.document.getElementById('accounts')).join(' | ');
   if (!controlsText.includes('Drift filters: search “targetderegistrationlag” · severity high · sort severity')) throw new Error('expected drift filter summary to reflect all active controls');
+  if (clearDriftFiltersButton.textContent !== 'Clear 3 drift filters') throw new Error('expected drift clear-filters label to count all active filters, got ' + clearDriftFiltersButton.textContent);
+  if (clearDriftFiltersButton.getAttribute('aria-label') !== 'Clear active drift filters: search “targetderegistrationlag”, severity high, sort severity') throw new Error('expected drift clear-filters aria-label to name all active filters, got ' + clearDriftFiltersButton.getAttribute('aria-label'));
+  if (clearDriftFiltersButton.getAttribute('title') !== 'Clear active drift filters: search “targetderegistrationlag”, severity high, sort severity') throw new Error('expected drift clear-filters tooltip to name all active filters, got ' + clearDriftFiltersButton.getAttribute('title'));
   if (run.window.location.search !== '?page=drift&deployment=api-prod&driftQuery=targetderegistrationlag&driftSeverity=high&driftSort=severity') throw new Error('expected all active drift controls to update bookmarkable URL, got ' + run.window.location.search);
   clearDriftFiltersButton.dispatch('click');
   await settle();
@@ -10268,6 +10276,8 @@ async function render(detail, search, hash = '') {
   if (severityField.value !== 'all') throw new Error('expected clear drift filters to reset severity control');
   if (sortField.value !== 'field') throw new Error('expected clear drift filters to reset sort control');
   if (!clearDriftFiltersButton.disabled) throw new Error('expected clear drift filters to disable after resetting defaults');
+  if (clearDriftFiltersButton.textContent !== 'Clear drift filters') throw new Error('expected cleared drift filters label to return to default, got ' + clearDriftFiltersButton.textContent);
+  if (clearDriftFiltersButton.getAttribute('aria-label') !== 'Clear drift filters (no active drift filters)') throw new Error('expected cleared drift filters aria-label to explain no active filters');
   controlsText = collectText(run.document.getElementById('accounts')).join(' | ');
   if (!controlsText.includes('Drift filters: defaults')) throw new Error('expected drift filter summary to return to defaults after clearing');
   if (!controlsText.includes('Showing all 7 drift rows.')) throw new Error('expected clear drift filters to restore all drift rows');
@@ -10281,8 +10291,10 @@ async function render(detail, search, hash = '') {
   const filteredEmptyText = collectText(run.document.getElementById('accounts')).join(' | ');
   if (!filteredEmptyText.includes('Filters currently hide all 7 drift rows.')) throw new Error('expected filtered-empty summary copy');
   if (!filteredEmptyText.includes('No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.')) throw new Error('expected filtered-empty table message');
-  const filteredEmptyClearButton = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Clear drift filters' && !node.disabled)[0];
+  const filteredEmptyClearButton = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Clear 1 drift filter' && !node.disabled)[0];
   if (!filteredEmptyClearButton) throw new Error('expected filtered-empty inline Clear drift filters action');
+  if (filteredEmptyClearButton.getAttribute('aria-label') !== 'Clear active drift filters: search “missing-signal”') throw new Error('expected filtered-empty clear action to name the active query filter, got ' + filteredEmptyClearButton.getAttribute('aria-label'));
+  if (filteredEmptyClearButton.getAttribute('title') !== 'Clear active drift filters: search “missing-signal”') throw new Error('expected filtered-empty clear action tooltip to name the active query filter, got ' + filteredEmptyClearButton.getAttribute('title'));
   filteredEmptyClearButton.dispatch('click');
   await settle();
   const inlineClearText = collectText(run.document.getElementById('accounts')).join(' | ');

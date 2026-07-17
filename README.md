@@ -33,6 +33,7 @@ The primary UI flow is intentionally simple, and the embedded shell's initial lo
 
 Additional operator workspaces are linked from that flow: account detail, drift,
 plan/apply, audit timeline, deployment events, recent logs, and live inspection.
+Drift clear actions count active query/severity/sort filters and name reset state in assistive labels/tooltips.
 Resource-detail quick navigation keeps `_self` links back to the Applications
 and Application detail pages before operators pivot into log or inspection
 evidence, while destination/section chips and hash jumps keep keyboard and screen
