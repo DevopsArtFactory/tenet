@@ -2772,6 +2772,11 @@ assert "createInput('Filter linked resources', currentPageState.resourceFilter, 
 assert "createElement('div', 'account-topology resource-filter-summary')" in application_ui, application_ui
 assert "createClearApplicationResourceFilterButton(detail, applicationState)" in application_ui, application_ui
 assert "const applicationResourceSectionLinkLabel = (group, resourceFilter = '') => {" in application_ui, application_ui
+assert "const applicationLinkedResourceSourceText = (detail) => {" in application_ui, application_ui
+assert 'Linked-resource source' in application_ui, application_ui
+assert 'Controller-authored rollout execution' in application_ui, application_ui
+assert 'Fallback rollout inventory' in application_ui, application_ui
+assert 'rollout.execution[] is missing or empty, so Tenet is showing canonical fallback resources for this execution mode.' in application_ui, application_ui
 assert 'No ${group.title} resources match resource filter "${resourceFilter}". Clear the resource filter to show all ${group.title} resources.' in application_ui, application_ui
 assert 'Clear resource filter' in application_ui, application_ui
 assert 'Current application status' in application_ui, application_ui

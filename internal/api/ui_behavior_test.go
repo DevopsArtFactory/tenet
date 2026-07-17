@@ -3196,6 +3196,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (summaryText.includes('Application detail read not refreshed yet')) throw new Error('expected loaded application route to replace not-refreshed fallback');
   if (!summaryText.includes('Application detail page: show only application-linked resources before the final resource-detail page.')) throw new Error('expected application route drill-down guidance');
   if (!accountsText.includes('Application resources')) throw new Error('expected application route resources body');
+  if (!accountsText.includes('Linked-resource source')) throw new Error('expected application route linked-resource source label');
+  if (!accountsText.includes('Fallback rollout inventory')) throw new Error('expected application route to explain fallback linked-resource source, got ' + accountsText);
+  if (!accountsText.includes('rollout.execution[] is missing or empty, so Tenet is showing canonical fallback resources for this execution mode.')) throw new Error('expected application route to explain why fallback linked resources are visible, got ' + accountsText);
   if (!accountsText.includes('Quick navigation')) throw new Error('expected application route quick navigation');
   if (!accountsText.includes('Hierarchy')) throw new Error('expected application route hierarchy quick-nav group');
   if (!accountsText.includes('Applications overview')) throw new Error('expected application route overview quick-nav entry');

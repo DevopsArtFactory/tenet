@@ -3723,6 +3723,13 @@
         if (resourceFilter) return `${group.title} (${visibleCount} of ${applicationResourceGroupTotal(group)})`;
         return `${group.title} (${visibleCount})`;
       };
+      const applicationLinkedResourceSourceText = (detail) => {
+        const execution = Array.isArray(detail?.rollout?.execution) ? detail.rollout.execution : [];
+        if (execution.length) {
+          return 'Controller-authored rollout execution · linked resources come from rollout.execution[] in the application detail read model.';
+        }
+        return 'Fallback rollout inventory · rollout.execution[] is missing or empty, so Tenet is showing canonical fallback resources for this execution mode.';
+      };
       const applicationResourceFilteredEmptyMessage = (group, resourceFilter) =>
         `No ${group.title} resources match resource filter "${resourceFilter}". Clear the resource filter to show all ${group.title} resources.`;
       const syncApplicationResourceFilterQueryParam = (value) => {
@@ -3898,6 +3905,7 @@
           ['Health', healthText],
           ['Artifact', artifactText !== '—' ? artifactText : 'No artifact reported'],
           ['Linked resources', `${linkedResources} linked resource${linkedResources === 1 ? '' : 's'}`],
+          ['Linked-resource source', applicationLinkedResourceSourceText(detail)],
           ['Managed drift', applicationManagedDriftSummaryText(detail)],
           ['Runtime events', applicationRuntimeEventSummary(detail)],
           ['Last update', runtimeSummaryTimestamp(detail.runtimeSummary)],
