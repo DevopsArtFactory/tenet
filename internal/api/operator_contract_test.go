@@ -2739,6 +2739,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"derived from the selected resource identity plus the latest completed Live inspection state and the latest completed Recent logs panel state",
 		"covers loading, empty, unavailable, and fetch-error states without hiding the selected resource",
 		"keeps `Current resource read: GET /v1/overview/deployments/{deploymentName}` visible",
+		"keeps the selected resource's `Linked-resource source` cue visible beside it",
 		"`minimumHealthyPercent`",
 		"`maximumPercent`",
 		"`healthCheckGracePeriodSeconds`",
