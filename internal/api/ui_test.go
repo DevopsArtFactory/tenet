@@ -3277,6 +3277,29 @@ func TestSmokeScriptsLockApplicationsOverviewInitialLoadingCopy(t *testing.T) {
 	}
 }
 
+func TestSmokeScriptsLockApplicationLinkedResourceSourceCopy(t *testing.T) {
+	fragments := []string{
+		"const applicationLinkedResourceSourceText = (detail) => {",
+		"Linked-resource source",
+		"Controller-authored rollout execution",
+		"Fallback rollout inventory",
+		"rollout.execution[] is missing or empty, so Tenet is showing canonical fallback resources for this execution mode.",
+	}
+
+	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
+		body, err := os.ReadFile("../../scripts/" + script)
+		if err != nil {
+			t.Fatalf("read %s: %v", script, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to lock application linked-resource source fragment %q", script, fragment)
+			}
+		}
+	}
+}
+
 func TestEmbeddedUIIncludesRuntimeAndHistoryChangeDetailsRendering(t *testing.T) {
 	body := string(indexHTML)
 
