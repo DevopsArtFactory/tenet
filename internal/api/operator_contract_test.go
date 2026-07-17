@@ -503,6 +503,8 @@ func TestOperatorTroubleshootingRunbookDocsContract(t *testing.T) {
 		"| Recent logs | `#resource-recent-logs` | `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}`",
 		"| Live inspection | `#resource-live-inspection` | `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}`",
 		"| Audit | `/?page=audit[&deployment={deploymentName}][&action={action}][&limit={n}]` | `GET /v1/audit-logs`",
+		"`Share audit entry`, `Copy audit entry link`, and action/deployment filters",
+		"row share/copy handoffs should preserve the current audit filters and stable row anchor",
 		"| Plan/apply | `/?page=plan&deployment={deploymentName}[&planId={planId}][&applyId={applyId}]` | `POST /v1/plans/deployments/{deploymentName}`",
 		"| Apply collections | `/?page=applies` for the queued monitor; `/?page=applies&appliesView=active` for active handoffs; `/?page=applies&appliesView=stale` for stale active claims | `GET /v1/applies?status=active`; `GET /v1/applies?status=active&claim=stale`; `GET /v1/applies?status=queued`; `GET /v1/applies?status=running`",
 		"The active API returns queued plus running records newest-first; the stale active API narrows to running records with stale or expired claim leases; the embedded monitor exposes queued/active/stale view controls",
