@@ -595,6 +595,21 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 	}
 }
 
+func TestOperatorTroubleshootingCallsOutRelatedRuntimeEvents(t *testing.T) {
+	runbookText := readTextFile(t, "runbooks/operator-troubleshooting.md")
+	for _, fragment := range []string{
+		"| Related runtime events | `#resource-related-runtime-events` | `GET /v1/overview/deployments/{deploymentName}/events?resourceType={type}&resourceName={name}` |",
+		"managedDrift[].resourceRef",
+		"managedDrift[].source.resourceType/resourceName",
+		"controller history filtered by retained resource evidence; not Recent logs, Live inspection, or immutable audit evidence",
+		"curl -i \"$TENET_API_BASE/v1/overview/deployments/{deploymentName}/events?resourceType={type}&resourceName={name}&limit=10\"",
+	} {
+		if !strings.Contains(runbookText, fragment) {
+			t.Fatalf("expected operator troubleshooting runbook to include resource-events fragment %q", fragment)
+		}
+	}
+}
+
 func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	overviewText := readTextFile(t, "architecture/tenet-v1-overview.md")
