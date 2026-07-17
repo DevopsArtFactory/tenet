@@ -4111,6 +4111,15 @@ func TestApplicationDetailPageWithNodeHarness(t *testing.T) {
 	nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
 const detailBody = ` + string(detailJSON) + `;
+function matchesSelector(node, selector) {
+  if (!node) return false;
+  const dataMatch = String(selector || '').match(/^\[data-([^=]+)="(.+)"\]$/);
+  if (dataMatch) {
+    const datasetKey = dataMatch[1].replace(/-([a-z])/g, (_m, ch) => ch.toUpperCase());
+    return String(node.dataset?.[datasetKey] || '') === dataMatch[2];
+  }
+  return false;
+}
 class Element {
   constructor(tagName, ownerDocument) {
     this.tagName = String(tagName).toUpperCase();
@@ -4138,6 +4147,8 @@ class Element {
   dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
   setAttribute(name, value) { this.attributes[name] = String(value); }
   getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  querySelector(selector) { return collectNodes(this, (node) => matchesSelector(node, selector))[0] || null; }
+  querySelectorAll(selector) { return collectNodes(this, (node) => matchesSelector(node, selector)); }
   focus() { this.ownerDocument.activeElement = this; }
 }
 class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
@@ -4145,7 +4156,8 @@ class Document {
   constructor() { this.activeElement = null; this.byID = new Map(); }
   createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
   getElementById(id) { return this.byID.get(id) || null; }
-  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+  querySelector(selector) { return collectNodes({ children: Array.from(this.byID.values()) }, (node) => matchesSelector(node, selector))[0] || null; }
+  querySelectorAll(selector) { return collectNodes({ children: Array.from(this.byID.values()) }, (node) => matchesSelector(node, selector)); }
 }
 const document = new Document();
 document.byID.set('toolbar', document.createElement('section'));
@@ -4157,7 +4169,14 @@ const history = { replaceState(_state, _title, url) { const [pathname, query = '
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (url === '/v1/overview/deployments/payments-api-staging/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
+  if (url === '/v1/overview/deployments/payments-api-staging/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({
+    deploymentName: 'payments-api-staging',
+    events: [
+      { eventId: 'evt-ecs-service', timestamp: '2026-04-16T07:16:00Z', source: 'controller', summary: 'ECS service rollout progressed', resourceRefs: [{ resourceType: 'ecsService', resourceName: 'payments-api-staging ECS Service', source: 'rollout_execution', context: 'service traffic shifted' }] },
+      { eventId: 'evt-listener', timestamp: '2026-04-16T07:14:00Z', source: 'managed_drift', summary: 'Listener drift detected', managedDrift: [{ field: 'traffic.listener.rule', severity: 'medium', resourceRef: { resourceType: 'productionListener', resourceName: 'prod listener' } }] },
+    ],
+    resultScope: { returnedEventCount: 2, totalEventCount: 2, retainedEventCount: 2 },
+  }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -4225,9 +4244,16 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!codeDeployApplicationRow) throw new Error('expected CodeDeploy application resource row');
   const ecsServiceLiveInspectionLink = collectNodes(ecsServiceRow, (node) => node.tagName === 'A' && node.textContent === 'Live evidence available')[0];
   const ecsServiceRecentLogsLink = collectNodes(ecsServiceRow, (node) => node.tagName === 'A' && node.textContent === 'Recent logs supported')[0];
+  const ecsServiceRelatedEventsLink = collectNodes(ecsServiceRow, (node) => node.tagName === 'A' && node.textContent === 'Related events · 1')[0];
+  const codeDeployApplicationRelatedEventsLink = collectNodes(codeDeployApplicationRow, (node) => node.tagName === 'A' && String(node.textContent || '').startsWith('Related events'))[0];
   const codeDeployApplicationLiveInspectionLink = collectNodes(codeDeployApplicationRow, (node) => node.tagName === 'A' && node.textContent === 'Live evidence available')[0];
   const codeDeployApplicationRecentLogsLink = collectNodes(codeDeployApplicationRow, (node) => node.tagName === 'A' && node.textContent === 'Recent logs supported')[0];
   if (!ecsServiceLiveInspectionLink || !ecsServiceLiveInspectionLink.href.includes(resourceIDFragment)) throw new Error('expected ECS service live cue to target its own resource row');
+  if (!ecsServiceRelatedEventsLink) throw new Error('expected ECS service row to cue related runtime-event evidence');
+  if (!ecsServiceRelatedEventsLink.href.includes(resourceIDFragment) || !ecsServiceRelatedEventsLink.href.endsWith('#resource-related-runtime-events')) throw new Error('expected related-events cue to deep-link to the resource related-events panel');
+  const ecsServiceRowText = collectText(ecsServiceRow).join(' | ');
+  if (!ecsServiceRowText.includes('Newest: ECS service rollout progressed · Source controller · 2026-04-16T07:16:00Z')) throw new Error('expected related-events cue to show newest concise event context');
+  if (codeDeployApplicationRelatedEventsLink) throw new Error('expected resource rows without retained evidence to stay quiet');
   if (!ecsServiceRecentLogsLink || !ecsServiceRecentLogsLink.href.includes(resourceIDFragment)) throw new Error('expected ECS service recent-logs cue to target its own resource row');
   if (!resourceLink.href.includes(resourceIDFragment)) throw new Error('expected stable unique resource identifier in drill-down href');
   if (!liveInspectionLink.href.includes('/?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected live inspection href to preserve filters and deployment context');

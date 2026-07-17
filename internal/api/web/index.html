@@ -4340,6 +4340,54 @@
           'greenTaskSetTargetGroup',
         ]).has(type);
       };
+      const runtimeEventManagedDriftMatchesResource = (event, resource) => (Array.isArray(event?.managedDrift) ? event.managedDrift : []).some((row) => (
+        (row?.resourceRef?.resourceType === resource?.type && row?.resourceRef?.resourceName === resource?.name) ||
+        (row?.source?.resourceType === resource?.type && row?.source?.resourceName === resource?.name)
+      ));
+      const runtimeEventResourceRefMatchesResource = (event, resource) => (Array.isArray(event?.resourceRefs) ? event.resourceRefs : []).some((ref) => (
+        ref?.resourceType === resource?.type && ref?.resourceName === resource?.name
+      ));
+      const runtimeEventMatchesApplicationResource = (event, resource) => Boolean(resource?.type && resource?.name) && (
+        runtimeEventResourceRefMatchesResource(event, resource) || runtimeEventManagedDriftMatchesResource(event, resource)
+      );
+      const relatedRuntimeEventsForResource = (result, resource) => sortTimelineEvents(result?.events || [])
+        .filter((event) => runtimeEventMatchesApplicationResource(event, resource));
+      const relatedRuntimeEventSourceCue = (event) => {
+        const source = String(event?.source || '').trim();
+        return source ? `Source ${source}` : '';
+      };
+      const relatedRuntimeEventNewestCue = (event) => {
+        const summary = String(event?.summary || '').trim();
+        const source = relatedRuntimeEventSourceCue(event);
+        const timestamp = String(event?.timestamp || '').trim();
+        return [summary || 'Newest retained event', source, timestamp].filter(Boolean).join(' · ');
+      };
+      const createApplicationResourceRelatedEventsCue = (deploymentName, resource, result) => {
+        if (!deploymentName || !resource?.type || !resource?.id) return null;
+        const relatedEvents = relatedRuntimeEventsForResource(result, resource);
+        if (!relatedEvents.length) return null;
+        const cue = createElement('div', 'detail-condition-meta application-resource-related-events-cue');
+        const routeParams = { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id };
+        cue.append(
+          createNavLink(buildPageSectionURL('resource', 'resource-related-runtime-events', routeParams), `Related events · ${relatedEvents.length}`, '_self'),
+          createElement('span', '', `Newest: ${relatedRuntimeEventNewestCue(relatedEvents[0])}`),
+        );
+        return cue;
+      };
+      const refreshApplicationResourceRelatedEventCues = (deploymentName, result) => {
+        const rows = document.querySelectorAll ? document.querySelectorAll('[data-application-resource-row="true"]') : [];
+        rows.forEach((row) => {
+          const cueSlot = row.querySelector ? row.querySelector('[data-related-events-cue-slot="true"]') : null;
+          if (!cueSlot) return;
+          const resource = {
+            type: row.dataset?.resourceType || '',
+            name: row.dataset?.resourceName || '',
+            id: row.dataset?.resourceId || '',
+          };
+          const cue = createApplicationResourceRelatedEventsCue(deploymentName, resource, result);
+          cueSlot.replaceChildren(...(cue ? [cue] : []));
+        });
+      };
       const appendApplicationResourceEvidenceLinks = (container, deploymentName, resource) => {
         if (!container || !deploymentName || !resource?.type || !resource?.id) {
           return;
@@ -4456,6 +4504,10 @@
           const groupRows = createElement('div', 'group-rows');
           group.resources.forEach((resource) => {
             const row = createElement('div', 'row');
+            row.dataset.applicationResourceRow = 'true';
+            row.dataset.resourceType = resource.type || '';
+            row.dataset.resourceName = resource.name || '';
+            row.dataset.resourceId = resource.id || '';
             const top = createElement('div', 'row-top');
             const titleWrap = createElement('div');
             titleWrap.append(
@@ -4464,11 +4516,18 @@
             );
             top.append(titleWrap, createElement('span', 'pill target', resource.type));
             const detailLinks = createElement('div', 'row-links row-links-shell');
+            const relatedEventsCueSlot = createElement('div', 'application-resource-related-events-slot');
+            relatedEventsCueSlot.dataset.relatedEventsCueSlot = 'true';
             if (detail.name) {
               detailLinks.append(createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self'));
               appendApplicationResourceEvidenceLinks(detailLinks, detail.name, resource);
+              const cachedEvents = deploymentEventsStateByDeployment.get(deploymentEventsCacheKey(detail.name, currentPageState.eventLimit, currentPageState.eventSource));
+              if (cachedEvents?.status === 'ready') {
+                const cue = createApplicationResourceRelatedEventsCue(detail.name, resource, cachedEvents.result);
+                if (cue) relatedEventsCueSlot.append(cue);
+              }
             }
-            row.append(top, detailLinks);
+            row.append(top, detailLinks, relatedEventsCueSlot);
             groupRows.append(row);
           });
           if (resourceFilter && !group.resources.length) {
@@ -8067,6 +8126,7 @@
           const stateNode = createElement('div', 'detail-state', deploymentEventsEmptyStateText(result, selectedLimit, selectedSource));
           markPoliteStatusNode(stateNode);
           section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), ...(sourceSummaryChips ? [sourceSummaryChips] : []), stateNode);
+          refreshApplicationResourceRelatedEventCues(deploymentName, result);
           return;
         }
 
@@ -8143,6 +8203,7 @@
         });
 
         section.replaceChildren(heading, intro, ...(eventNavigation ? [eventNavigation] : []), ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), ...(sourceSummaryChips ? [sourceSummaryChips] : []), ordering, driftSummary, eventList);
+        refreshApplicationResourceRelatedEventCues(deploymentName, result);
       };
       const renderDeploymentEventsSection = (section, deploymentName, options = {}) => {
         const force = Boolean(options?.force);
