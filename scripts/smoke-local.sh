@@ -1045,6 +1045,17 @@ def assert_recent_log_result_window(label, payload):
         assert 'newestEntryTimestamp' not in scope, {label: payload}
         assert 'oldestEntryTimestamp' not in scope, {label: payload}
 
+
+def assert_related_log_routes(label, payload, want):
+    routes = payload.get('relatedLogRoutes')
+    assert isinstance(routes, list), {label: payload}
+    assert len(routes) == len(want), {label: payload}
+    for got, expected in zip(routes, want):
+        assert got.get('label') == expected['label'], {label: payload}
+        assert got.get('route') == expected['route'], {label: payload}
+        assert got.get('resourceType') == expected['resourceType'], {label: payload}
+        assert got.get('resourceName') == expected['resourceName'], {label: payload}
+
 assert summary['accountCount'] == 2, summary
 assert summary['environmentCount'] == 2, summary
 assert summary['deploymentCount'] == 3, summary
@@ -1602,6 +1613,21 @@ assert isinstance(traffic_resource_logs['lookupContext'].get('controlAccountId')
 assert isinstance(traffic_resource_logs['lookupContext'].get('targetAccountId'), str) and traffic_resource_logs['lookupContext']['targetAccountId'], traffic_resource_logs
 assert isinstance(traffic_resource_logs['lookupContext'].get('crossAccount'), bool), traffic_resource_logs
 assert isinstance(traffic_resource_logs['lookupContext'].get('observerRoleConfigured'), bool), traffic_resource_logs
+weighted_related_log_routes = [
+    {
+        'label': 'Candidate Auto Scaling Group recent logs',
+        'route': '/v1/overview/deployments/payments-api-prod/resource-logs?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup',
+        'resourceType': 'candidateAutoScalingGroup',
+        'resourceName': 'payments-api-prod-candidate',
+    },
+    {
+        'label': 'Userdata backing Auto Scaling Group recent logs',
+        'route': '/v1/overview/deployments/payments-api-prod/resource-logs?resourceName=git%3Auserdata%2Fpayments-api-prod.sh&resourceType=userDataBootstrapSource',
+        'resourceType': 'userDataBootstrapSource',
+        'resourceName': 'git:userdata/payments-api-prod.sh',
+    },
+]
+assert_related_log_routes('traffic_resource_logs', traffic_resource_logs, weighted_related_log_routes)
 
 assert production_listener_rule_resource_logs['deploymentName'] == 'payments-api-prod', production_listener_rule_resource_logs
 assert production_listener_rule_resource_logs['resourceType'] == 'productionListenerRule', production_listener_rule_resource_logs
@@ -1623,6 +1649,7 @@ assert isinstance(production_listener_rule_resource_logs['lookupContext'].get('c
 assert isinstance(production_listener_rule_resource_logs['lookupContext'].get('targetAccountId'), str) and production_listener_rule_resource_logs['lookupContext']['targetAccountId'], production_listener_rule_resource_logs
 assert isinstance(production_listener_rule_resource_logs['lookupContext'].get('crossAccount'), bool), production_listener_rule_resource_logs
 assert isinstance(production_listener_rule_resource_logs['lookupContext'].get('observerRoleConfigured'), bool), production_listener_rule_resource_logs
+assert_related_log_routes('production_listener_rule_resource_logs', production_listener_rule_resource_logs, weighted_related_log_routes)
 
 for payload, resource_type, resource_name in (
     (active_target_group_resource_logs, 'activeTargetGroup', 'payments-api-prod-active'),
@@ -1639,6 +1666,7 @@ for payload, resource_type, resource_name in (
     assert isinstance(payload['lookupContext'].get('targetAccountId'), str) and payload['lookupContext']['targetAccountId'], payload
     assert isinstance(payload['lookupContext'].get('crossAccount'), bool), payload
     assert isinstance(payload['lookupContext'].get('observerRoleConfigured'), bool), payload
+    assert_related_log_routes(resource_type, payload, weighted_related_log_routes)
 
 assert bootstrap_resource_inspection['deploymentName'] == 'payments-api-prod', bootstrap_resource_inspection
 assert bootstrap_resource_inspection['resourceType'] == 'userDataBootstrapSource', bootstrap_resource_inspection

@@ -860,6 +860,7 @@ type resourceLookupRequest struct {
 	TargetAccountID     string
 	Region              string
 	ObserverRoleARN     string
+	RelatedLogRoutes    []resourcelogs.RelatedLogRoute
 }
 
 func newOverviewDeploymentResourceLookupProvider(
@@ -903,6 +904,7 @@ func loadOverviewDeploymentResourceRequest(
 		TargetAccountID:     detail.AWSAccountID,
 		Region:              detail.Region,
 		ObserverRoleARN:     observerRoleARN,
+		RelatedLogRoutes:    relatedResourceLogRoutes(detail, resourceType, resourceName),
 	}, nil
 }
 
@@ -930,7 +932,74 @@ func newOverviewDeploymentResourceLogsProvider(
 			InstanceID:          resourcelogs.InstanceIDFromContext(ctx),
 			ClusterARN:          resourcelogs.ClusterARNFromContext(ctx),
 			Limit:               limit,
+			RelatedLogRoutes:    request.RelatedLogRoutes,
 		})
+	}
+}
+
+func relatedResourceLogRoutes(detail catalog.DeploymentOverviewDetail, resourceType, resourceName string) []resourcelogs.RelatedLogRoute {
+	resourceType = strings.TrimSpace(resourceType)
+	switch resourceType {
+	case "trafficShiftPlan", "productionListenerRule", "activeTargetGroup", "candidateTargetGroup":
+		return relatedLogRoutesForResources(detail, []string{"candidateAutoScalingGroup", "userDataBootstrapSource"})
+	case "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
+		return relatedLogRoutesForResources(detail, []string{"codeDeployDeploymentGroup", "codeDeployApplication", "ecsService"})
+	case "userDataBootstrapSource":
+		return relatedLogRoutesForResources(detail, []string{"candidateAutoScalingGroup", "serviceAutoScalingGroup"})
+	default:
+		return nil
+	}
+}
+
+func relatedLogRoutesForResources(detail catalog.DeploymentOverviewDetail, resourceTypes []string) []resourcelogs.RelatedLogRoute {
+	resources := rolloutExecutionResources(detail)
+	routes := make([]resourcelogs.RelatedLogRoute, 0, len(resourceTypes))
+	seen := map[string]bool{}
+	for _, desiredType := range resourceTypes {
+		for _, resource := range resources {
+			if resource.Resource != desiredType || strings.TrimSpace(resource.Name) == "" {
+				continue
+			}
+			key := resource.Resource + "\x00" + resource.Name
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			routes = append(routes, relatedResourceLogRoute(detail.Name, resource))
+			break
+		}
+	}
+	return routes
+}
+
+func relatedResourceLogRoute(deploymentName string, resource domain.RolloutExecutionDetail) resourcelogs.RelatedLogRoute {
+	query := url.Values{}
+	query.Set("resourceType", strings.TrimSpace(resource.Resource))
+	query.Set("resourceName", strings.TrimSpace(resource.Name))
+	return resourcelogs.RelatedLogRoute{
+		Label:        relatedLogRouteLabel(resource.Resource),
+		Route:        "/v1/overview/deployments/" + url.PathEscape(strings.TrimSpace(deploymentName)) + "/resource-logs?" + query.Encode(),
+		ResourceType: strings.TrimSpace(resource.Resource),
+		ResourceName: strings.TrimSpace(resource.Name),
+	}
+}
+
+func relatedLogRouteLabel(resourceType string) string {
+	switch resourceType {
+	case "candidateAutoScalingGroup":
+		return "Candidate Auto Scaling Group recent logs"
+	case "serviceAutoScalingGroup":
+		return "Service Auto Scaling Group recent logs"
+	case "userDataBootstrapSource":
+		return "Userdata backing Auto Scaling Group recent logs"
+	case "codeDeployDeploymentGroup":
+		return "CodeDeploy deployment group recent logs"
+	case "codeDeployApplication":
+		return "CodeDeploy application recent logs"
+	case "ecsService":
+		return "ECS service recent logs"
+	default:
+		return "Related resource recent logs"
 	}
 }
 

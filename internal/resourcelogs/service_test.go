@@ -1109,6 +1109,53 @@ func TestServiceRecent(t *testing.T) {
 		}
 	})
 
+	t.Run("no log source payload carries related log route handoffs", func(t *testing.T) {
+		service := NewService(Options{})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-prod",
+			ResourceType:     "trafficShiftPlan",
+			ResourceName:     "payments-api-prod-weighted-routing",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+			RelatedLogRoutes: []RelatedLogRoute{{
+				Label:        "Candidate Auto Scaling Group recent logs",
+				Route:        "/v1/overview/deployments/payments-api-prod/resource-logs?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup",
+				ResourceType: "candidateAutoScalingGroup",
+				ResourceName: "payments-api-prod-candidate",
+			}},
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		if len(result.RelatedLogRoutes) != 1 {
+			t.Fatalf("expected related log route handoff, got %+v", result.RelatedLogRoutes)
+		}
+		result.RelatedLogRoutes[0].Label = "mutated"
+
+		second, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-prod",
+			ResourceType:     "trafficShiftPlan",
+			ResourceName:     "payments-api-prod-weighted-routing",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+			RelatedLogRoutes: []RelatedLogRoute{{
+				Label:        "Candidate Auto Scaling Group recent logs",
+				Route:        "/v1/overview/deployments/payments-api-prod/resource-logs?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup",
+				ResourceType: "candidateAutoScalingGroup",
+				ResourceName: "payments-api-prod-candidate",
+			}},
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error on second call: %v", err)
+		}
+		if second.RelatedLogRoutes[0].Label != "Candidate Auto Scaling Group recent logs" {
+			t.Fatalf("expected cloned related log routes, got %+v", second.RelatedLogRoutes)
+		}
+	})
+
 	t.Run("weighted traffic-routing resources report no log source", func(t *testing.T) {
 		service := NewService(Options{
 			ListASGInstanceConsoles: func(ctx context.Context, req ASGRequest) ([]InstanceConsole, error) {

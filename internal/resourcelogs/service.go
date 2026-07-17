@@ -114,25 +114,38 @@ type Request struct {
 	InstanceID          string
 	ClusterARN          string
 	Limit               int
+	RelatedLogRoutes    []RelatedLogRoute
 }
 
 type Result struct {
-	DeploymentName      string        `json:"deploymentName"`
-	ResourceType        string        `json:"resourceType"`
-	ResourceName        string        `json:"resourceName"`
-	ResourceDescription string        `json:"resourceDescription,omitempty"`
-	BackingResourceType string        `json:"backingResourceType,omitempty"`
-	BackingResourceName string        `json:"backingResourceName,omitempty"`
-	ContainerName       string        `json:"containerName,omitempty"`
-	InstanceID          string        `json:"instanceId,omitempty"`
-	ClusterARN          string        `json:"clusterArn,omitempty"`
-	LookupContext       LookupContext `json:"lookupContext"`
-	Available           bool          `json:"available"`
-	Source              string        `json:"source"`
-	Entries             []Entry       `json:"entries"`
-	ResultScope         *ResultScope  `json:"resultScope,omitempty"`
-	UnavailableReason   string        `json:"unavailableReason"`
-	EmptyReason         string        `json:"emptyReason,omitempty"`
+	DeploymentName      string            `json:"deploymentName"`
+	ResourceType        string            `json:"resourceType"`
+	ResourceName        string            `json:"resourceName"`
+	ResourceDescription string            `json:"resourceDescription,omitempty"`
+	BackingResourceType string            `json:"backingResourceType,omitempty"`
+	BackingResourceName string            `json:"backingResourceName,omitempty"`
+	ContainerName       string            `json:"containerName,omitempty"`
+	InstanceID          string            `json:"instanceId,omitempty"`
+	ClusterARN          string            `json:"clusterArn,omitempty"`
+	LookupContext       LookupContext     `json:"lookupContext"`
+	Available           bool              `json:"available"`
+	Source              string            `json:"source"`
+	Entries             []Entry           `json:"entries"`
+	ResultScope         *ResultScope      `json:"resultScope,omitempty"`
+	RelatedLogRoutes    []RelatedLogRoute `json:"relatedLogRoutes,omitempty"`
+	UnavailableReason   string            `json:"unavailableReason"`
+	EmptyReason         string            `json:"emptyReason,omitempty"`
+}
+
+// RelatedLogRoute is an additive operator handoff for route-stable resources
+// that have no independent log stream. It points at sibling recent-log reads
+// derived from the same deployment detail instead of changing unavailable
+// semantics for the selected resource.
+type RelatedLogRoute struct {
+	Label        string `json:"label"`
+	Route        string `json:"route"`
+	ResourceType string `json:"resourceType"`
+	ResourceName string `json:"resourceName"`
 }
 
 // ResultScope is additive operator-facing metadata for bounded recent-log reads.
@@ -397,7 +410,7 @@ func unavailableReasonForError(err error) (string, bool) {
 }
 
 func (s Service) unavailableResult(req Request, reason string) Result {
-	return Result{
+	result := Result{
 		DeploymentName:      req.DeploymentName,
 		ResourceType:        req.ResourceType,
 		ResourceName:        req.ResourceName,
@@ -412,6 +425,19 @@ func (s Service) unavailableResult(req Request, reason string) Result {
 		ResultScope:         buildResultScope(req.Limit, s.effectiveLimit(req.Limit), 0, 0, nil, ScopeTruncationStatusNotApplicable),
 		UnavailableReason:   reason,
 	}
+	if reason == UnavailableReasonNoLogSource {
+		result.RelatedLogRoutes = cloneRelatedLogRoutes(req.RelatedLogRoutes)
+	}
+	return result
+}
+
+func cloneRelatedLogRoutes(routes []RelatedLogRoute) []RelatedLogRoute {
+	if len(routes) == 0 {
+		return nil
+	}
+	cloned := make([]RelatedLogRoute, len(routes))
+	copy(cloned, routes)
+	return cloned
 }
 
 func (s Service) availableResult(req Request, source string, entries []Entry, total int, emptyReason string) Result {

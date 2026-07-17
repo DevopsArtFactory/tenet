@@ -7393,6 +7393,75 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 	})
 
+	t.Run("preserves related log route handoffs in no-log-source JSON", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "payments-api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(_ context.Context, name, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
+				if name != "payments-api-prod" || resourceType != "trafficShiftPlan" || resourceName != "payments-api-prod-weighted-routing" {
+					t.Fatalf("unexpected resource log lookup: %s %s %s", name, resourceType, resourceName)
+				}
+				return resourcelogs.Result{
+					DeploymentName: "payments-api-prod",
+					ResourceType:   resourceType,
+					ResourceName:   resourceName,
+					LookupContext: resourcelogs.LookupContext{
+						Region:                 "ap-northeast-2",
+						ControlAccountID:       "123456789012",
+						TargetAccountID:        "123456789012",
+						ObserverRoleConfigured: true,
+					},
+					Available: false,
+					Entries:   []resourcelogs.Entry{},
+					ResultScope: &resourcelogs.ResultScope{
+						EffectiveLimit:     resourcelogs.DefaultMaxEntries,
+						Limit:              resourcelogs.DefaultMaxEntries,
+						ReturnedEntryCount: 0,
+						TruncationStatus:   resourcelogs.ScopeTruncationStatusNotApplicable,
+					},
+					RelatedLogRoutes: []resourcelogs.RelatedLogRoute{{
+						Label:        "Candidate Auto Scaling Group recent logs",
+						Route:        "/v1/overview/deployments/payments-api-prod/resource-logs?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup",
+						ResourceType: "candidateAutoScalingGroup",
+						ResourceName: "payments-api-prod-candidate",
+					}},
+					UnavailableReason: resourcelogs.UnavailableReasonNoLogSource,
+				}, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("decode raw no-log-source handoff payload: %v", err)
+		}
+		routes, ok := raw["relatedLogRoutes"].([]any)
+		if !ok || len(routes) != 1 {
+			t.Fatalf("expected one relatedLogRoutes entry, got %#v", raw["relatedLogRoutes"])
+		}
+		first, ok := routes[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected object relatedLogRoutes entry, got %#v", routes[0])
+		}
+		if first["label"] != "Candidate Auto Scaling Group recent logs" || first["resourceType"] != "candidateAutoScalingGroup" || first["resourceName"] != "payments-api-prod-candidate" || first["route"] != "/v1/overview/deployments/payments-api-prod/resource-logs?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup" {
+			t.Fatalf("unexpected relatedLogRoutes entry: %#v", first)
+		}
+		if raw["unavailableReason"] != resourcelogs.UnavailableReasonNoLogSource {
+			t.Fatalf("expected no_log_source reason to remain stable, got %#v", raw["unavailableReason"])
+		}
+	})
+
 	t.Run("enforces deployment read authorization and preserves unavailable payload when authorized", func(t *testing.T) {
 		const (
 			path                 = "/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service"

@@ -1829,9 +1829,34 @@ func TestAPIOptionsOverviewDeploymentResourceLogsUsesWeightedTargetGroupFallback
 		if provider.lastRequest.ResourceType != resource.resourceType || provider.lastRequest.ResourceName != resource.resourceName {
 			t.Fatalf("unexpected resource log request for %s/%s: %+v", resource.resourceType, resource.resourceName, provider.lastRequest)
 		}
+		if resource.resourceType == "trafficShiftPlan" {
+			wantRoutes := []resourcelogs.RelatedLogRoute{{
+				Label:        "Candidate Auto Scaling Group recent logs",
+				Route:        "/v1/overview/deployments/api-prod/resource-logs?resourceName=api-prod-candidate&resourceType=candidateAutoScalingGroup",
+				ResourceType: "candidateAutoScalingGroup",
+				ResourceName: "api-prod-candidate",
+			}, {
+				Label:        "Userdata backing Auto Scaling Group recent logs",
+				Route:        "/v1/overview/deployments/api-prod/resource-logs?resourceName=file%3Auserdata%2Fapi-prod.sh&resourceType=userDataBootstrapSource",
+				ResourceType: "userDataBootstrapSource",
+				ResourceName: "file:userdata/api-prod.sh",
+			}}
+			if !reflect.DeepEqual(provider.lastRequest.RelatedLogRoutes, wantRoutes) {
+				t.Fatalf("expected weighted traffic route related log handoffs, got %+v", provider.lastRequest.RelatedLogRoutes)
+			}
+		}
 		if resource.resourceType == "userDataBootstrapSource" {
 			if provider.lastRequest.BackingResourceType != "candidateAutoScalingGroup" || provider.lastRequest.BackingResourceName != "api-prod-candidate" {
 				t.Fatalf("expected bootstrap-source fallback to target candidate ASG, got %+v", provider.lastRequest)
+			}
+			wantRoutes := []resourcelogs.RelatedLogRoute{{
+				Label:        "Candidate Auto Scaling Group recent logs",
+				Route:        "/v1/overview/deployments/api-prod/resource-logs?resourceName=api-prod-candidate&resourceType=candidateAutoScalingGroup",
+				ResourceType: "candidateAutoScalingGroup",
+				ResourceName: "api-prod-candidate",
+			}}
+			if !reflect.DeepEqual(provider.lastRequest.RelatedLogRoutes, wantRoutes) {
+				t.Fatalf("expected bootstrap-source related log handoff, got %+v", provider.lastRequest.RelatedLogRoutes)
 			}
 		}
 	}
