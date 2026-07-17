@@ -192,21 +192,27 @@ type RuntimeEventCue struct {
 // DeploymentEventsResultScope describes the bounded runtime-event window returned
 // by GET /v1/overview/deployments/{deploymentName}/events without promising an
 // expensive provider-wide total count.
+type DeploymentEventsResourceFilter struct {
+	ResourceType string `json:"resourceType"`
+	ResourceName string `json:"resourceName"`
+}
+
 type DeploymentEventsResultScope struct {
-	RequestedLimit       *int   `json:"requestedLimit,omitempty"`
-	SourceFilter         string `json:"sourceFilter,omitempty"`
-	EffectiveLimit       int    `json:"effectiveLimit"`
-	ReturnedEventCount   int    `json:"returnedEventCount"`
-	ReturnedCount        int    `json:"returnedCount"`
-	TotalEventCount      int    `json:"totalEventCount"`
-	RetentionLimit       int    `json:"retentionLimit"`
-	RetainedEventCount   int    `json:"retainedEventCount"`
-	RetentionStatus      string `json:"retentionStatus"`
-	Limited              bool   `json:"limited"`
-	NewestEventTimestamp string `json:"newestEventTimestamp,omitempty"`
-	OldestEventTimestamp string `json:"oldestEventTimestamp,omitempty"`
-	TruncationStatus     string `json:"truncationStatus"`
-	Truncated            bool   `json:"truncated"`
+	RequestedLimit       *int                            `json:"requestedLimit,omitempty"`
+	SourceFilter         string                          `json:"sourceFilter,omitempty"`
+	ResourceFilter       *DeploymentEventsResourceFilter `json:"resourceFilter,omitempty"`
+	EffectiveLimit       int                             `json:"effectiveLimit"`
+	ReturnedEventCount   int                             `json:"returnedEventCount"`
+	ReturnedCount        int                             `json:"returnedCount"`
+	TotalEventCount      int                             `json:"totalEventCount"`
+	RetentionLimit       int                             `json:"retentionLimit"`
+	RetainedEventCount   int                             `json:"retainedEventCount"`
+	RetentionStatus      string                          `json:"retentionStatus"`
+	Limited              bool                            `json:"limited"`
+	NewestEventTimestamp string                          `json:"newestEventTimestamp,omitempty"`
+	OldestEventTimestamp string                          `json:"oldestEventTimestamp,omitempty"`
+	TruncationStatus     string                          `json:"truncationStatus"`
+	Truncated            bool                            `json:"truncated"`
 }
 
 // ApplicationOverviewDetail makes the application page contract explicit while preserving deployment detail semantics.
