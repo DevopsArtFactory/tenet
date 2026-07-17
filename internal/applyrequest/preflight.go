@@ -227,7 +227,7 @@ func (s Service) enrichOperationPermissionChecks(ctx context.Context, record Rec
 		Checks:         checks,
 	})
 	if err != nil {
-		enriched = unavailablePermissionChecks(checks, err)
+		enriched = unavailablePermissionChecks(checks)
 	}
 	return applyEnrichedCapabilityChecks(operations, positions, enriched)
 }
@@ -436,11 +436,8 @@ func flattenOperationCapabilityChecks(operations []OperationExecutionPreflight) 
 	return checks, positions
 }
 
-func unavailablePermissionChecks(checks []OperationExecutionCapabilityCheck, err error) []OperationExecutionCapabilityCheck {
+func unavailablePermissionChecks(checks []OperationExecutionCapabilityCheck) []OperationExecutionCapabilityCheck {
 	reason := "aws_unavailable"
-	if err != nil && strings.TrimSpace(err.Error()) != "" {
-		reason = "aws_unavailable"
-	}
 	out := make([]OperationExecutionCapabilityCheck, len(checks))
 	copy(out, checks)
 	for i := range out {
