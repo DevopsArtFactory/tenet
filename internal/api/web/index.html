@@ -4160,7 +4160,8 @@
         if (!registered?.section) return;
         renderResourceTroubleshootingSummary(registered.section, registered.detail, registered.resource);
       };
-      const resourceTroubleshootingState = (state, readyLabel) => {
+      const resourceTroubleshootingState = (state, readyLabel, supported = true) => {
+        if (!supported) return 'Unsupported for this resource type';
         switch (state?.status) {
           case 'loading':
             return 'Loading';
@@ -4172,14 +4173,15 @@
             return 'Not loaded yet';
         }
       };
-      const resourceTroubleshootingFreshnessPart = (label, state) => {
+      const resourceTroubleshootingFreshnessPart = (label, state, supported = true) => {
+        if (!supported) return `${label} unsupported for this resource type`;
         if (state?.status !== 'ready') return `${label} not refreshed yet`;
         const fetchedAt = resourcePanelFetchedAtText(state.result);
         return fetchedAt ? `${label} refreshed ${fetchedAt}` : `${label} not refreshed yet`;
       };
       const resourceTroubleshootingFreshness = (states) => [
-        resourceTroubleshootingFreshnessPart('Recent logs', states.logsState),
-        resourceTroubleshootingFreshnessPart('Live inspection', states.inspectionState),
+        resourceTroubleshootingFreshnessPart('Recent logs', states.logsState, states.supportsLogs),
+        resourceTroubleshootingFreshnessPart('Live inspection', states.inspectionState, states.supportsInspection),
       ].join(' · ');
       const resourceTroubleshootingReasonLabel = (reason, fallback = 'unavailable') => {
         switch (reason) {
@@ -4218,17 +4220,28 @@
         return `Available${source !== '—' ? ` · ${source}` : ''}`;
       };
       const resourceTroubleshootingPanelStates = (deploymentName, resource) => {
+        const supportsLogs = resourceSupportsRecentLogs(resource);
+        const supportsInspection = resourceSupportsLiveInspection(resource);
         const logsLimit = selectedResourceLogsLimit(deploymentName, resource);
         const inspectionLimit = supportsBoundedResourceInspection(resource) ? selectedResourceInspectionLimit(deploymentName, resource) : 0;
-        const logsState = resourceLogStateByKey.get(resourceLogRequestCacheKey(deploymentName, resource, logsLimit));
-        const inspectionState = resourceInspectionStateByKey.get(resourceInspectionRequestCacheKey(deploymentName, resource, inspectionLimit));
-        return { logsState, inspectionState };
+        const logsState = supportsLogs ? resourceLogStateByKey.get(resourceLogRequestCacheKey(deploymentName, resource, logsLimit)) : null;
+        const inspectionState = supportsInspection ? resourceInspectionStateByKey.get(resourceInspectionRequestCacheKey(deploymentName, resource, inspectionLimit)) : null;
+        return { logsState, inspectionState, supportsLogs, supportsInspection };
       };
       const resourceTroubleshootingUnavailableReasons = (states) => [
         states.logsState?.status === 'ready' && states.logsState.result?.available === false ? states.logsState.result?.unavailableReason : '',
         states.inspectionState?.status === 'ready' && states.inspectionState.result?.available === false ? states.inspectionState.result?.unavailableReason : '',
       ].filter(Boolean);
       const resourceTroubleshootingNextCheck = (states) => {
+        if (!states.supportsLogs && !states.supportsInspection) {
+          return 'Focused evidence panels are not supported for this resource type yet; use the current resource read, rollout context, status conditions, and related runtime events before escalating.';
+        }
+        if (!states.supportsLogs) {
+          return 'Recent logs are not supported for this resource type yet; use Live inspection plus the current resource read and rollout context for the next troubleshooting step.';
+        }
+        if (!states.supportsInspection) {
+          return 'Live inspection is not supported for this resource type yet; use Recent logs plus the current resource read and rollout context for the next troubleshooting step.';
+        }
         const reasons = resourceTroubleshootingUnavailableReasons(states);
         if (reasons.includes('cross_account_not_configured')) {
           return 'Cross-account observer role wiring is missing for this resource evidence lookup; configure the observer role, then refresh Recent logs and Live inspection.';
@@ -4262,8 +4275,8 @@
           ...(selectedLookupScope ? [['Selected lookup scope', selectedLookupScope]] : []),
           ['Deployment state', `${detail?.sync?.state || 'Unknown'} · ${healthLabel(detail?.health)} · ${metricValue(detail?.rollout?.phase)}`],
           ['Current step', metricValue(detail?.rollout?.currentStep || detail?.runtimeSummary?.currentStep)],
-          ['Recent logs', resourceTroubleshootingState(states.logsState, resourceTroubleshootingLogsLabel)],
-          ['Live inspection', resourceTroubleshootingState(states.inspectionState, resourceTroubleshootingInspectionLabel)],
+          ['Recent logs', resourceTroubleshootingState(states.logsState, resourceTroubleshootingLogsLabel, states.supportsLogs)],
+          ['Live inspection', resourceTroubleshootingState(states.inspectionState, resourceTroubleshootingInspectionLabel, states.supportsInspection)],
           ['Evidence freshness', resourceTroubleshootingFreshness(states)],
           ['Next check', resourceTroubleshootingNextCheck(states)],
         ];
@@ -5283,13 +5296,21 @@
         pushResourceSection(relatedEventsSection, 'resource-related-runtime-events', 'Related runtime events');
         renderResourceRelatedEventsSection(relatedEventsSection, deploymentName, resource).catch(() => {});
 
-        const inspectionSection = createDetailSection('Live inspection');
-        pushResourceSection(inspectionSection, 'resource-live-inspection', 'Live inspection');
-        renderResourceInspectionSection(inspectionSection, detail, resource).catch(() => {});
+        const supportsInspection = resourceSupportsLiveInspection(resource);
+        const supportsLogs = resourceSupportsRecentLogs(resource);
+        let inspectionSection = null;
+        if (supportsInspection) {
+          inspectionSection = createDetailSection('Live inspection');
+          pushResourceSection(inspectionSection, 'resource-live-inspection', 'Live inspection');
+          renderResourceInspectionSection(inspectionSection, detail, resource).catch(() => {});
+        }
 
-        const logsSection = createDetailSection('Recent logs');
-        pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');
-        renderResourceLogsSection(logsSection, detail.name || currentPageState.deployment || '', resource, { detail }).catch(() => {});
+        let logsSection = null;
+        if (supportsLogs) {
+          logsSection = createDetailSection('Recent logs');
+          pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');
+          renderResourceLogsSection(logsSection, detail.name || currentPageState.deployment || '', resource, { detail }).catch(() => {});
+        }
         renderResourceTroubleshootingSummary(troubleshootingSection, detail, resource);
 
         const quickNav = createResourceQuickNav(detail, resource, resourceSectionLinks);
@@ -5302,7 +5323,7 @@
         } else if (refreshState?.message) {
           page.append(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.message));
         }
-        page.append(quickNav, troubleshootingSection, shell, historySection, executionSection, conditionsSection, relatedEventsSection, inspectionSection, logsSection);
+        page.append(...[quickNav, troubleshootingSection, shell, historySection, executionSection, conditionsSection, relatedEventsSection, inspectionSection, logsSection].filter(Boolean));
         root.replaceChildren(page);
         activeResourceQuickNavSync = typeof quickNav.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
         syncActiveResourceQuickNav();

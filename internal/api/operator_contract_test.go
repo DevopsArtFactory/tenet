@@ -2737,7 +2737,8 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"resource-detail Troubleshooting summary",
 		"derived from the selected resource identity plus the latest completed Live inspection state and the latest completed Recent logs panel state",
-		"covers loading, empty, unavailable, and fetch-error states without hiding the selected resource",
+		"covers loading, empty, unavailable, fetch-error, and unsupported focused-evidence states without hiding the selected resource",
+		"Unsupported for this resource type",
 		"keeps `Current resource read: GET /v1/overview/deployments/{deploymentName}` visible",
 		"keeps the selected resource's `Linked-resource source` cue visible beside it",
 		"`minimumHealthyPercent`",
