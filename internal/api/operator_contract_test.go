@@ -501,6 +501,7 @@ func TestOperatorTroubleshootingRunbookDocsContract(t *testing.T) {
 		"Capture total/visible linked-resource counts, per-group counts, the top-level `Resource filter \"...\" hides all ... linked resources` recovery cue, its unchanged `GET /v1/overview/applications/{deploymentName}` backing read, and any `Related events · N` resource cues/source mix before treating a filtered page as missing rollout inventory or missing controller-history handoffs.",
 		"| Resource detail | `/?page=resource&deployment={deploymentName}&resourceType={type}&resourceId={stableResourceId}` | `GET /v1/overview/deployments/{deploymentName}`",
 		"| Recent logs | `#resource-recent-logs` | `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}`",
+		"the `Provider lookup context` card, the `Lookup path · ...` summary, `lookupContext.region`, `lookupContext.targetAccountId`, `lookupContext.crossAccount`, `lookupContext.observerRoleConfigured`, selectors, and `resultScope`",
 		"| Live inspection | `#resource-live-inspection` | `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}`",
 		"the `Provider lookup context` card, the `Inspection path · ...` summary, `lookupContext` fields, accepted selectors such as `clusterArn` or `instanceId`, and `resultScope` when bounded",
 		"| Audit | `/?page=audit[&deployment={deploymentName}][&action={action}][&limit={n}]` | `GET /v1/audit-logs`",
