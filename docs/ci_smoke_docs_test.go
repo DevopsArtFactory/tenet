@@ -370,6 +370,17 @@ func TestOperatorTroubleshootingRunbookDocumentsDailyTriageFlow(t *testing.T) {
 		"GET /v1/controller/refresh/status",
 		"/?page=application&deployment={deploymentName}",
 		"/?page=resource&deployment={deploymentName}&resourceType={type}&resourceId={stableResourceId}",
+		"## End-to-End Resource Troubleshooting Workflow",
+		"Recommended next check",
+		"Related events · N",
+		"Current resource read",
+		"Evidence hints",
+		"Provider lookup context",
+		"resultScope",
+		"emptyReason",
+		"unavailableReason",
+		"Distinguish browser read freshness,",
+		"request-correlation IDs in the handoff",
 		"Request-Id",
 		"Tenet request ID",
 		"lookupContext",
@@ -387,6 +398,7 @@ func TestOperatorTroubleshootingRunbookDocumentsDailyTriageFlow(t *testing.T) {
 	orderedFragments := []string{
 		"## Identity and Refresh Preflight",
 		"## Surface Matrix",
+		"## End-to-End Resource Troubleshooting Workflow",
 		"## Unavailable-State Decoder",
 		"## Verification Commands",
 	}
@@ -658,6 +670,8 @@ func TestOperatorTroubleshootingCallsOutRelatedRuntimeEvents(t *testing.T) {
 		"application detail lists the linked resource, resource detail narrows retained controller history to that resource",
 		"Source-filtered empty states also include a one-click `Show all related event sources` recovery action",
 		"empty related-event results mean no retained matching rollout/drift/resource evidence in the selected source/window rather than missing Recent logs, Live inspection, or immutable audit data",
+		"release-guarded operator path for application detail -> resource detail ->",
+		"Related runtime events -> Recent logs / Live inspection -> request-correlation",
 	} {
 		if !strings.Contains(overviewGuideText, fragment) {
 			t.Fatalf("expected overview dashboard guide to include resource-events journey fragment %q", fragment)
@@ -698,6 +712,7 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 		"Resource drill-down Related runtime events, Recent logs, and Live inspection panels summarize controller history, lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract.",
 		"Capture the HTTP `Request-Id` response header with the `Provider lookup context`",
 		"card when escalating a failed or unavailable Recent logs or Live inspection",
+		"end-to-end application detail -> resource detail -> Related runtime events -> Recent logs / Live inspection -> request-correlation handoff workflow",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README documentation map to include %q", fragment)
@@ -1463,7 +1478,8 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{
-		"`Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search",
+		"`Application JSON`, `Copy read route`, and render the server-authored `Recommended next check` hint when `troubleshootingRecommendation` is present",
+		"The page also includes a lightweight `resourceFilter=` search",
 		"with visible/total impact, a compact `Linked resource inventory` summary with per-group counts, and section-specific empty guidance alongside the inline",
 		"`Clear resource filter`; when the filter hides every linked resource, the page adds a top-level recovery cue that names the unchanged `GET /v1/overview/applications/{deploymentName}` backing read before the per-section empty states.",
 		"Their linked-resource summary also includes `Linked-resource source`, distinguishing controller-authored `rollout.execution[]` rows from canonical fallback rollout inventory when that array is missing or empty, plus compact resource-row `Evidence cues`:",
@@ -1526,6 +1542,59 @@ func TestOverviewDashboardRuntimeEventCueDocumentsDeterministicTieBreak(t *testi
 	} {
 		if !strings.Contains(overviewText, fragment) {
 			t.Fatalf("expected overview dashboard docs to include runtimeEventCue deterministic contract %q", fragment)
+		}
+	}
+}
+
+func TestApplicationTroubleshootingRecommendationDocsStayReadOnly(t *testing.T) {
+	readmeText := readTextFile(t, "../README.md")
+	statusAPIText := readTextFile(t, "architecture/tenet-v1-deployment-status-api.md")
+	overviewText := readTextFile(t, "features/overview-dashboard.md")
+	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
+
+	for _, fragment := range []string{
+		"Application overview and application detail rows may also carry additive `troubleshootingRecommendation` hints",
+		"quiet applications omit the object",
+		"operator handoffs to existing Tenet reads rather than live cloud or log probes",
+		"preserves safe backend-provided query/hash targets such as drift filters, audit actions, plan/apply IDs, and row/section anchors",
+		"conservative priority is managed drift first, then unhealthy/error status, then unavailable live-observation evidence, then retained runtime-event context",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README to preserve application troubleshooting recommendation guidance %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"`troubleshootingRecommendation` object when existing joined status/read-model evidence already points at a conservative next investigation hop",
+		"current reasons are `managed_drift`, `unhealthy`, `live_observation_unavailable`, and `recent_runtime_event`",
+		"chooses a single conservative hint in this order: managed drift, unhealthy/error status, unavailable live-observation evidence, then retained runtime-event context",
+		"it does not perform live AWS or log reads",
+	} {
+		if !strings.Contains(statusAPIText, fragment) {
+			t.Fatalf("expected deployment status API docs to preserve recommendation contract %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"Application rows may also include an additive `troubleshootingRecommendation` object",
+		"Recommendations are read-only hints derived from managed drift, unhealthy/error status, unavailable runtime observations, or retained runtime events",
+		"triage order conservative: managed drift, then unhealthy/error status, then unavailable live-observation evidence, then retained runtime-event context",
+		"preserves backend-provided embedded-shell query/hash targets such as drift filters, audit actions, plan/apply IDs, and row/section anchors",
+		"They do not trigger live AWS/log reads while building the overview",
+	} {
+		if !strings.Contains(overviewText, fragment) {
+			t.Fatalf("expected overview dashboard docs to preserve recommendation read-only contract %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"Application overview/detail read models may include additive `troubleshootingRecommendation` hints",
+		"Operators should treat those hints as read-only route handoffs, not live AWS/log probes",
+		"keep existing `_self` application/resource/workspace navigation separate from JSON/read-route handoffs",
+		"the embedded UI preserves safe same-shell query/hash targets from those handoffs",
+	} {
+		if !strings.Contains(operatorContractsText, fragment) {
+			t.Fatalf("expected operator contracts docs to preserve recommendation handoff guidance %q", fragment)
 		}
 	}
 }

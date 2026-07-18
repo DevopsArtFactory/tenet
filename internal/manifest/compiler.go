@@ -41,9 +41,10 @@ func Compile(input CatalogSpec) (Catalog, error) {
 			return Catalog{}, fmt.Errorf("validate account %q: %w", account.Name, err)
 		}
 		compiledAccount := domain.Account{
-			Name:           account.Name,
-			AWSAccountID:   account.AWSAccountID,
-			AllowedRegions: append([]string(nil), account.AllowedRegions...),
+			Name:            account.Name,
+			AWSAccountID:    account.AWSAccountID,
+			ObserverRoleARN: strings.TrimSpace(account.ObserverRoleARN),
+			AllowedRegions:  append([]string(nil), account.AllowedRegions...),
 		}
 		if _, exists := accountIndex[account.Name]; exists {
 			return Catalog{}, fmt.Errorf("duplicate account %q", account.Name)

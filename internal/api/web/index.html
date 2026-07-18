@@ -4154,6 +4154,88 @@
         section.append(head, metrics);
         return section;
       };
+      const applicationRecommendationRouteResource = (detail, recommendation) => {
+        const resourceType = String(recommendation?.resourceType || '').trim();
+        const resourceName = String(recommendation?.resourceName || '').trim();
+        if (!resourceType || !resourceName) return null;
+        return groupResourceSections(detail)
+          .flatMap((group) => group.resources || [])
+          .find((resource) => resource.type === resourceType && resource.name === resourceName) || null;
+      };
+      const applicationRecommendationEmbeddedHandoffURL = (route, fallbackPage, fallbackExtras = {}) => {
+        const rawRoute = String(route || '').trim();
+        const [routeWithoutHash, hashFragment = ''] = rawRoute.split('#');
+        const params = routeWithoutHash.includes('?')
+          ? new URLSearchParams(routeWithoutHash.slice(routeWithoutHash.indexOf('?') + 1))
+          : new URLSearchParams();
+        const page = params.get('page') || fallbackPage;
+        if (!['application', 'drift', 'plan', 'audit'].includes(page)) return '';
+        const extras = { ...fallbackExtras };
+        params.forEach((value, key) => {
+          if (key !== 'page') extras[key] = value;
+        });
+        const baseURL = buildPageURL(page, extras);
+        const sectionID = hashFragment.trim().replace(/^#/, '');
+        return sectionID ? `${baseURL}#${sectionID}` : baseURL;
+      };
+      const applicationRecommendationHandoffURL = (detail, recommendation, handoff) => {
+        const deploymentName = detail?.name || currentPageState.deployment || '';
+        const route = String(handoff?.route || '').trim();
+        const label = String(handoff?.label || '').toLowerCase();
+        if (!deploymentName && !route) return '';
+        if (route.includes('/events') || label.includes('runtime event')) {
+          return buildPageSectionURL('application', 'application-runtime-events', { deployment: deploymentName });
+        }
+        if (route.includes('resource-inspection') || label.includes('live inspection')) {
+          const resource = applicationRecommendationRouteResource(detail, recommendation);
+          if (!resource) return buildPageURL('application', { deployment: deploymentName });
+          return `${buildPageURL('resource', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id })}#resource-live-inspection`;
+        }
+        if (route.includes('resource-logs') || label.includes('recent logs')) {
+          const resource = applicationRecommendationRouteResource(detail, recommendation);
+          if (!resource) return buildPageURL('application', { deployment: deploymentName });
+          return `${buildPageURL('resource', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id })}#resource-recent-logs`;
+        }
+        const embeddedURL = applicationRecommendationEmbeddedHandoffURL(route, 'application', { deployment: deploymentName });
+        if (embeddedURL) return embeddedURL;
+        return buildPageURL('application', { deployment: deploymentName });
+      };
+      const createApplicationTroubleshootingRecommendation = (detail) => {
+        const recommendation = detail?.troubleshootingRecommendation;
+        const section = createElement('section', 'deployment-group application-next-check');
+        const head = createElement('div', 'deployment-group-head');
+        const titleWrap = createElement('div');
+        titleWrap.append(
+          createElement('h3', 'deployment-group-title', 'Recommended next check'),
+          createElement('div', 'deployment-group-meta', recommendation ? 'Server-authored troubleshooting hint from existing runtime evidence.' : 'No urgent next check is currently recommended for this application.'),
+        );
+        const reason = String(recommendation?.reason || '').trim();
+        if (reason) {
+          head.append(titleWrap, createElement('span', 'pill target', reason));
+        } else {
+          head.append(titleWrap, createElement('span', 'pill synced', 'Quiet'));
+        }
+        section.append(head);
+        const metrics = createElement('div', 'metrics');
+        if (!recommendation) {
+          metrics.append(createMetric('Next check', 'No urgent next check is currently recommended. Continue with the linked resources or runtime events only if the operator needs more evidence.', 'summary'));
+          section.append(metrics);
+          return section;
+        }
+        metrics.append(createMetric('Summary', recommendation.summary || 'Review the application detail and runtime evidence before taking action.', 'summary'));
+        if (reason) metrics.append(createMetric('Reason', reason));
+        const resourceFocus = [recommendation.resourceType, recommendation.resourceName].filter(Boolean).join(' · ');
+        if (resourceFocus) metrics.append(createMetric('Focus resource', resourceFocus));
+        section.append(metrics);
+        const handoffs = createElement('div', 'row-links row-links-shell');
+        (recommendation.handoffs || []).forEach((handoff) => {
+          const label = String(handoff?.label || '').trim();
+          const href = applicationRecommendationHandoffURL(detail, recommendation, handoff);
+          if (label && href) handoffs.append(createNavLink(href, label, '_self'));
+        });
+        if (handoffs.children.length) section.append(handoffs);
+        return section;
+      };
       const createApplicationDetailActions = (applicationState = null) => [
         (applicationState?.detail?.name || currentPageState.deployment)
           ? createNavLink(`/v1/overview/applications/${encodeURIComponent(applicationState?.detail?.name || currentPageState.deployment)}`, 'Application JSON')
@@ -4843,7 +4925,7 @@
         }
         const applicationStatusSection = createApplicationStatusSummary(detail, allResourceGroups);
         applicationStatusSection.id = applicationStatusSectionID;
-        page.append(applicationStatusSection);
+        page.append(applicationStatusSection, createApplicationTroubleshootingRecommendation(detail));
         pushApplicationSectionLink(applicationStatusSectionID, 'Current application status');
         const workspaceLinks = createElement('div', 'row-links row-links-shell');
         if (deploymentName) {
@@ -5924,7 +6006,11 @@
       };
       const createOperatorReadFailureRequestIDMeta = (error) => {
         const requestId = String(error?.requestId || '').trim();
-        return requestId ? createElement('div', 'detail-condition-meta', `Tenet request ID · ${requestId}`) : null;
+        const fetchedAtText = resourcePanelFetchedAtText(error);
+        const parts = [];
+        if (requestId) parts.push(`Tenet request ID · ${requestId}`);
+        if (fetchedAtText) parts.push(`Last refresh attempt · ${fetchedAtText}`);
+        return parts.length ? createElement('div', 'detail-condition-meta resource-panel-freshness-cue', parts.join(' · ')) : null;
       };
       const createOperatorReadFailureAttemptedMeta = (error) => {
         const attemptedAt = resourcePanelFetchedAtText(error);
@@ -5934,13 +6020,13 @@
         const heading = operatorReadFailureHeading(error);
         if (!heading) return false;
         const requestIdMeta = createOperatorReadFailureRequestIDMeta(error);
-        const attemptedMeta = createOperatorReadFailureAttemptedMeta(error);
+        const freshnessCue = createResourcePanelFreshnessCue(title, error, 'last refresh attempt');
         container.replaceChildren(
           createDetailSectionHeader(title, actions),
+          ...(freshnessCue ? [freshnessCue] : []),
           createElement('div', 'detail-state error', heading),
           createElement('div', 'detail-condition-meta', operatorReadFailureMessage(route, error)),
           ...(requestIdMeta ? [requestIdMeta] : []),
-          ...(attemptedMeta ? [attemptedMeta] : []),
           createOperatorReadFailureActions(error),
         );
         return true;
@@ -6088,6 +6174,11 @@
         error.tenetFetchedAt = new Date();
         return error;
       };
+      const createResourcePanelFreshnessCue = (label, result, action = 'last refreshed') => {
+        const fetchedAtText = resourcePanelFetchedAtText(result);
+        if (!fetchedAtText) return null;
+        return createElement('p', 'detail-section-copy resource-panel-freshness-cue', `${label} ${action} · ${fetchedAtText}`);
+      };
       const resourcePanelRequestIDFields = (result) => {
         const fields = [];
         const requestId = String(result?.tenetRequestId || result?.requestId || '').trim();
@@ -6098,7 +6189,11 @@
       };
       const createResourcePanelRequestIDMeta = (error) => {
         const requestId = String(error?.requestId || '').trim();
-        return requestId ? createElement('div', 'detail-condition-meta', `Tenet request ID · ${requestId}`) : null;
+        const fetchedAtText = resourcePanelFetchedAtText(error);
+        const parts = [];
+        if (requestId) parts.push(`Tenet request ID · ${requestId}`);
+        if (fetchedAtText) parts.push(`Last refresh attempt · ${fetchedAtText}`);
+        return parts.length ? createElement('div', 'detail-condition-meta resource-panel-freshness-cue', parts.join(' · ')) : null;
       };
       const createResourcePanelAttemptedMeta = (error) => {
         const attemptedAt = resourcePanelFetchedAtText(error);
@@ -6284,7 +6379,8 @@
         const handoffSection = createResourceLogsBackingResourceHandoffSection(detail, result);
         const relatedLogRoutesHandoffSection = createRelatedLogRoutesHandoffSection(result);
         const supplementalSections = [handoffSection, relatedLogRoutesHandoffSection].filter(Boolean);
-        const beforeNodes = (metadata) => [capNote, ...lookupContextNodes, metadata, ...supplementalSections];
+        const freshnessCue = createResourcePanelFreshnessCue('Recent logs', result);
+        const beforeNodes = (metadata) => [freshnessCue, capNote, ...lookupContextNodes, metadata, ...supplementalSections].filter(Boolean);
         const scopeFields = resourceLogsResultScopeFields(result?.resultScope);
         const requestRouteFields = resourceLogsRequestRouteFields(deploymentName, resource, selectedLimit);
         if (!result?.available) {
@@ -6394,9 +6490,9 @@
             return result;
           })
           .catch((rawError) => {
-            const error = withResourcePanelAttemptedAt(rawError);
             const current = resourceLogStateByKey.get(logsKey);
-            resourceLogStateByKey.set(logsKey, { status: 'error', error });
+            const stampedError = withResourcePanelAttemptedAt(rawError);
+            resourceLogStateByKey.set(logsKey, { status: 'error', error: stampedError });
             (current?.sections || []).forEach((target) => {
               const container = target?.section || target;
               if (renderOperatorReadFailurePanel(
@@ -6404,19 +6500,18 @@
                 'Recent logs',
                 createResourceLogsActions(container, deploymentName, resource, false, target?.detail || detail),
                 resourceLogsReadRoute(deploymentName, resource, target?.limit ?? selectedLimit),
-                error,
+                stampedError,
               )) {
                 return;
               }
-              const requestIDMeta = createResourceLogsRequestIDMeta(error);
-              const attemptedMeta = createResourcePanelAttemptedMeta(error);
+              const requestIDMeta = createResourceLogsRequestIDMeta(stampedError);
               const targetLimit = target?.limit ?? selectedLimit;
               renderResourceLogsState(
                 container,
-                `Failed to load recent logs: ${error.message}`,
+                `Failed to load recent logs: ${stampedError.message}`,
                 'error',
                 [createResourceLogsLimitNote(targetLimit), createResourceLogsRequestContext(deploymentName, resource, targetLimit)],
-                [requestIDMeta, attemptedMeta].filter(Boolean),
+                requestIDMeta ? [requestIDMeta] : [],
                 createResourceLogsActions(container, deploymentName, resource, false, target?.detail || detail),
               );
             });
@@ -6879,6 +6974,7 @@
         );
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
+          createResourcePanelFreshnessCue('Live inspection', result),
           createElement('p', 'detail-section-copy', 'Live ECS service inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
@@ -7163,6 +7259,7 @@
           : null;
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
+          createResourcePanelFreshnessCue('Live inspection', result),
           createElement('p', 'detail-section-copy', 'Live Auto Scaling Group inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
@@ -7240,6 +7337,7 @@
         );
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
+          createResourcePanelFreshnessCue('Live inspection', result),
           createElement('p', 'detail-section-copy', 'Live bootstrap-source inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
@@ -7698,6 +7796,7 @@
         );
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
+          createResourcePanelFreshnessCue('Live inspection', result),
           createElement('p', 'detail-section-copy', 'Live ECS task inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
@@ -7728,6 +7827,7 @@
         const targetGroupSection = createTrafficRoutingTargetGroupSection(detail, trafficRouting);
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
+          createResourcePanelFreshnessCue('Live inspection', result),
           createElement('p', 'detail-section-copy', 'Read-only traffic-routing inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
@@ -7830,9 +7930,9 @@
             return result;
           })
           .catch((rawError) => {
-            const error = withResourcePanelAttemptedAt(rawError);
             const current = resourceInspectionStateByKey.get(inspectionKey);
-            resourceInspectionStateByKey.set(inspectionKey, { status: 'error', error });
+            const stampedError = withResourcePanelAttemptedAt(rawError);
+            resourceInspectionStateByKey.set(inspectionKey, { status: 'error', error: stampedError });
             (current?.sections || []).forEach((target) => {
               const container = target?.section || target;
               const targetDetail = target?.detail || detail;
@@ -7842,24 +7942,23 @@
                 'Live inspection',
                 createResourceInspectionActions(container, targetDetail, resource),
                 resourceInspectionReadRoute(deploymentName, resource, targetLimit),
-                error,
+                stampedError,
               )) {
                 return;
               }
-              const requestIDMeta = createResourceInspectionRequestIDMeta(error);
-              const attemptedMeta = createResourcePanelAttemptedMeta(error);
+              const requestIDMeta = createResourceInspectionRequestIDMeta(stampedError);
               renderResourceInspectionState(
                 container,
-                `Failed to load live inspection: ${error.message}`,
+                `Failed to load live inspection: ${stampedError.message}`,
                 'error',
                 [createResourceInspectionRequestContext(deploymentName, resource, targetLimit)],
-                [requestIDMeta, attemptedMeta].filter(Boolean),
+                requestIDMeta ? [requestIDMeta] : [],
                 createResourceInspectionActions(container, targetDetail, resource),
               );
             });
             refreshResourceTroubleshootingSummary(deploymentName, resource);
             scrollToCurrentHashTarget();
-            throw error;
+            throw stampedError;
           });
 
         resourceInspectionStateByKey.set(inspectionKey, { status: 'loading', promise, sections: [{ section, detail, limit: selectedLimit }] });

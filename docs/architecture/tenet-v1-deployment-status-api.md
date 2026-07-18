@@ -15,13 +15,46 @@ The payloads now expose the current persisted runtime snapshot shape rather than
 - `status.deployedArtifact` carries deployed binary/image metadata when known
 - `status.rollout` may include controller-derived rollout generations, phase/current-step/summary fields, ordered `steps[]` entries, per-step `status` (`completed`, `current`, `pending`), optional per-step `detail`, and additive `execution[]` resource details
 - `status.history[]` may include the bounded controller-authored runtime timeline with timestamp, source, summary, additive `changes[]` string labels, sync, health, desired/observed generation metadata, rollout phase, optional current step, and optional `controllerRefresh` evidence when a Redis GitHub desired-state refresh handoff triggered the reconcile
+- `status.runtimeObservations[]` and matching `status.history[].runtimeObservations[]` entries expose read-only live observation attempts separately from drift, using stable `resourceType`, `resourceName`, `source`, `available`, `unavailableReason`, and operator `summary` fields. For example, when AWS access is unavailable Tenet can report:
+
+  ```json
+  {
+    "resourceType": "candidateAutoScalingGroup",
+    "resourceName": "payments-api-prod-candidate",
+    "source": "resource_inspection",
+    "available": false,
+    "unavailableReason": "aws_unavailable",
+    "summary": "Live read-only observation for candidateAutoScalingGroup payments-api-prod-candidate is unavailable: aws_unavailable"
+  }
+  ```
+
+  These rows are availability evidence for the live read path and do not by themselves create `managedDrift[]` rows.
 
 The deployment overview read models now intentionally copy the latest artifact/condition context into their additive `runtimeSummary` contract as well:
 - `/v1/overview/applications`, `/v1/overview/accounts`, and `/v1/overview/deployments/{deploymentName}` may expose `runtimeSummary.deployedArtifact`
 - those same joined/detail routes may expose `runtimeSummary.conditions[]` as concise latest-runtime condition context copied from the newest runtime signal
-- bounded `history[]` entries on `/v1/overview/deployments/{deploymentName}` may also carry additive `deployedArtifact` / `conditions` fields when the controller recorded them for that point-in-time runtime signal
+- bounded `history[]` entries on `/v1/overview/deployments/{deploymentName}` may also carry additive `deployedArtifact` / `conditions` / `runtimeObservations[]` fields when the controller recorded them for that point-in-time runtime signal
+- `runtimeSummary.runtimeObservations[]` is derived history-first from the newest controller history entry and falls back to current `status.runtimeObservations[]` when retained history is absent or legacy history lacks the additive field
 - `/v1/overview/deployments/{deploymentName}` now also exposes additive `sourceFingerprint`, a deterministic hash derived from the same rollout/runtime/detail inputs Tenet uses for plan-preview optimistic matching
 - `/v1/overview/applications/{deploymentName}` preserves that same `sourceFingerprint` field because the application detail route currently keeps deployment-detail semantics aligned
+- `/v1/overview/applications` and `/v1/overview/applications/{deploymentName}` may expose an additive top-level `troubleshootingRecommendation` object when existing joined status/read-model evidence already points at a conservative next investigation hop. Quiet synced deployments omit the field. The object uses `summary`, `reason`, optional `resourceType` / `resourceName`, and existing read-route `handoffs`; current reasons are `managed_drift`, `unhealthy`, `live_observation_unavailable`, and `recent_runtime_event`. When multiple reasons are present, Tenet chooses a single conservative hint in this order: managed drift, unhealthy/error status, unavailable live-observation evidence, then retained runtime-event context. The recommendation is derived from persisted/joined managed drift, sync/health state, runtime observations, and retained runtime/resource events only; it does not perform live AWS or log reads.
+
+Example recommendation payload:
+
+```json
+{
+  "troubleshootingRecommendation": {
+    "summary": "1 managed drift row(s) need review; 1 high.",
+    "reason": "managed_drift",
+    "resourceType": "candidateAutoScalingGroup",
+    "resourceName": "payments-api-prod-candidate",
+    "handoffs": [
+      {"label": "Open runtime events", "route": "/v1/overview/deployments/payments-api-prod/events"},
+      {"label": "Open live inspection", "route": "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup"}
+    ]
+  }
+}
+```
 
 That additive copy keeps overview/detail consumers from having to diff the full `status` object or scrape the newest history entry just to show the latest runtime artifact/condition context in a compact UI row.
 

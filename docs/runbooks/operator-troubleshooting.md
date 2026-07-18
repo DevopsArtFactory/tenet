@@ -33,6 +33,42 @@ Deployment-scoped refresh audit handoff: `/?page=audit&deployment={deploymentNam
 | Plan/apply | `/?page=plan&deployment={deploymentName}[&planId={planId}][&applyId={applyId}]` | `POST /v1/plans/deployments/{deploymentName}`; `GET /v1/plans/{planId}`; `POST /v1/applies/plans/{planId}`; `GET /v1/applies/{applyId}`; `GET /v1/applies/{applyId}/preflight`; `GET /v1/applies/{applyId}/execution-preview`; `POST /v1/applies/{applyId}/transitions` | `Request-Id`, persisted actor, `planId`, `applyId`, source fingerprint/`ifMatch`, operation IDs, lifecycle status/progress, backend preflight readiness evidence, the `Apply preflight next action` summary, per-operation preflight `handoffs`, `Workspace JSON` / `Copy workspace read route` handoffs to the current deployment-detail read, and audit source routes. | Local writes persist immutable Tenet records but do not mutate AWS; stale reviewed plans return `409 Conflict`; guarded writes require identity, operator/admin role, and matching deployment or project/environment scope. Preflight next-action and row handoffs are read-only next-step routes (`deploymentDetailRoute`, `planApplyWorkspaceRoute`, `resourceInspectionRoute`, `resourceLogsRoute`), not AWS execution proof. | `curl -i -X POST "$TENET_API_BASE/v1/plans/deployments/{deploymentName}"` |
 | Apply collections | `/?page=applies` for the queued monitor; `/?page=applies&appliesView=active` for active handoffs; `/?page=applies&appliesView=stale` for stale active claims | `GET /v1/applies?status=active`; `GET /v1/applies?status=active&claim=stale`; `GET /v1/applies?status=queued`; `GET /v1/applies?status=running` | `Request-Id`, returned immutable records, deployment names, `status=queued` or `status=running`, queued/running operations, lifecycle fields, claim `lastHeartbeatAt` / `expiresAt` when present, execution-readiness summary/evidence when `executionReadiness` is present, and related audit `apply.requested` / `apply.transitioned` rows. | Default local/no-AWS runs may return `[]`; `TENET_AWS_ENABLE_APPLY=true` queues local-safe apply handoff metadata only, requires no live AWS credentials, and does not perform live AWS mutation. Backend `executionReadiness` evidence is readiness/preflight context, not live AWS execution success; missing readiness evidence should use the monitor's explicit no-backend-preflight fallback copy, and disabled/default apply records are expected local-safe evidence, not a product failure. The active API returns queued plus running records newest-first; the stale active API narrows to running records with stale or expired claim leases; the embedded monitor exposes queued/active/stale view controls, keeps all reads read-only, and links rows back to `/?page=plan&deployment={deploymentName}&applyId={applyId}` for review. | `curl -i "$TENET_API_BASE/v1/applies?status=active&claim=stale"` |
 
+## End-to-End Resource Troubleshooting Workflow
+
+Use this workflow when an application row looks unhealthy, drifted, or noisy but
+no single panel has enough evidence on its own:
+
+1. Start from the applications overview and open `/?page=application&deployment={deploymentName}`.
+   Capture the application row state, `Current application read`, linked-resource
+   inventory source, `Recommended next check`, and any `Related events · N` cue.
+2. Open the suggested resource with `/?page=resource&deployment={deploymentName}&resourceType={type}&resourceId={stableResourceId}`.
+   Capture `Current resource read`, `Linked-resource source`, `Evidence hints`,
+   and the selected resource identity before lazy panels resolve.
+3. Refresh `Related runtime events` first. Treat empty retained controller history
+   as separate from Recent logs, Live inspection, and immutable audit evidence;
+   when a source filter hides rows, use `Show all related event sources` before
+   escalating the event path.
+4. Refresh `Recent logs` and `Live inspection` only for resource types that expose
+   those focused evidence handoffs. Capture the exact request routes, `Request-Id`
+   / `Tenet request ID`, `Provider lookup context`, `resultScope`, selector echoes
+   (`clusterArn`, `containerName`, or `instanceId`), `emptyReason`, and
+   `unavailableReason` before changing the bookmark.
+5. Read the resource `Troubleshooting summary` as a synthesis of the current
+   resource selection plus the latest Related runtime events, Recent logs, and
+   Live inspection panel states. Its `Recommended next check` should route the
+   operator to the next safe panel or back to current resource/rollout context for
+   unsupported resource types.
+6. If the path still needs escalation, include the immutable audit/plan/apply
+   links that preserve deployment context, the provider lookup context, and the
+   captured request-correlation IDs. Distinguish browser read freshness,
+   controller runtime timestamps, provider evidence freshness, and
+   request-correlation IDs in the handoff.
+
+This sequence is intentionally local/no-AWS friendly: route-stable unavailable
+payloads and successful empty reads are operator evidence, not vague backend
+failures, and the smoke/docs guards should verify the workflow labels without
+requiring live provider credentials.
+
 Local-safe apply executor release guard: reviewers should verify the
 active collection (`GET /v1/applies?status=active`), stale active-claim collection
 (`GET /v1/applies?status=active&claim=stale`), queued exact subset

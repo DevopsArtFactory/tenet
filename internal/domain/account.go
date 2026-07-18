@@ -2,9 +2,10 @@ package domain
 
 // Account represents a target AWS account Tenet can use for placement.
 type Account struct {
-	Name           string
-	AWSAccountID   string
-	AllowedRegions []string
+	Name            string
+	AWSAccountID    string
+	ObserverRoleARN string
+	AllowedRegions  []string
 }
 
 // AllowsRegion reports whether the account can operate in the provided region.

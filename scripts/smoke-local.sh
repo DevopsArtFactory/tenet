@@ -2859,10 +2859,20 @@ assert 'rollout.execution[] is missing or empty, so Tenet is showing canonical f
 assert 'No ${group.title} resources match resource filter "${resourceFilter}". Clear the resource filter to show all ${group.title} resources.' in application_ui, application_ui
 assert 'Clear resource filter' in application_ui, application_ui
 assert 'Current application status' in application_ui, application_ui
+assert 'Recommended next check' in application_ui, application_ui
+assert 'Server-authored troubleshooting hint from existing runtime evidence.' in application_ui, application_ui
+assert 'No urgent next check is currently recommended for this application.' in application_ui, application_ui
+assert "const createApplicationTroubleshootingRecommendation = (detail) => {" in application_ui, application_ui
+assert "const applicationRecommendationEmbeddedHandoffURL = (route, fallbackPage, fallbackExtras = {}) => {" in application_ui, application_ui
+assert "const [routeWithoutHash, hashFragment = ''] = rawRoute.split('#');" in application_ui, application_ui
+assert "applicationRecommendationHandoffURL(detail, recommendation, handoff)" in application_ui, application_ui
+assert "#resource-live-inspection" in application_ui, application_ui
+assert "#resource-recent-logs" in application_ui, application_ui
 assert 'Application rollout context:' in application_ui, application_ui
 assert "['Runtime events', applicationRuntimeEventSummary(detail)]," in application_ui, application_ui
 assert "const applicationStatusSectionID = 'application-current-status';" in application_ui, application_ui
 assert "applicationStatusSection.id = applicationStatusSectionID;" in application_ui, application_ui
+assert "page.append(applicationStatusSection, createApplicationTroubleshootingRecommendation(detail));" in application_ui, application_ui
 assert "pushApplicationSectionLink(applicationStatusSectionID, 'Current application status');" in application_ui, application_ui
 assert "createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')" in application_ui, application_ui
 assert "const resourceSupportsLiveInspectionByType = (resource) => {" in application_ui, application_ui

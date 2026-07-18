@@ -477,6 +477,46 @@ func TestDeriveRuntimeSummaryReturnsManagedDriftWithoutOtherRuntimeSignals(t *te
 	}
 }
 
+func TestDeriveRuntimeSummaryPreservesRuntimeObservationsFromHistoryAndFallback(t *testing.T) {
+	historyObservation := domain.RuntimeObservation{
+		ResourceType:      "candidateAutoScalingGroup",
+		ResourceName:      "payments-api-prod-candidate",
+		Source:            "resource_inspection",
+		Available:         false,
+		UnavailableReason: "aws_unavailable",
+		Summary:           "Live read-only observation for candidateAutoScalingGroup payments-api-prod-candidate is unavailable: aws_unavailable",
+	}
+	currentObservation := domain.RuntimeObservation{
+		ResourceType: "trafficShiftPlan",
+		ResourceName: "payments-api-prod-weighted-routing",
+		Source:       "rollout_execution_summary",
+		Available:    true,
+		Summary:      "Live read-only observation for trafficShiftPlan payments-api-prod-weighted-routing is available.",
+	}
+
+	summary := deriveRuntimeSummary(domain.DeploymentStatus{
+		RuntimeObservations: []domain.RuntimeObservation{currentObservation},
+		History: []domain.StatusHistoryEntry{{
+			Timestamp:           "2026-04-16T06:30:00Z",
+			Source:              "controller",
+			Summary:             "Runtime status updated",
+			RuntimeObservations: []domain.RuntimeObservation{historyObservation},
+		}},
+	})
+	if summary == nil || !reflect.DeepEqual(summary.RuntimeObservations, []domain.RuntimeObservation{historyObservation}) {
+		t.Fatalf("expected runtime summary to prefer history-backed runtime observations, got %+v", summary)
+	}
+	summary.RuntimeObservations[0].Summary = "mutated-by-caller"
+	fallback := deriveRuntimeSummary(domain.DeploymentStatus{RuntimeObservations: []domain.RuntimeObservation{currentObservation}})
+	if fallback == nil || !reflect.DeepEqual(fallback.RuntimeObservations, []domain.RuntimeObservation{currentObservation}) {
+		t.Fatalf("expected runtime summary fallback to preserve current runtime observations, got %+v", fallback)
+	}
+	fallback.RuntimeObservations[0].Summary = "fallback-mutated"
+	if currentObservation.Summary == "fallback-mutated" {
+		t.Fatalf("expected runtime observation fallback to be cloned defensively")
+	}
+}
+
 func TestBuildAccountOverviewsRuntimeEventCueUsesRetainedHistory(t *testing.T) {
 	catalog := manifest.Catalog{
 		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
@@ -764,6 +804,200 @@ func TestBuildApplicationOverviews(t *testing.T) {
 	staging := overviews[2]
 	if staging.AccountName != "staging-core" || staging.AWSAccountID != "210987654321" || staging.Sync.State != "" || staging.RuntimeSummary != nil || staging.Rollout != nil {
 		t.Fatalf("expected missing snapshot fields to stay zero-valued, got %+v", staging)
+	}
+}
+
+func TestBuildApplicationOverviewsAddsTroubleshootingRecommendation(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", TargetType: "ecs", Strategy: "linear", ExecutionMode: "ecsCodeDeploy", DesiredArtifact: domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-api:r7"}}},
+	}
+	snapshots := []statusstore.Snapshot{{
+		DeploymentName: "payments-api-prod",
+		Status: domain.DeploymentStatus{
+			Sync:   domain.Sync{State: domain.SyncStateDrifted, Reason: "managed drift"},
+			Health: domain.Health{Overall: domain.HealthProgressing, Summary: "runtime differs"},
+			History: []domain.StatusHistoryEntry{{
+				Timestamp: "2026-04-16T06:20:00Z",
+				Source:    "controller",
+				Summary:   "Managed drift detected",
+				ManagedDrift: []domain.ManagedDriftItem{{
+					Field:    "runtimeContext.capacity.desired",
+					Desired:  "6",
+					Actual:   "4",
+					Severity: domain.ManagedDriftSeverityHigh,
+					ResourceRef: &domain.ManagedDriftResourceRef{
+						ResourceType: "ecsService",
+						ResourceName: "payments-api",
+					},
+				}},
+				Sync:               domain.Sync{State: domain.SyncStateDrifted, Reason: "managed drift"},
+				Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "runtime differs"},
+				DesiredGeneration:  8,
+				ObservedGeneration: 7,
+			}},
+		},
+	}}
+
+	overviews, err := BuildApplicationOverviews(catalog, snapshots)
+	if err != nil {
+		t.Fatalf("BuildApplicationOverviews returned error: %v", err)
+	}
+	if len(overviews) != 1 {
+		t.Fatalf("expected one overview, got %+v", overviews)
+	}
+	recommendation := overviews[0].TroubleshootingRecommendation
+	if recommendation == nil {
+		t.Fatalf("expected troubleshootingRecommendation from runtimeSummary managed drift")
+	}
+	if recommendation.Reason != TroubleshootingReasonManagedDrift || recommendation.ResourceType != "ecsService" || recommendation.ResourceName != "payments-api" {
+		t.Fatalf("unexpected recommendation: %+v", recommendation)
+	}
+	if !strings.Contains(recommendation.Summary, "1 high") {
+		t.Fatalf("expected managed drift severity summary, got %q", recommendation.Summary)
+	}
+	if len(recommendation.Handoffs) < 4 {
+		t.Fatalf("expected application/drift/events/evidence handoffs, got %+v", recommendation.Handoffs)
+	}
+	payload, err := json.Marshal(overviews[0])
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		t.Fatalf("raw JSON decode failed: %v", err)
+	}
+	rawRecommendation, ok := raw["troubleshootingRecommendation"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected troubleshootingRecommendation raw field, got %s", payload)
+	}
+	if rawRecommendation["reason"] != "managed_drift" || rawRecommendation["resourceType"] != "ecsService" || rawRecommendation["resourceName"] != "payments-api" {
+		t.Fatalf("unexpected raw recommendation: %#v", rawRecommendation)
+	}
+}
+
+func TestBuildApplicationOverviewDetailTroubleshootingRecommendationOmittedWhenQuiet(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", TargetType: "ecs", Strategy: "rolling", ExecutionMode: "ecsRolling", DesiredArtifact: domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-api:r7"}}},
+	}
+	snapshots := []statusstore.Snapshot{{
+		DeploymentName: "payments-api-prod",
+		Status: domain.DeploymentStatus{
+			Sync:             domain.Sync{State: domain.SyncStateSynced, Reason: "stable"},
+			Health:           domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+			DeployedArtifact: domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-api:r7"},
+		},
+	}}
+
+	detail, err := BuildApplicationOverviewDetail(catalog, snapshots, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildApplicationOverviewDetail returned error: %v", err)
+	}
+	if detail.TroubleshootingRecommendation != nil {
+		t.Fatalf("expected quiet synced application to omit recommendation, got %+v", detail.TroubleshootingRecommendation)
+	}
+	payload, err := json.Marshal(detail)
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	if jsonContainsKey(payload, "troubleshootingRecommendation") {
+		t.Fatalf("expected troubleshootingRecommendation omitted from quiet JSON, got %s", payload)
+	}
+}
+
+func TestBuildTroubleshootingRecommendationPrefersHighestSignalEvidence(t *testing.T) {
+	recommendation := BuildTroubleshootingRecommendation(
+		"payments-api-prod",
+		domain.Sync{State: domain.SyncStateReconciling, Reason: "controller is still reconciling"},
+		domain.Health{Overall: domain.HealthUnhealthy, Summary: "service is degraded"},
+		&domain.RuntimeSummary{
+			Summary: "latest controller history says rollout is still noisy",
+			ManagedDrift: []domain.ManagedDriftItem{{
+				Field:    "runtimeContext.capacity.desired",
+				Desired:  "6",
+				Actual:   "4",
+				Severity: domain.ManagedDriftSeverityHigh,
+				ResourceRef: &domain.ManagedDriftResourceRef{
+					ResourceType: "ecsService",
+					ResourceName: "payments-api",
+				},
+			}},
+			RuntimeObservations: []domain.RuntimeObservation{{
+				ResourceType:      "ecsService",
+				ResourceName:      "payments-api",
+				Source:            "resource_inspection",
+				Available:         false,
+				UnavailableReason: "aws_unavailable",
+				Summary:           "AWS credentials are not configured locally",
+			}},
+		},
+		nil,
+		nil,
+		[]ResourceRelatedEventSummary{{
+			ResourceType:         "ecsService",
+			ResourceName:         "payments-api",
+			RetainedEventCount:   2,
+			NewestEventTimestamp: "2026-04-16T06:40:00Z",
+		}},
+	)
+	if recommendation == nil {
+		t.Fatalf("expected recommendation from combined troubleshooting evidence")
+	}
+	if recommendation.Reason != TroubleshootingReasonManagedDrift || recommendation.ResourceType != "ecsService" || recommendation.ResourceName != "payments-api" {
+		t.Fatalf("expected managed drift to win over unhealthy, unavailable observation, and runtime-event signals, got %+v", recommendation)
+	}
+	if !strings.Contains(recommendation.Summary, "1 high") {
+		t.Fatalf("expected managed drift severity summary, got %q", recommendation.Summary)
+	}
+}
+
+func TestBuildApplicationOverviewDetailTroubleshootingRecommendationPrefersUnavailableObservation(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", DesiredArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/r7"}}},
+	}
+	snapshots := []statusstore.Snapshot{{
+		DeploymentName: "payments-api-prod",
+		Status: domain.DeploymentStatus{
+			Sync:   domain.Sync{State: domain.SyncStateReconciling, Reason: "observing resources"},
+			Health: domain.Health{Overall: domain.HealthProgressing, Summary: "waiting for live read"},
+			History: []domain.StatusHistoryEntry{{
+				Timestamp: "2026-04-16T06:20:00Z",
+				Source:    "controller",
+				Summary:   "Live observation unavailable",
+				RuntimeObservations: []domain.RuntimeObservation{{
+					ResourceType:      "candidateAutoScalingGroup",
+					ResourceName:      "payments-api-prod-candidate",
+					Source:            "resource_inspection",
+					Available:         false,
+					UnavailableReason: "cross_account_not_configured",
+					Summary:           "observer role missing",
+				}},
+				Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "observing resources"},
+				Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "waiting for live read"},
+				DesiredGeneration:  8,
+				ObservedGeneration: 7,
+			}},
+		},
+	}}
+
+	detail, err := BuildApplicationOverviewDetail(catalog, snapshots, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildApplicationOverviewDetail returned error: %v", err)
+	}
+	recommendation := detail.TroubleshootingRecommendation
+	if recommendation == nil {
+		t.Fatalf("expected unavailable observation recommendation")
+	}
+	if recommendation.Reason != TroubleshootingReasonLiveObservationUnavailable || recommendation.ResourceType != "candidateAutoScalingGroup" || recommendation.ResourceName != "payments-api-prod-candidate" {
+		t.Fatalf("unexpected recommendation: %+v", recommendation)
+	}
+	if !strings.Contains(recommendation.Summary, "cross_account_not_configured") {
+		t.Fatalf("expected unavailable reason in summary, got %q", recommendation.Summary)
 	}
 }
 
@@ -2035,10 +2269,19 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 		ManagedDriftSummary:        deploymentDetail.ManagedDriftSummary,
 		ManagedDriftSourceCoverage: cloneManagedDriftSourceCoverage(deploymentDetail.ManagedDriftSourceCoverage),
 		RuntimeSummary:             cloneRuntimeSummary(deploymentDetail.RuntimeSummary),
-		Rollout:                    cloneRolloutSummaryWithEvidence(deploymentDetail.Rollout, deploymentDetail.Name),
-		ResourceRelatedEvents:      cloneResourceRelatedEventSummaries(deploymentDetail.ResourceRelatedEvents),
-		Conditions:                 append([]domain.Condition(nil), deploymentDetail.Conditions...),
-		History:                    cloneStatusHistory(deploymentDetail.History),
+		TroubleshootingRecommendation: BuildTroubleshootingRecommendation(
+			deploymentDetail.Name,
+			deploymentDetail.Sync,
+			deploymentDetail.Health,
+			deploymentDetail.RuntimeSummary,
+			deploymentDetail.Rollout,
+			deploymentDetail.ManagedDrift,
+			deploymentDetail.ResourceRelatedEvents,
+		),
+		Rollout:               cloneRolloutSummaryWithEvidence(deploymentDetail.Rollout, deploymentDetail.Name),
+		ResourceRelatedEvents: cloneResourceRelatedEventSummaries(deploymentDetail.ResourceRelatedEvents),
+		Conditions:            append([]domain.Condition(nil), deploymentDetail.Conditions...),
+		History:               cloneStatusHistory(deploymentDetail.History),
 	}
 	if !reflect.DeepEqual(detail, expected) {
 		t.Fatalf("expected application detail to preserve deployment detail semantics, got application=%+v expected=%+v", detail, expected)

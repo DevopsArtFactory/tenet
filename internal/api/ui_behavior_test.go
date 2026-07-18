@@ -2297,6 +2297,9 @@ async function render(search, fetchImpl, clipboardImpl) {
   if (resourceView.document.lastScrolledTarget?.id !== 'ecs-service-event-evt-deployment-steady') throw new Error('expected bookmarked ECS service event hash to scroll after live-inspection render');
   const resourceBodyText = collectText(resourceView.document.getElementById('accounts')).join(' | ');
   const resourceToolbarText = collectText(resourceView.document.getElementById('toolbar')).join(' | ');
+  if (!resourceBodyText.includes('Live inspection last refreshed')) throw new Error('expected live-inspection panel to show last-refreshed freshness cue, got ' + resourceBodyText);
+  if (!resourceBodyText.includes('Recent logs last refreshed')) throw new Error('expected recent-logs panel to show last-refreshed freshness cue, got ' + resourceBodyText);
+  if (!resourceBodyText.includes('Last refreshed')) throw new Error('expected resource panel metadata to retain last refreshed field labels, got ' + resourceBodyText);
   if (!resourceBodyText.includes('Current resource read: GET /v1/overview/deployments/payments-api-staging')) throw new Error('expected resource detail body to show the top-level read route');
   if (!resourceBodyText.includes('Linked-resource source: Fallback rollout inventory')) throw new Error('expected resource detail body to preserve fallback linked-resource source cue, got ' + resourceBodyText);
   if (resourceToolbarText.includes('Current resource read: GET /v1/overview/deployments/payments-api-staging')) throw new Error('expected current resource read route outside toolbar');
@@ -4106,6 +4109,18 @@ func TestApplicationDetailPageWithNodeHarness(t *testing.T) {
 			"sync":         map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
 			"health":       map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy while rollout continues"},
 		},
+		"troubleshootingRecommendation": map[string]any{
+			"summary":      "1 managed drift row needs review before promotion.",
+			"reason":       "managed_drift",
+			"resourceType": "ecsService",
+			"resourceName": "payments-api-staging ECS Service",
+			"handoffs": []map[string]any{
+				{"label": "Open drift workspace", "route": "/?deployment=payments-api-staging&page=drift&driftSeverity=high#drift-field-level"},
+				{"label": "Open runtime events", "route": "/v1/overview/deployments/payments-api-staging/events"},
+				{"label": "Open live inspection", "route": "/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging+ECS+Service"},
+				{"label": "Open audit trail", "route": "/?page=audit&deployment=payments-api-staging&action=plan.created&limit=5#audit-row-plan-created"},
+			},
+		},
 		"resourceRelatedEvents": []map[string]any{
 			{
 				"resourceType":         "ecsService",
@@ -4234,6 +4249,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('payments-api-staging')) throw new Error('expected application summary title');
   if (!accountsText.includes('Application resources')) throw new Error('expected application resources heading');
   if (!accountsText.includes('Current application status')) throw new Error('expected compact application status summary');
+  if (!accountsText.includes('Recommended next check')) throw new Error('expected application-detail recommended next-check heading');
+  if (!accountsText.includes('1 managed drift row needs review before promotion.')) throw new Error('expected server-authored recommended next-check summary');
+  if (!accountsText.includes('Reason | managed_drift')) throw new Error('expected recommended next-check reason');
+  if (!accountsText.includes('Focus resource | ecsService · payments-api-staging ECS Service')) throw new Error('expected recommended next-check focus resource');
   if (!accountsText.includes('Target ecs · Strategy linear · Execution ecsCodeDeploy')) throw new Error('expected application status summary rollout context');
   if (!accountsText.includes('ghcr.io/devopsartfactory/payments-api:staging-20260415')) throw new Error('expected application status summary artifact');
   if (!accountsText.includes('Managed drift')) throw new Error('expected application status summary managed drift metric');
@@ -4260,12 +4279,21 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (accountsText.includes('Runtime history')) throw new Error('application page should not expose deep runtime history yet');
   const resourceLink = links.find((node) => node.textContent === 'Open resource');
   const liveInspectionLink = links.find((node) => node.textContent === 'Live evidence available');
+  const recommendedDriftLink = links.find((node) => node.textContent === 'Open drift workspace');
+  const recommendedRuntimeEventsLink = links.find((node) => node.textContent === 'Open runtime events');
+  const recommendedLiveInspectionLink = links.find((node) => node.textContent === 'Open live inspection');
+  const recommendedAuditLink = links.find((node) => node.textContent === 'Open audit trail');
   const recentLogsLink = links.find((node) => node.textContent === 'Recent logs supported');
   const relatedRuntimeEventsHintLink = links.find((node) => node.textContent === 'Related runtime events supported');
   const driftLink = links.find((node) => node.textContent === 'Drift view');
   const planLink = links.find((node) => node.textContent === 'Plan/apply');
   const auditLink = links.find((node) => node.textContent === 'Audit log');
   if (!resourceLink) throw new Error('expected resource drill-down link');
+  if (!recommendedDriftLink || !recommendedDriftLink.href.includes('/?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&driftSeverity=high') || !recommendedDriftLink.href.endsWith('#drift-field-level')) throw new Error('expected recommended drift handoff to preserve backend workspace filter and section target');
+  if (!recommendedRuntimeEventsLink || !recommendedRuntimeEventsLink.href.endsWith('#application-runtime-events')) throw new Error('expected recommended runtime-events handoff to target application runtime events section');
+  if (!recommendedLiveInspectionLink || !recommendedLiveInspectionLink.href.endsWith('#resource-live-inspection')) throw new Error('expected recommended live-inspection handoff to target resource live-inspection section');
+  if (!recommendedAuditLink || !recommendedAuditLink.href.includes('/?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&action=plan.created&limit=5') || !recommendedAuditLink.href.endsWith('#audit-row-plan-created')) throw new Error('expected recommended audit handoff to preserve action, limit, and row anchor');
+  if (recommendedDriftLink.target !== '_self' || recommendedRuntimeEventsLink.target !== '_self' || recommendedLiveInspectionLink.target !== '_self' || recommendedAuditLink.target !== '_self') throw new Error('expected recommended next-check handoffs to stay in embedded UI flow');
   if (!liveInspectionLink) throw new Error('expected direct live evidence cue handoff link');
   if (!recentLogsLink) throw new Error('expected direct recent logs cue handoff link');
   if (!relatedRuntimeEventsHintLink) throw new Error('expected direct related runtime-events cue handoff link');
@@ -8927,7 +8955,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Target account ID') || !text.includes('210987654321')) throw new Error('expected recent logs provider lookup context to include target account');
   if (!text.includes('Observer role configured') || !text.includes('True')) throw new Error('expected recent logs provider lookup context to include observer role status');
   if (!text.includes('Failed to load live inspection: resource inspection request failed (503)')) throw new Error('expected initial live inspection error state before refresh');
-  if (!text.includes('Last attempted ·')) throw new Error('expected failed live inspection read to render attempted freshness metadata: ' + text);
+  if (!text.includes('Last refresh attempt ·')) throw new Error('expected failed live inspection read to render refresh-attempt metadata: ' + text);
   const failedInspectionStatus = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('detail-state')).find((node) => node.textContent === 'Failed to load live inspection: resource inspection request failed (503)');
   assertStatusRegion(failedInspectionStatus, 'Live inspection error state');
   if (!text.match(/Related runtime events \| Available · 1 event · newest 2026-04-18T00:14:00Z/)) throw new Error('expected troubleshooting summary to surface related runtime-events state after initial read: ' + text);
