@@ -669,6 +669,8 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 		"`docs/features/resource-inspection.md` documents the focused live resource inspection route, selectors, lookup context, unavailable states, and detailed field contracts.",
 		"`docs/features/resource-recent-logs.md` documents recent-log resource contracts, including lookup context, selector echoes, and friendly empty/unavailable states.",
 		"Resource drill-down Related runtime events, Recent logs, and Live inspection panels summarize controller history, lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract.",
+		"Capture the HTTP `Request-Id` response header with the `Provider lookup context`",
+		"card when escalating a failed or unavailable Recent logs or Live inspection",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README documentation map to include %q", fragment)
