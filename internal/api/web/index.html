@@ -4420,6 +4420,11 @@
       };
       const resourceTroubleshootingFreshnessPart = (label, state, supported = true) => {
         if (!supported) return `${label} unsupported for this resource type`;
+        if (state?.status === 'loading') return `${label} refresh in progress`;
+        if (state?.status === 'error') {
+          const attemptedAt = resourcePanelFetchedAtText(state.error);
+          return attemptedAt ? `${label} attempted ${attemptedAt} (failed)` : `${label} attempted but failed`;
+        }
         if (state?.status !== 'ready') return `${label} not refreshed yet`;
         const fetchedAt = resourcePanelFetchedAtText(state.result);
         return fetchedAt ? `${label} refreshed ${fetchedAt}` : `${label} not refreshed yet`;
@@ -5921,15 +5926,21 @@
         const requestId = String(error?.requestId || '').trim();
         return requestId ? createElement('div', 'detail-condition-meta', `Tenet request ID · ${requestId}`) : null;
       };
+      const createOperatorReadFailureAttemptedMeta = (error) => {
+        const attemptedAt = resourcePanelFetchedAtText(error);
+        return attemptedAt ? createElement('div', 'detail-condition-meta', `Last attempted · ${attemptedAt}`) : null;
+      };
       const renderOperatorReadFailurePanel = (container, title, actions, route, error) => {
         const heading = operatorReadFailureHeading(error);
         if (!heading) return false;
         const requestIdMeta = createOperatorReadFailureRequestIDMeta(error);
+        const attemptedMeta = createOperatorReadFailureAttemptedMeta(error);
         container.replaceChildren(
           createDetailSectionHeader(title, actions),
           createElement('div', 'detail-state error', heading),
           createElement('div', 'detail-condition-meta', operatorReadFailureMessage(route, error)),
           ...(requestIdMeta ? [requestIdMeta] : []),
+          ...(attemptedMeta ? [attemptedMeta] : []),
           createOperatorReadFailureActions(error),
         );
         return true;
@@ -6072,6 +6083,11 @@
         if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
         return { ...result, tenetFetchedAt: new Date() };
       };
+      const withResourcePanelAttemptedAt = (error) => {
+        if (!error || typeof error !== 'object' || Array.isArray(error)) return error;
+        error.tenetFetchedAt = new Date();
+        return error;
+      };
       const resourcePanelRequestIDFields = (result) => {
         const fields = [];
         const requestId = String(result?.tenetRequestId || result?.requestId || '').trim();
@@ -6083,6 +6099,10 @@
       const createResourcePanelRequestIDMeta = (error) => {
         const requestId = String(error?.requestId || '').trim();
         return requestId ? createElement('div', 'detail-condition-meta', `Tenet request ID · ${requestId}`) : null;
+      };
+      const createResourcePanelAttemptedMeta = (error) => {
+        const attemptedAt = resourcePanelFetchedAtText(error);
+        return attemptedAt ? createElement('div', 'detail-condition-meta', `Last attempted · ${attemptedAt}`) : null;
       };
       const resourceLogsRequestIDFields = resourcePanelRequestIDFields;
       const createResourceLogsRequestIDMeta = createResourcePanelRequestIDMeta;
@@ -6373,7 +6393,8 @@
             scrollToCurrentHashTarget();
             return result;
           })
-          .catch((error) => {
+          .catch((rawError) => {
+            const error = withResourcePanelAttemptedAt(rawError);
             const current = resourceLogStateByKey.get(logsKey);
             resourceLogStateByKey.set(logsKey, { status: 'error', error });
             (current?.sections || []).forEach((target) => {
@@ -6388,13 +6409,14 @@
                 return;
               }
               const requestIDMeta = createResourceLogsRequestIDMeta(error);
+              const attemptedMeta = createResourcePanelAttemptedMeta(error);
               const targetLimit = target?.limit ?? selectedLimit;
               renderResourceLogsState(
                 container,
                 `Failed to load recent logs: ${error.message}`,
                 'error',
                 [createResourceLogsLimitNote(targetLimit), createResourceLogsRequestContext(deploymentName, resource, targetLimit)],
-                requestIDMeta ? [requestIDMeta] : [],
+                [requestIDMeta, attemptedMeta].filter(Boolean),
                 createResourceLogsActions(container, deploymentName, resource, false, target?.detail || detail),
               );
             });
@@ -7807,7 +7829,8 @@
             scrollToCurrentHashTarget();
             return result;
           })
-          .catch((error) => {
+          .catch((rawError) => {
+            const error = withResourcePanelAttemptedAt(rawError);
             const current = resourceInspectionStateByKey.get(inspectionKey);
             resourceInspectionStateByKey.set(inspectionKey, { status: 'error', error });
             (current?.sections || []).forEach((target) => {
@@ -7824,12 +7847,13 @@
                 return;
               }
               const requestIDMeta = createResourceInspectionRequestIDMeta(error);
+              const attemptedMeta = createResourcePanelAttemptedMeta(error);
               renderResourceInspectionState(
                 container,
                 `Failed to load live inspection: ${error.message}`,
                 'error',
                 [createResourceInspectionRequestContext(deploymentName, resource, targetLimit)],
-                requestIDMeta ? [requestIDMeta] : [],
+                [requestIDMeta, attemptedMeta].filter(Boolean),
                 createResourceInspectionActions(container, targetDetail, resource),
               );
             });

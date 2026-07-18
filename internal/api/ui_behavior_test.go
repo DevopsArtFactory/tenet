@@ -8927,10 +8927,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Target account ID') || !text.includes('210987654321')) throw new Error('expected recent logs provider lookup context to include target account');
   if (!text.includes('Observer role configured') || !text.includes('True')) throw new Error('expected recent logs provider lookup context to include observer role status');
   if (!text.includes('Failed to load live inspection: resource inspection request failed (503)')) throw new Error('expected initial live inspection error state before refresh');
+  if (!text.includes('Last attempted ·')) throw new Error('expected failed live inspection read to render attempted freshness metadata: ' + text);
   const failedInspectionStatus = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('detail-state')).find((node) => node.textContent === 'Failed to load live inspection: resource inspection request failed (503)');
   assertStatusRegion(failedInspectionStatus, 'Live inspection error state');
   if (!text.match(/Related runtime events \| Available · 1 event · newest 2026-04-18T00:14:00Z/)) throw new Error('expected troubleshooting summary to surface related runtime-events state after initial read: ' + text);
-  if (!text.match(/Evidence freshness \| Related runtime events refreshed .+ · Recent logs refreshed .+ · Live inspection not refreshed yet/)) throw new Error('expected troubleshooting summary to surface related-events freshness before completed sibling evidence: ' + text);
+  if (!text.match(/Evidence freshness \| Related runtime events refreshed .+ · Recent logs refreshed .+ · Live inspection attempted .+ \(failed\)/)) throw new Error('expected troubleshooting summary to surface attempted live-inspection freshness before completed sibling evidence: ' + text);
 
   const selectByField = (label) => collectNodes(root, (node) => node.tagName === 'SELECT' && node.dataset.toolbarField === label)[0];
   let relatedEventWindow = selectByField('Related event window');
@@ -9038,6 +9039,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (refreshInspection.disabled) throw new Error('expected live-inspection refresh button to stay enabled during recent-logs refresh');
   const refreshingLogsStatus = collectNodes(root, (node) => String(node.className || '').split(/\s+/).includes('detail-state')).find((node) => node.textContent === 'Loading recent logs…');
   assertStatusRegion(refreshingLogsStatus, 'Recent logs refresh loading state');
+  text = collectText(root).join(' | ');
+  if (!text.match(/Evidence freshness \| Related runtime events refreshed .+ · Recent logs refresh in progress · Live inspection attempted .+ \(failed\)/)) throw new Error('expected troubleshooting summary to distinguish recent-logs loading state from failed live inspection freshness: ' + text);
   if (logsFetchCount !== 2) throw new Error('expected recent-logs refresh to bypass cached ready state');
   if (window.location.search !== initialSearch) throw new Error('expected recent-logs refresh to preserve bookmarkable URL');
 
@@ -9052,7 +9055,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   text = collectText(root).join(' | ');
   if (!text.includes('Updated recent log line')) throw new Error('expected recent-logs refresh to render fresh payload');
   if (text.includes('Initial recent log line')) throw new Error('expected recent-logs refresh to replace stale payload');
-  if (!text.match(/Evidence freshness \| Related runtime events refreshed .+ · Recent logs refreshed .+ · Live inspection not refreshed yet/)) throw new Error('expected recent-logs refresh to retain related-events freshness while updating logs without inventing failed inspection freshness: ' + text);
+  if (!text.match(/Evidence freshness \| Related runtime events refreshed .+ · Recent logs refreshed .+ · Live inspection attempted .+ \(failed\)/)) throw new Error('expected recent-logs refresh to retain related-events freshness while preserving failed inspection attempt freshness: ' + text);
 
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   refreshLogs = buttons.find((node) => node.textContent === 'Refresh recent logs');
