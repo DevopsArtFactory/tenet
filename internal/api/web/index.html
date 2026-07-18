@@ -4799,10 +4799,18 @@
         }
         if (resourceFilter && totalResourceCount > 0) {
           const filterSummary = createElement('div', 'account-topology resource-filter-summary');
-          filterSummary.append(
-            createElement('span', '', `${visibleResourceCount} of ${totalResourceCount} linked resources match resource filter "${resourceFilter}"`),
-            createClearApplicationResourceFilterButton(detail, applicationState),
-          );
+          if (visibleResourceCount === 0) {
+            filterSummary.classList.add('resource-filter-empty-recovery');
+            filterSummary.append(
+              createElement('span', '', `Resource filter "${resourceFilter}" hides all ${totalResourceCount} linked resources. The application detail read still uses ${applicationDetailReadRoute(deploymentName)}.`),
+              createClearApplicationResourceFilterButton(detail, applicationState),
+            );
+          } else {
+            filterSummary.append(
+              createElement('span', '', `${visibleResourceCount} of ${totalResourceCount} linked resources match resource filter "${resourceFilter}"`),
+              createClearApplicationResourceFilterButton(detail, applicationState),
+            );
+          }
           page.append(filterSummary);
         }
         const applicationStatusSection = createApplicationStatusSummary(detail, allResourceGroups);

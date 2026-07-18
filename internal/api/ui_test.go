@@ -846,6 +846,8 @@ func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 		"Linked resource inventory: ${visibleResourceCount} of ${totalResourceCount} ${resourceText} visible",
 		"application-resource-inventory-summary",
 		"const inventorySummary = createApplicationResourceInventorySummary(resourceGroups, totalResourceCount, visibleResourceCount, resourceFilter);",
+		"resource-filter-empty-recovery",
+		"Resource filter \"${resourceFilter}\" hides all ${totalResourceCount} linked resources. The application detail read still uses ${applicationDetailReadRoute(deploymentName)}.",
 		"const applicationResourceFilteredEmptyMessage = (group, resourceFilter) =>",
 		"createElement('div', 'detail-state', applicationResourceFilteredEmptyMessage(group, resourceFilter))",
 		"if (!totalResourceCount) {",
@@ -4405,8 +4407,8 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Evidence cues' in application_ui, application_ui") || !strings.Contains(text, "assert 'Live evidence available' in application_ui, application_ui") || !strings.Contains(text, "assert 'Recent logs supported' in application_ui, application_ui") || !strings.Contains(text, "assert 'Related runtime events supported' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page evidence handoff copy")
 	}
-	if !strings.Contains(text, "assert \"const applicationResourceSectionLinkLabel = (group, resourceFilter = '') => {\" in application_ui, application_ui") {
-		t.Fatalf("expected smoke-local.sh to assert application page filters empty linked-resource groups")
+	if !strings.Contains(text, "assert \"const applicationResourceSectionLinkLabel = (group, resourceFilter = '') => {\" in application_ui, application_ui") || !strings.Contains(text, "assert \"resource-filter-empty-recovery\" in application_ui, application_ui") || !strings.Contains(text, "assert 'Resource filter \"${resourceFilter}\" hides all ${totalResourceCount} linked resources. The application detail read still uses ${applicationDetailReadRoute(deploymentName)}.' in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page filtered-empty recovery and linked-resource groups")
 	}
 	if !strings.Contains(text, "assert 'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page empty-state copy")

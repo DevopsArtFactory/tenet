@@ -1410,7 +1410,8 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search",
 		"with visible/total impact, a compact `Linked resource inventory` summary with per-group counts, and section-specific empty guidance alongside the inline",
-		"`Clear resource filter`. Their linked-resource summary also includes `Linked-resource source`, distinguishing controller-authored `rollout.execution[]` rows from canonical fallback rollout inventory when that array is missing or empty, plus compact resource-row `Evidence cues`:",
+		"`Clear resource filter`; when the filter hides every linked resource, the page adds a top-level recovery cue that names the unchanged `GET /v1/overview/applications/{deploymentName}` backing read before the per-section empty states.",
+		"Their linked-resource summary also includes `Linked-resource source`, distinguishing controller-authored `rollout.execution[]` rows from canonical fallback rollout inventory when that array is missing or empty, plus compact resource-row `Evidence cues`:",
 		"`Live evidence available` / `Recent logs supported` / `Related runtime events supported` `_self` handoffs to the final",
 		"Application resource rows seed those related-event cues from the already-loaded `resourceRelatedEvents[]` detail summary first",
 		"using operator-readable source labels such as `Controller history` while preserving custom source values",
@@ -1436,6 +1437,7 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 		"Filtering never changes the backing read route: application detail still reads `GET /v1/overview/applications/{deploymentName}`",
 		"deeper resource/drift/plan links still preserve their existing route contracts",
 		"The resource list starts with a compact `Linked resource inventory` line that shows total/visible resources and per-group counts",
+		"When `resourceFilter` hides every linked resource, the page adds a top-level recovery cue such as `Resource filter \"does-not-match\" hides all 3 linked resources. The application detail read still uses GET /v1/overview/applications/{deploymentName}.`",
 		"When `resourceFilter` hides rows in one or more reported resource groups, the UI keeps those sections visible with section-specific filtered-empty copy",
 		"Active filters also switch section quick-nav labels to visible/total counts such as `Traffic routing (1 of 3)`.",
 		"When the application read reports no linked resources at all, the page keeps the separate no-resource state `No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.`",
@@ -1450,7 +1452,7 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`resourceFilter` is UI query state only; it is not sent to `GET /v1/overview/applications/{deploymentName}` and does not add a read-route variant.",
 		"The filter matches linked-resource type, name, description, and source-cue text after the application-detail payload is loaded.",
-		"The filtered-empty state is distinct from the no-resource state so operators can tell whether client-side filtering hid resources or the read model reported none.",
+		"The filtered-empty state is distinct from the no-resource state so operators can tell whether client-side filtering hid resources or the read model reported none, and when the filter hides every linked resource the top-level recovery cue repeats the unchanged application-detail read route before the section-specific empty states.",
 		"Application-detail links and filter controls must preserve `q`, `sync`, `account`, `deployment`, and hash state while changing only `resourceFilter`.",
 	} {
 		if !strings.Contains(operatorContractsText, fragment) {

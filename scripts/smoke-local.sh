@@ -2835,6 +2835,8 @@ assert "const applicationResourceInventorySummaryText = (groups, totalResourceCo
 assert 'Linked resource inventory:' in application_ui, application_ui
 assert "createElement('div', 'account-topology application-resource-inventory-summary'" in application_ui, application_ui
 assert "const inventorySummary = createApplicationResourceInventorySummary(resourceGroups, totalResourceCount, visibleResourceCount, resourceFilter);" in application_ui, application_ui
+assert "resource-filter-empty-recovery" in application_ui, application_ui
+assert 'Resource filter "${resourceFilter}" hides all ${totalResourceCount} linked resources. The application detail read still uses ${applicationDetailReadRoute(deploymentName)}.' in application_ui, application_ui
 assert "createClearApplicationResourceFilterButton(detail, applicationState)" in application_ui, application_ui
 assert "const applicationResourceSectionLinkLabel = (group, resourceFilter = '') => {" in application_ui, application_ui
 assert "const applicationLinkedResourceSourceText = (detail) => {" in application_ui, application_ui
