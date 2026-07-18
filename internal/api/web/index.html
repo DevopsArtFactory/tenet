@@ -172,11 +172,11 @@
       .detail-step-meta-cancelled { color: var(--muted); }
       .detail-execution-meta, .detail-history-meta { display:grid; gap: 4px; margin-top: 6px; }
       .detail-section-copy { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.5; }
-      .recent-log-lookup-context-card { display:grid; gap: 8px; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(103,183,255,.16); background: rgba(103,183,255,.06); }
-      .recent-log-lookup-context-label { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
-      .recent-log-lookup-context-summary { color: var(--text); font-size: 13px; line-height: 1.45; }
-      .recent-log-lookup-context-chips { display:flex; flex-wrap:wrap; gap: 6px; }
-      .recent-log-lookup-context-chip { display:inline-flex; align-items:center; padding: 5px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.045); color: var(--muted); font-size: 12px; line-height: 1.3; }
+      .provider-lookup-context-card, .recent-log-lookup-context-card { display:grid; gap: 8px; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(103,183,255,.16); background: rgba(103,183,255,.06); }
+      .provider-lookup-context-label, .recent-log-lookup-context-label { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+      .provider-lookup-context-summary, .recent-log-lookup-context-summary { color: var(--text); font-size: 13px; line-height: 1.45; }
+      .provider-lookup-context-chips, .recent-log-lookup-context-chips { display:flex; flex-wrap:wrap; gap: 6px; }
+      .provider-lookup-context-chip, .recent-log-lookup-context-chip { display:inline-flex; align-items:center; padding: 5px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.045); color: var(--muted); font-size: 12px; line-height: 1.3; }
       .detail-callout { display:grid; gap: 8px; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.035); }
       .detail-callout .detail-section-copy { margin: 0; }
       .drift-table-wrap { overflow-x: auto; }
@@ -5971,13 +5971,14 @@
       const lookupContextText = (value) => value == null || value === '' ? '—' : String(value);
       const lookupContextBoolText = (value) => typeof value === 'boolean' ? boolLabel(value) : '—';
       const lookupContextReturned = (lookupContext) => lookupContext && typeof lookupContext === 'object' && !Array.isArray(lookupContext);
-      const resourceLogsLookupContextFields = (lookupContext) => lookupContextReturned(lookupContext) ? [
+      const providerLookupContextFields = (lookupContext) => lookupContextReturned(lookupContext) ? [
         ['Lookup region', lookupContextText(lookupContext.region)],
         ['Control account ID', lookupContextText(lookupContext.controlAccountId)],
         ['Target account ID', lookupContextText(lookupContext.targetAccountId)],
         ['Cross-account lookup', lookupContextBoolText(lookupContext.crossAccount)],
         ['Observer role configured', lookupContextBoolText(lookupContext.observerRoleConfigured)],
       ] : [];
+      const resourceLogsLookupContextFields = providerLookupContextFields;
       const lookupContextPathText = (lookupContext, prefix = 'Lookup path ·') => {
         const parts = [];
         const region = lookupContextText(lookupContext?.region);
@@ -6005,31 +6006,36 @@
       };
       const resourceLogsLookupPathText = (lookupContext) => lookupContextPathText(lookupContext, 'Lookup path ·');
       const resourceInspectionLookupPathText = (lookupContext) => lookupContextPathText(lookupContext, 'Inspection path ·');
-      const createResourceLogsLookupPathSummary = (lookupContext) => createElement('p', 'detail-section-copy', resourceLogsLookupPathText(lookupContext));
-      const createResourceInspectionLookupPathSummary = (lookupContext) => createElement('p', 'detail-section-copy', resourceInspectionLookupPathText(lookupContext));
-      const createProviderLookupContextLabel = () => createElement('div', 'detail-condition-meta', 'Provider lookup context');
-      const createResourceLogsLookupContextCard = (lookupContext) => {
-        const card = createElement('div', 'recent-log-lookup-context-card');
-        const chips = createElement('div', 'recent-log-lookup-context-chips');
-        resourceLogsLookupContextFields(lookupContext)
+      const createProviderLookupContextCard = (lookupContext, { classPrefix = 'provider-lookup-context', summaryText = resourceLogsLookupPathText(lookupContext) } = {}) => {
+        const card = createElement('div', `${classPrefix}-card`);
+        const chips = createElement('div', `${classPrefix}-chips`);
+        providerLookupContextFields(lookupContext)
           .filter(([, value]) => value !== '—')
           .forEach(([label, value]) => {
-            chips.append(createElement('span', 'recent-log-lookup-context-chip', `${label}: ${value}`));
+            chips.append(createElement('span', `${classPrefix}-chip`, `${label}: ${value}`));
           });
         card.append(
-          createElement('div', 'recent-log-lookup-context-label', 'Provider lookup context'),
-          createElement('div', 'recent-log-lookup-context-summary', resourceLogsLookupPathText(lookupContext)),
+          createElement('div', `${classPrefix}-label`, 'Provider lookup context'),
+          createElement('div', `${classPrefix}-summary`, summaryText),
         );
         if (chips.children.length) {
           card.append(chips);
         }
         return card;
       };
+      const createResourceLogsLookupContextCard = (lookupContext) => createProviderLookupContextCard(lookupContext, {
+        classPrefix: 'recent-log-lookup-context',
+        summaryText: resourceLogsLookupPathText(lookupContext),
+      });
+      const createResourceInspectionLookupContextCard = (lookupContext) => createProviderLookupContextCard(lookupContext, {
+        classPrefix: 'provider-lookup-context',
+        summaryText: resourceInspectionLookupPathText(lookupContext),
+      });
       const createResourceLogsLookupContextNodes = (lookupContext) => lookupContextReturned(lookupContext)
         ? [createResourceLogsLookupContextCard(lookupContext)]
         : [];
       const createResourceInspectionLookupContextNodes = (lookupContext) => lookupContextReturned(lookupContext)
-        ? [createResourceInspectionLookupPathSummary(lookupContext), createProviderLookupContextLabel()]
+        ? [createResourceInspectionLookupContextCard(lookupContext)]
         : [];
 
       const resourcePanelFetchedAtText = (result) => {
@@ -6167,7 +6173,7 @@
         resource,
         resourceLogsRequestRouteFields(deploymentName, resource, limit),
       );
-      const lookupContextFields = (lookupContext) => resourceLogsLookupContextFields(lookupContext);
+      const lookupContextFields = (lookupContext) => providerLookupContextFields(lookupContext);
       const createLookupContextGrid = (lookupContext, extraFields = []) => {
         const metadata = createElement('div', 'detail-grid');
         [...extraFields, ...lookupContextFields(lookupContext)].forEach(([label, value]) => {
