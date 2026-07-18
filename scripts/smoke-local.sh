@@ -2439,6 +2439,7 @@ assert "node.setAttribute('aria-live', 'polite');" in ui, ui
 assert "node.setAttribute('aria-atomic', 'true');" in ui, ui
 assert 'Inspection path ·' in ui, ui
 assert 'Provider lookup context' in ui, ui
+assert 'provider-lookup-context-card' in ui, ui
 assert 'createResourceInspectionLookupContextNodes(result?.lookupContext)' in ui, ui
 assert 'No live inspection details are available for this resource yet.' in ui, ui
 assert 'CodeDeploy deployment group status' in ui, ui
@@ -3152,6 +3153,7 @@ assert 'Recent logs request' in ui, ui
 assert 'Live inspection request' in ui, ui
 assert 'Refresh recent logs' in ui, ui
 assert 'recent-log-lookup-context-card' in ui, ui
+assert 'provider-lookup-context-card' in ui, ui
 assert 'Requested cap' in ui, ui
 assert 'Effective cap' in ui, ui
 assert 'Returned entries' in ui, ui

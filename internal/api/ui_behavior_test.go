@@ -6034,6 +6034,8 @@ async function render(search, inspectionResult, hash = '') {
   if (!taskRun.fetchCalls.includes(taskLogsURL)) throw new Error('expected selected-cluster ecsTask recent-log fetch URL, got ' + JSON.stringify(taskRun.fetchCalls));
   if (!taskRun.text.includes('Live ECS task inspection')) throw new Error('expected ECS task inspection panel');
   if (!taskRun.text.includes('Inspection path · ap-northeast-2 · account 123456789012 · same-account lookup · observer role configured')) throw new Error('expected live inspection lookup path summary: ' + taskRun.text);
+  if (!taskRun.text.includes('Provider lookup context | Inspection path · ap-northeast-2')) throw new Error('expected live inspection lookup context card: ' + taskRun.text);
+  if (!taskRun.text.includes('Lookup region: ap-northeast-2') || !taskRun.text.includes('Observer role configured: True')) throw new Error('expected live inspection lookup context chips: ' + taskRun.text);
   if (!taskRun.text.includes('Tenet request ID | req-inspection-878-success')) throw new Error('expected live inspection success to render Tenet Request-Id metadata: ' + taskRun.text);
   if (!taskRun.text.includes('Last refreshed |')) throw new Error('expected live inspection success to render last-refreshed metadata: ' + taskRun.text);
   if (!taskRun.text.includes('Task containers')) throw new Error('expected ECS task container section');

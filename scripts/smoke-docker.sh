@@ -2121,6 +2121,7 @@ for fragment in (
     "Lookup path ·",
     "Provider lookup context",
     "recent-log-lookup-context-card",
+    "provider-lookup-context-card",
     "Lookup region",
     "Observer role configured",
     "This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.",
