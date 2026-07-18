@@ -1478,7 +1478,8 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{
-		"`Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search",
+		"`Application JSON`, `Copy read route`, and render the server-authored `Recommended next check` hint when `troubleshootingRecommendation` is present",
+		"The page also includes a lightweight `resourceFilter=` search",
 		"with visible/total impact, a compact `Linked resource inventory` summary with per-group counts, and section-specific empty guidance alongside the inline",
 		"`Clear resource filter`; when the filter hides every linked resource, the page adds a top-level recovery cue that names the unchanged `GET /v1/overview/applications/{deploymentName}` backing read before the per-section empty states.",
 		"Their linked-resource summary also includes `Linked-resource source`, distinguishing controller-authored `rollout.execution[]` rows from canonical fallback rollout inventory when that array is missing or empty, plus compact resource-row `Evidence cues`:",
