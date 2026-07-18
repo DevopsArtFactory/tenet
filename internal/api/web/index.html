@@ -4486,6 +4486,8 @@
         states.logsState?.status === 'ready' && states.logsState.result?.available === false ? states.logsState.result?.unavailableReason : '',
         states.inspectionState?.status === 'ready' && states.inspectionState.result?.available === false ? states.inspectionState.result?.unavailableReason : '',
       ].filter(Boolean);
+      const resourceTroubleshootingGuardedErrorStatus = (states) => [states.logsState, states.inspectionState, states.relatedEventsState]
+        .find((state) => state?.status === 'error' && (state.error?.status === 401 || state.error?.status === 403))?.error?.status || 0;
       const resourceTroubleshootingRequestIDFromState = (state) => {
         if (state?.status === 'ready') return String(state.result?.tenetRequestId || state.result?.requestId || '').trim();
         if (state?.status === 'error') return String(state.error?.requestId || '').trim();
@@ -4515,6 +4517,13 @@
         }
         if (reasons.includes('aws_unavailable')) {
           return 'AWS/provider access is unavailable for this resource evidence lookup; capture the Tenet request ID and lookup path, verify credentials, account/region placement, observer-role reachability, and permissions, then refresh both panels.';
+        }
+        const guardedStatus = resourceTroubleshootingGuardedErrorStatus(states);
+        if (guardedStatus === 401) {
+          return 'One focused evidence read was denied by the trusted front door; use the Tenet request ID, retry through the authenticated entry point, then refresh only the denied panel.';
+        }
+        if (guardedStatus === 403) {
+          return 'One focused evidence read was denied by deployment authorization; use the Tenet request ID to verify allowed deployment scope, then refresh only the denied panel.';
         }
         if (states.logsState?.status === 'error' || states.inspectionState?.status === 'error') {
           return 'One evidence read failed; use the panel-specific request route and Tenet request ID, then refresh only the failed panel after access or provider wiring is corrected.';
@@ -4547,9 +4556,9 @@
           ['Live inspection', resourceTroubleshootingState(states.inspectionState, resourceTroubleshootingInspectionLabel, states.supportsInspection)],
           ['Evidence request IDs', resourceTroubleshootingRequestIDs(states)],
           ['Evidence freshness', resourceTroubleshootingFreshness(states)],
-          ['Next check', resourceTroubleshootingNextCheck(states)],
+          ['Recommended next check', resourceTroubleshootingNextCheck(states)],
         ];
-        summaryRows.forEach(([label, value]) => summaryGrid.append(createMetric(label, value, label === 'Next check' ? 'summary' : '')));
+        summaryRows.forEach(([label, value]) => summaryGrid.append(createMetric(label, value, label === 'Recommended next check' ? 'summary' : '')));
         section.replaceChildren(
           createDetailSectionHeader('Troubleshooting summary'),
           createElement('p', 'detail-section-copy', 'Derived from selected deployment/resource context plus the latest Related runtime events, Live inspection, and Recent logs panel results.'),

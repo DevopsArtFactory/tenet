@@ -5642,7 +5642,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!pageText.includes('Live inspection | Unsupported for this resource type')) throw new Error('expected troubleshooting summary to mark Live inspection unsupported: ' + pageText);
   if (!pageText.includes('Evidence freshness | Related runtime events refreshed ')) throw new Error('expected related-events freshness in unsupported summary: ' + pageText);
   if (!pageText.includes('Recent logs unsupported for this resource type · Live inspection unsupported for this resource type')) throw new Error('expected freshness row to avoid stale unsupported evidence guidance: ' + pageText);
-  if (!pageText.includes('Next check | Focused evidence panels are not supported for this resource type yet; use the current resource read, rollout context, status conditions, and related runtime events before escalating.')) throw new Error('expected unsupported next-check guidance: ' + pageText);
+  if (!pageText.includes('Recommended next check | Focused evidence panels are not supported for this resource type yet; use the current resource read, rollout context, status conditions, and related runtime events before escalating.')) throw new Error('expected unsupported next-check guidance: ' + pageText);
   if (pageText.includes('Open or refresh Live inspection and Recent logs')) throw new Error('unsupported troubleshooting summary should not ask operators to refresh hidden panels: ' + pageText);
   if (fetchCalls.find((url) => String(url).includes('/resource-inspection') || String(url).includes('/resource-logs'))) throw new Error('unsupported resource should not lazy-fetch hidden panels: ' + fetchCalls.join(', '));
 })();
@@ -9306,7 +9306,7 @@ async function renderResource(logPayload, inspectionPayload, eventsPayload = { d
   if (emptyText.includes('Recent logs | Empty · no_recent_events')) throw new Error('expected summary to hide raw empty recent-log reason code: ' + emptyText);
   if (!emptyText.includes('Live inspection | Available · AWS ECS')) throw new Error('expected available live-inspection summary state with friendly source label: ' + emptyText);
   if (emptyText.includes('Live inspection | Available · ecs_service')) throw new Error('expected available live-inspection summary to hide raw source token: ' + emptyText);
-  if (!emptyText.includes('Next check | Recent logs returned no rows in the selected window; increase the log cap or refresh after deployment activity before treating logs as absent.')) throw new Error('expected empty-log next-step guidance: ' + emptyText);
+  if (!emptyText.includes('Recommended next check | Recent logs returned no rows in the selected window; increase the log cap or refresh after deployment activity before treating logs as absent.')) throw new Error('expected empty-log next-step guidance: ' + emptyText);
 
   const unavailableRun = await renderResource(
     {
@@ -9327,7 +9327,7 @@ async function renderResource(logPayload, inspectionPayload, eventsPayload = { d
   if (!unavailableText.includes('Recent logs | Unavailable · Cross-account observer role missing')) throw new Error('expected cross-account unavailable recent-log summary state: ' + unavailableText);
   if (!unavailableText.includes('Live inspection | Unavailable · AWS access unavailable')) throw new Error('expected AWS-unavailable inspection summary state: ' + unavailableText);
   if (!unavailableText.match(/Evidence freshness \| Related runtime events refreshed .+ · Recent logs refreshed .+ · Live inspection refreshed .+/)) throw new Error('expected completed unavailable evidence reads to still surface freshness in summary: ' + unavailableText);
-  if (!unavailableText.includes('Next check | Cross-account observer role wiring is missing for this resource evidence lookup; configure the observer role, then refresh Recent logs and Live inspection.')) throw new Error('expected cross-account next-step guidance: ' + unavailableText);
+  if (!unavailableText.includes('Recommended next check | Cross-account observer role wiring is missing for this resource evidence lookup; configure the observer role, then refresh Recent logs and Live inspection.')) throw new Error('expected cross-account next-step guidance: ' + unavailableText);
 })();
 `
 
