@@ -913,6 +913,7 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"const resourceTroubleshootingRequestIDFromState = (state) => {",
 		"const resourceTroubleshootingRequestIDs = (states) => {",
 		"['Evidence request IDs', resourceTroubleshootingRequestIDs(states)]",
+		"['Recommended next check', resourceTroubleshootingNextCheck(states)]",
 		"const resourceTroubleshootingFreshnessPart = (label, state, supported = true) => {",
 		"Unsupported for this resource type",
 		"Focused evidence panels are not supported for this resource type yet; use the current resource read, rollout context, status conditions, and related runtime events before escalating.",

@@ -4547,9 +4547,9 @@
           ['Live inspection', resourceTroubleshootingState(states.inspectionState, resourceTroubleshootingInspectionLabel, states.supportsInspection)],
           ['Evidence request IDs', resourceTroubleshootingRequestIDs(states)],
           ['Evidence freshness', resourceTroubleshootingFreshness(states)],
-          ['Next check', resourceTroubleshootingNextCheck(states)],
+          ['Recommended next check', resourceTroubleshootingNextCheck(states)],
         ];
-        summaryRows.forEach(([label, value]) => summaryGrid.append(createMetric(label, value, label === 'Next check' ? 'summary' : '')));
+        summaryRows.forEach(([label, value]) => summaryGrid.append(createMetric(label, value, label === 'Recommended next check' ? 'summary' : '')));
         section.replaceChildren(
           createDetailSectionHeader('Troubleshooting summary'),
           createElement('p', 'detail-section-copy', 'Derived from selected deployment/resource context plus the latest Related runtime events, Live inspection, and Recent logs panel results.'),

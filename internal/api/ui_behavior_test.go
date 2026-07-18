@@ -5642,7 +5642,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!pageText.includes('Live inspection | Unsupported for this resource type')) throw new Error('expected troubleshooting summary to mark Live inspection unsupported: ' + pageText);
   if (!pageText.includes('Evidence freshness | Related runtime events refreshed ')) throw new Error('expected related-events freshness in unsupported summary: ' + pageText);
   if (!pageText.includes('Recent logs unsupported for this resource type · Live inspection unsupported for this resource type')) throw new Error('expected freshness row to avoid stale unsupported evidence guidance: ' + pageText);
-  if (!pageText.includes('Next check | Focused evidence panels are not supported for this resource type yet; use the current resource read, rollout context, status conditions, and related runtime events before escalating.')) throw new Error('expected unsupported next-check guidance: ' + pageText);
+  if (!pageText.includes('Recommended next check | Focused evidence panels are not supported for this resource type yet; use the current resource read, rollout context, status conditions, and related runtime events before escalating.')) throw new Error('expected unsupported next-check guidance: ' + pageText);
   if (pageText.includes('Open or refresh Live inspection and Recent logs')) throw new Error('unsupported troubleshooting summary should not ask operators to refresh hidden panels: ' + pageText);
   if (fetchCalls.find((url) => String(url).includes('/resource-inspection') || String(url).includes('/resource-logs'))) throw new Error('unsupported resource should not lazy-fetch hidden panels: ' + fetchCalls.join(', '));
 })();
@@ -9253,6 +9253,10 @@ class Document {
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
 async function settle(count = 1) { for (let i = 0; i < count; i += 1) { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); } }
+const testHeader = (requestId) => ({ get: (name) => ['request-id', 'x-request-id'].includes(String(name || '').toLowerCase()) ? requestId : '' });
+const okResponse = (payload, requestId = '') => ({ ok: true, status: 200, json: () => Promise.resolve(payload), headers: testHeader(requestId) });
+const errorResponse = (status, body, requestId = '') => ({ ok: false, status, text: () => Promise.resolve(body), headers: testHeader(requestId) });
+const panelResponse = (payload, url) => Promise.resolve(typeof payload === 'function' ? payload(url) : payload).then((value) => value && Object.prototype.hasOwnProperty.call(value, 'ok') ? value : okResponse(value));
 async function renderResource(logPayload, inspectionPayload, eventsPayload = { deploymentName: 'payments-api-staging', events: [{ timestamp: '2026-04-18T00:12:00Z', source: 'controller', summary: 'Service stability verified' }] }) {
   const document = new Document();
   document.byID.set('toolbar', document.createElement('section'));
@@ -9265,19 +9269,82 @@ async function renderResource(logPayload, inspectionPayload, eventsPayload = { d
   const window = { location: { pathname: '/', search: '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID) + '&containerName=' + encodeURIComponent(selectedContainer) + '&instanceId=' + encodeURIComponent(selectedInstance) + '&clusterArn=' + encodeURIComponent(selectedCluster), hash: '' } };
   const history = { replaceState(_state, _title, url) { const [pathAndQuery, hash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
   const fetch = (url) => {
-    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&containerName=app&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(logPayload) });
-    if (url === '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve(inspectionPayload) });
-    if (url === '/v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve(eventsPayload) });
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve(okResponse(detailBody));
+    if (url === '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&containerName=app&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod') return panelResponse(logPayload, url);
+    if (url === '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod&limit=10') return panelResponse(inspectionPayload, url);
+    if (url === '/v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10') return panelResponse(eventsPayload, url);
     throw new Error('unexpected fetch url: ' + url);
   };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
   await settle(4);
   const accounts = document.getElementById('accounts');
   const troubleshootingSummary = collectNodes(accounts, (node) => node.id === 'resource-troubleshooting-summary')[0];
-  return { accountsText: collectText(accounts).join(' | '), summaryText: collectText(troubleshootingSummary).join(' | ') };
+  const text = () => collectText(accounts).join(' | ');
+  const summaryText = () => collectText(troubleshootingSummary).join(' | ');
+  const clickButton = (label) => {
+    const button = collectNodes(accounts, (node) => node.tagName === 'BUTTON' && collectText(node).join(' ').includes(label))[0];
+    if (!button) throw new Error('button not found: ' + label + ' in ' + text());
+    button.dispatch('click', { preventDefault() {} });
+  };
+  return { accounts, accountsText: text(), summaryText: summaryText(), text, summaryTextNow: summaryText, clickButton, window };
 }
 (async () => {
+  const pendingRun = await renderResource(
+    () => new Promise(() => {}),
+    () => new Promise(() => {}),
+    () => new Promise(() => {}),
+  );
+  const pendingText = pendingRun.accountsText;
+  if (!pendingText.includes('Related runtime events | Loading')) throw new Error('expected pending related-events summary state: ' + pendingText);
+  if (!pendingText.includes('Recent logs | Loading')) throw new Error('expected pending recent-logs summary state: ' + pendingText);
+  if (!pendingText.includes('Live inspection | Loading')) throw new Error('expected pending live-inspection summary state: ' + pendingText);
+  if (!pendingText.includes('Evidence request IDs | —')) throw new Error('expected pending summary to omit request IDs until a panel resolves or fails: ' + pendingText);
+  if (!pendingText.includes('Recommended next check | Evidence panels are still loading; wait for Live inspection and Recent logs before deciding the next troubleshooting action.')) throw new Error('expected pending next-check guidance: ' + pendingText);
+
+  const guardedRun = await renderResource(
+    () => errorResponse(401, 'unauthenticated: operator identity missing', 'req-log-401'),
+    () => errorResponse(403, 'forbidden: deployment access denied', 'req-inspection-403'),
+  );
+  const guardedText = guardedRun.accountsText;
+  if (!guardedText.includes('Recent logs | Fetch error · resource logs request failed (401): unauthenticated: operator identity missing')) throw new Error('expected guarded recent-log error state: ' + guardedText);
+  if (!guardedText.includes('Live inspection | Fetch error · resource inspection request failed (403): forbidden: deployment access denied')) throw new Error('expected guarded inspection error state: ' + guardedText);
+  if (!guardedText.includes('Evidence request IDs | Logs req-log-401 · Inspection req-inspection-403')) throw new Error('expected guarded summary to surface panel request IDs: ' + guardedText);
+  if (!guardedText.includes('Recommended next check | One evidence read failed; use the panel-specific request route and Tenet request ID, then refresh only the failed panel after access or provider wiring is corrected.')) throw new Error('expected guarded next-check guidance: ' + guardedText);
+
+  const refreshedLogs = [
+    {
+      available: true,
+      source: 'cloudwatch',
+      emptyReason: 'no_recent_events',
+      resultScope: { requestedLimit: null, effectiveLimit: 25, returnedEntryCount: 0, truncationStatus: 'not_truncated' },
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
+      entries: [],
+    },
+    {
+      available: true,
+      source: 'cloudwatch',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
+      entries: [{ timestamp: '2026-04-18T00:20:00Z', message: 'steady state reached' }],
+    },
+  ];
+  const refreshRun = await renderResource(
+    () => okResponse(refreshedLogs.shift()),
+    {
+      available: true,
+      source: 'ecs_service',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true },
+      ecsService: { serviceName: 'payments-api-staging-service', status: 'ACTIVE', desiredCount: 2, runningCount: 2, pendingCount: 0, deployments: [], events: [] },
+    },
+  );
+  if (!refreshRun.text().includes('Recommended next check | Recent logs returned no rows in the selected window; increase the log cap or refresh after deployment activity before treating logs as absent.')) throw new Error('expected refresh setup to start with empty-log recommendation: ' + refreshRun.text());
+  const beforeRefreshSearch = refreshRun.window.location.search;
+  refreshRun.clickButton('Refresh recent logs');
+  await settle(4);
+  const refreshedText = refreshRun.text();
+  if (refreshRun.window.location.search !== beforeRefreshSearch) throw new Error('recent-log refresh should preserve bookmarkable resource URL state: ' + refreshRun.window.location.search);
+  if (!refreshedText.includes('Recent logs | Available · 1 entry · CloudWatch Logs')) throw new Error('expected refreshed recent-log summary state: ' + refreshedText);
+  if (!refreshedText.includes('Recommended next check | Compare the latest log entries with live resource state, deployment sync, health, rollout phase, and current step before retrying or escalating.')) throw new Error('expected successful refresh to update recommendation: ' + refreshedText);
+
   const emptyRun = await renderResource(
     {
       available: true,
@@ -9306,7 +9373,7 @@ async function renderResource(logPayload, inspectionPayload, eventsPayload = { d
   if (emptyText.includes('Recent logs | Empty · no_recent_events')) throw new Error('expected summary to hide raw empty recent-log reason code: ' + emptyText);
   if (!emptyText.includes('Live inspection | Available · AWS ECS')) throw new Error('expected available live-inspection summary state with friendly source label: ' + emptyText);
   if (emptyText.includes('Live inspection | Available · ecs_service')) throw new Error('expected available live-inspection summary to hide raw source token: ' + emptyText);
-  if (!emptyText.includes('Next check | Recent logs returned no rows in the selected window; increase the log cap or refresh after deployment activity before treating logs as absent.')) throw new Error('expected empty-log next-step guidance: ' + emptyText);
+  if (!emptyText.includes('Recommended next check | Recent logs returned no rows in the selected window; increase the log cap or refresh after deployment activity before treating logs as absent.')) throw new Error('expected empty-log next-step guidance: ' + emptyText);
 
   const unavailableRun = await renderResource(
     {
@@ -9327,7 +9394,7 @@ async function renderResource(logPayload, inspectionPayload, eventsPayload = { d
   if (!unavailableText.includes('Recent logs | Unavailable · Cross-account observer role missing')) throw new Error('expected cross-account unavailable recent-log summary state: ' + unavailableText);
   if (!unavailableText.includes('Live inspection | Unavailable · AWS access unavailable')) throw new Error('expected AWS-unavailable inspection summary state: ' + unavailableText);
   if (!unavailableText.match(/Evidence freshness \| Related runtime events refreshed .+ · Recent logs refreshed .+ · Live inspection refreshed .+/)) throw new Error('expected completed unavailable evidence reads to still surface freshness in summary: ' + unavailableText);
-  if (!unavailableText.includes('Next check | Cross-account observer role wiring is missing for this resource evidence lookup; configure the observer role, then refresh Recent logs and Live inspection.')) throw new Error('expected cross-account next-step guidance: ' + unavailableText);
+  if (!unavailableText.includes('Recommended next check | Cross-account observer role wiring is missing for this resource evidence lookup; configure the observer role, then refresh Recent logs and Live inspection.')) throw new Error('expected cross-account next-step guidance: ' + unavailableText);
 })();
 `
 
