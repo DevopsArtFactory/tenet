@@ -4115,9 +4115,10 @@ func TestApplicationDetailPageWithNodeHarness(t *testing.T) {
 			"resourceType": "ecsService",
 			"resourceName": "payments-api-staging ECS Service",
 			"handoffs": []map[string]any{
-				{"label": "Open drift workspace", "route": "/?deployment=payments-api-staging&page=drift"},
+				{"label": "Open drift workspace", "route": "/?deployment=payments-api-staging&page=drift&driftSeverity=high#drift-field-level"},
 				{"label": "Open runtime events", "route": "/v1/overview/deployments/payments-api-staging/events"},
 				{"label": "Open live inspection", "route": "/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging+ECS+Service"},
+				{"label": "Open audit trail", "route": "/?page=audit&deployment=payments-api-staging&action=plan.created&limit=5#audit-row-plan-created"},
 			},
 		},
 		"resourceRelatedEvents": []map[string]any{
@@ -4281,16 +4282,18 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const recommendedDriftLink = links.find((node) => node.textContent === 'Open drift workspace');
   const recommendedRuntimeEventsLink = links.find((node) => node.textContent === 'Open runtime events');
   const recommendedLiveInspectionLink = links.find((node) => node.textContent === 'Open live inspection');
+  const recommendedAuditLink = links.find((node) => node.textContent === 'Open audit trail');
   const recentLogsLink = links.find((node) => node.textContent === 'Recent logs supported');
   const relatedRuntimeEventsHintLink = links.find((node) => node.textContent === 'Related runtime events supported');
   const driftLink = links.find((node) => node.textContent === 'Drift view');
   const planLink = links.find((node) => node.textContent === 'Plan/apply');
   const auditLink = links.find((node) => node.textContent === 'Audit log');
   if (!resourceLink) throw new Error('expected resource drill-down link');
-  if (!recommendedDriftLink || !recommendedDriftLink.href.includes('/?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected recommended drift handoff to use bookmarkable workspace route');
+  if (!recommendedDriftLink || !recommendedDriftLink.href.includes('/?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&driftSeverity=high') || !recommendedDriftLink.href.endsWith('#drift-field-level')) throw new Error('expected recommended drift handoff to preserve backend workspace filter and section target');
   if (!recommendedRuntimeEventsLink || !recommendedRuntimeEventsLink.href.endsWith('#application-runtime-events')) throw new Error('expected recommended runtime-events handoff to target application runtime events section');
   if (!recommendedLiveInspectionLink || !recommendedLiveInspectionLink.href.endsWith('#resource-live-inspection')) throw new Error('expected recommended live-inspection handoff to target resource live-inspection section');
-  if (recommendedDriftLink.target !== '_self' || recommendedRuntimeEventsLink.target !== '_self' || recommendedLiveInspectionLink.target !== '_self') throw new Error('expected recommended next-check handoffs to stay in embedded UI flow');
+  if (!recommendedAuditLink || !recommendedAuditLink.href.includes('/?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&action=plan.created&limit=5') || !recommendedAuditLink.href.endsWith('#audit-row-plan-created')) throw new Error('expected recommended audit handoff to preserve action, limit, and row anchor');
+  if (recommendedDriftLink.target !== '_self' || recommendedRuntimeEventsLink.target !== '_self' || recommendedLiveInspectionLink.target !== '_self' || recommendedAuditLink.target !== '_self') throw new Error('expected recommended next-check handoffs to stay in embedded UI flow');
   if (!liveInspectionLink) throw new Error('expected direct live evidence cue handoff link');
   if (!recentLogsLink) throw new Error('expected direct recent logs cue handoff link');
   if (!relatedRuntimeEventsHintLink) throw new Error('expected direct related runtime-events cue handoff link');

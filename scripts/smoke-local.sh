@@ -2858,6 +2858,8 @@ assert 'Recommended next check' in application_ui, application_ui
 assert 'Server-authored troubleshooting hint from existing runtime evidence.' in application_ui, application_ui
 assert 'No urgent next check is currently recommended for this application.' in application_ui, application_ui
 assert "const createApplicationTroubleshootingRecommendation = (detail) => {" in application_ui, application_ui
+assert "const applicationRecommendationEmbeddedHandoffURL = (route, fallbackPage, fallbackExtras = {}) => {" in application_ui, application_ui
+assert "const [routeWithoutHash, hashFragment = ''] = rawRoute.split('#');" in application_ui, application_ui
 assert "applicationRecommendationHandoffURL(detail, recommendation, handoff)" in application_ui, application_ui
 assert "#resource-live-inspection" in application_ui, application_ui
 assert "#resource-recent-logs" in application_ui, application_ui

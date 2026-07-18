@@ -4162,6 +4162,22 @@
           .flatMap((group) => group.resources || [])
           .find((resource) => resource.type === resourceType && resource.name === resourceName) || null;
       };
+      const applicationRecommendationEmbeddedHandoffURL = (route, fallbackPage, fallbackExtras = {}) => {
+        const rawRoute = String(route || '').trim();
+        const [routeWithoutHash, hashFragment = ''] = rawRoute.split('#');
+        const params = routeWithoutHash.includes('?')
+          ? new URLSearchParams(routeWithoutHash.slice(routeWithoutHash.indexOf('?') + 1))
+          : new URLSearchParams();
+        const page = params.get('page') || fallbackPage;
+        if (!['application', 'drift', 'plan', 'audit'].includes(page)) return '';
+        const extras = { ...fallbackExtras };
+        params.forEach((value, key) => {
+          if (key !== 'page') extras[key] = value;
+        });
+        const baseURL = buildPageURL(page, extras);
+        const sectionID = hashFragment.trim().replace(/^#/, '');
+        return sectionID ? `${baseURL}#${sectionID}` : baseURL;
+      };
       const applicationRecommendationHandoffURL = (detail, recommendation, handoff) => {
         const deploymentName = detail?.name || currentPageState.deployment || '';
         const route = String(handoff?.route || '').trim();
@@ -4180,13 +4196,8 @@
           if (!resource) return buildPageURL('application', { deployment: deploymentName });
           return `${buildPageURL('resource', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id })}#resource-recent-logs`;
         }
-        const params = route.includes('?') ? new URLSearchParams(route.slice(route.indexOf('?') + 1)) : new URLSearchParams();
-        const page = params.get('page') || '';
-        const routedDeployment = params.get('deployment') || deploymentName;
-        if (page === 'drift' || page === 'plan' || page === 'audit' || page === 'application') {
-          return buildPageURL(page, { deployment: routedDeployment });
-        }
-        if (route.startsWith('/?')) return route;
+        const embeddedURL = applicationRecommendationEmbeddedHandoffURL(route, 'application', { deployment: deploymentName });
+        if (embeddedURL) return embeddedURL;
         return buildPageURL('application', { deployment: deploymentName });
       };
       const createApplicationTroubleshootingRecommendation = (detail) => {
