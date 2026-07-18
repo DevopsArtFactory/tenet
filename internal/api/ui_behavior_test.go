@@ -4109,6 +4109,17 @@ func TestApplicationDetailPageWithNodeHarness(t *testing.T) {
 			"sync":         map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
 			"health":       map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy while rollout continues"},
 		},
+		"troubleshootingRecommendation": map[string]any{
+			"summary":      "1 managed drift row needs review before promotion.",
+			"reason":       "managed_drift",
+			"resourceType": "ecsService",
+			"resourceName": "payments-api-staging ECS Service",
+			"handoffs": []map[string]any{
+				{"label": "Open drift workspace", "route": "/?deployment=payments-api-staging&page=drift"},
+				{"label": "Open runtime events", "route": "/v1/overview/deployments/payments-api-staging/events"},
+				{"label": "Open live inspection", "route": "/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging+ECS+Service"},
+			},
+		},
 		"resourceRelatedEvents": []map[string]any{
 			{
 				"resourceType":         "ecsService",
@@ -4237,6 +4248,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('payments-api-staging')) throw new Error('expected application summary title');
   if (!accountsText.includes('Application resources')) throw new Error('expected application resources heading');
   if (!accountsText.includes('Current application status')) throw new Error('expected compact application status summary');
+  if (!accountsText.includes('Recommended next check')) throw new Error('expected application-detail recommended next-check heading');
+  if (!accountsText.includes('1 managed drift row needs review before promotion.')) throw new Error('expected server-authored recommended next-check summary');
+  if (!accountsText.includes('Reason | managed_drift')) throw new Error('expected recommended next-check reason');
+  if (!accountsText.includes('Focus resource | ecsService · payments-api-staging ECS Service')) throw new Error('expected recommended next-check focus resource');
   if (!accountsText.includes('Target ecs · Strategy linear · Execution ecsCodeDeploy')) throw new Error('expected application status summary rollout context');
   if (!accountsText.includes('ghcr.io/devopsartfactory/payments-api:staging-20260415')) throw new Error('expected application status summary artifact');
   if (!accountsText.includes('Managed drift')) throw new Error('expected application status summary managed drift metric');
@@ -4263,12 +4278,19 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (accountsText.includes('Runtime history')) throw new Error('application page should not expose deep runtime history yet');
   const resourceLink = links.find((node) => node.textContent === 'Open resource');
   const liveInspectionLink = links.find((node) => node.textContent === 'Live evidence available');
+  const recommendedDriftLink = links.find((node) => node.textContent === 'Open drift workspace');
+  const recommendedRuntimeEventsLink = links.find((node) => node.textContent === 'Open runtime events');
+  const recommendedLiveInspectionLink = links.find((node) => node.textContent === 'Open live inspection');
   const recentLogsLink = links.find((node) => node.textContent === 'Recent logs supported');
   const relatedRuntimeEventsHintLink = links.find((node) => node.textContent === 'Related runtime events supported');
   const driftLink = links.find((node) => node.textContent === 'Drift view');
   const planLink = links.find((node) => node.textContent === 'Plan/apply');
   const auditLink = links.find((node) => node.textContent === 'Audit log');
   if (!resourceLink) throw new Error('expected resource drill-down link');
+  if (!recommendedDriftLink || !recommendedDriftLink.href.includes('/?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected recommended drift handoff to use bookmarkable workspace route');
+  if (!recommendedRuntimeEventsLink || !recommendedRuntimeEventsLink.href.endsWith('#application-runtime-events')) throw new Error('expected recommended runtime-events handoff to target application runtime events section');
+  if (!recommendedLiveInspectionLink || !recommendedLiveInspectionLink.href.endsWith('#resource-live-inspection')) throw new Error('expected recommended live-inspection handoff to target resource live-inspection section');
+  if (recommendedDriftLink.target !== '_self' || recommendedRuntimeEventsLink.target !== '_self' || recommendedLiveInspectionLink.target !== '_self') throw new Error('expected recommended next-check handoffs to stay in embedded UI flow');
   if (!liveInspectionLink) throw new Error('expected direct live evidence cue handoff link');
   if (!recentLogsLink) throw new Error('expected direct recent logs cue handoff link');
   if (!relatedRuntimeEventsHintLink) throw new Error('expected direct related runtime-events cue handoff link');

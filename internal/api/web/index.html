@@ -4154,6 +4154,77 @@
         section.append(head, metrics);
         return section;
       };
+      const applicationRecommendationRouteResource = (detail, recommendation) => {
+        const resourceType = String(recommendation?.resourceType || '').trim();
+        const resourceName = String(recommendation?.resourceName || '').trim();
+        if (!resourceType || !resourceName) return null;
+        return groupResourceSections(detail)
+          .flatMap((group) => group.resources || [])
+          .find((resource) => resource.type === resourceType && resource.name === resourceName) || null;
+      };
+      const applicationRecommendationHandoffURL = (detail, recommendation, handoff) => {
+        const deploymentName = detail?.name || currentPageState.deployment || '';
+        const route = String(handoff?.route || '').trim();
+        const label = String(handoff?.label || '').toLowerCase();
+        if (!deploymentName && !route) return '';
+        if (route.includes('/events') || label.includes('runtime event')) {
+          return buildPageSectionURL('application', 'application-runtime-events', { deployment: deploymentName });
+        }
+        if (route.includes('resource-inspection') || label.includes('live inspection')) {
+          const resource = applicationRecommendationRouteResource(detail, recommendation);
+          if (!resource) return buildPageURL('application', { deployment: deploymentName });
+          return `${buildPageURL('resource', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id })}#resource-live-inspection`;
+        }
+        if (route.includes('resource-logs') || label.includes('recent logs')) {
+          const resource = applicationRecommendationRouteResource(detail, recommendation);
+          if (!resource) return buildPageURL('application', { deployment: deploymentName });
+          return `${buildPageURL('resource', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id })}#resource-recent-logs`;
+        }
+        const params = route.includes('?') ? new URLSearchParams(route.slice(route.indexOf('?') + 1)) : new URLSearchParams();
+        const page = params.get('page') || '';
+        const routedDeployment = params.get('deployment') || deploymentName;
+        if (page === 'drift' || page === 'plan' || page === 'audit' || page === 'application') {
+          return buildPageURL(page, { deployment: routedDeployment });
+        }
+        if (route.startsWith('/?')) return route;
+        return buildPageURL('application', { deployment: deploymentName });
+      };
+      const createApplicationTroubleshootingRecommendation = (detail) => {
+        const recommendation = detail?.troubleshootingRecommendation;
+        const section = createElement('section', 'deployment-group application-next-check');
+        const head = createElement('div', 'deployment-group-head');
+        const titleWrap = createElement('div');
+        titleWrap.append(
+          createElement('h3', 'deployment-group-title', 'Recommended next check'),
+          createElement('div', 'deployment-group-meta', recommendation ? 'Server-authored troubleshooting hint from existing runtime evidence.' : 'No urgent next check is currently recommended for this application.'),
+        );
+        const reason = String(recommendation?.reason || '').trim();
+        if (reason) {
+          head.append(titleWrap, createElement('span', 'pill target', reason));
+        } else {
+          head.append(titleWrap, createElement('span', 'pill synced', 'Quiet'));
+        }
+        section.append(head);
+        const metrics = createElement('div', 'metrics');
+        if (!recommendation) {
+          metrics.append(createMetric('Next check', 'No urgent next check is currently recommended. Continue with the linked resources or runtime events only if the operator needs more evidence.', 'summary'));
+          section.append(metrics);
+          return section;
+        }
+        metrics.append(createMetric('Summary', recommendation.summary || 'Review the application detail and runtime evidence before taking action.', 'summary'));
+        if (reason) metrics.append(createMetric('Reason', reason));
+        const resourceFocus = [recommendation.resourceType, recommendation.resourceName].filter(Boolean).join(' · ');
+        if (resourceFocus) metrics.append(createMetric('Focus resource', resourceFocus));
+        section.append(metrics);
+        const handoffs = createElement('div', 'row-links row-links-shell');
+        (recommendation.handoffs || []).forEach((handoff) => {
+          const label = String(handoff?.label || '').trim();
+          const href = applicationRecommendationHandoffURL(detail, recommendation, handoff);
+          if (label && href) handoffs.append(createNavLink(href, label, '_self'));
+        });
+        if (handoffs.children.length) section.append(handoffs);
+        return section;
+      };
       const createApplicationDetailActions = (applicationState = null) => [
         (applicationState?.detail?.name || currentPageState.deployment)
           ? createNavLink(`/v1/overview/applications/${encodeURIComponent(applicationState?.detail?.name || currentPageState.deployment)}`, 'Application JSON')
@@ -4838,7 +4909,7 @@
         }
         const applicationStatusSection = createApplicationStatusSummary(detail, allResourceGroups);
         applicationStatusSection.id = applicationStatusSectionID;
-        page.append(applicationStatusSection);
+        page.append(applicationStatusSection, createApplicationTroubleshootingRecommendation(detail));
         pushApplicationSectionLink(applicationStatusSectionID, 'Current application status');
         const workspaceLinks = createElement('div', 'row-links row-links-shell');
         if (deploymentName) {
