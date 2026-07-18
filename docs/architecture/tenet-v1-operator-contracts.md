@@ -28,6 +28,8 @@ This keeps the first page simple and pushes deeper operational detail into drill
 
 On application detail, `resourceFilter` is UI query state only; it is not sent to `GET /v1/overview/applications/{deploymentName}` and does not add a read-route variant. The filter matches linked-resource type, name, description, and source-cue text after the application-detail payload is loaded. The filtered-empty state is distinct from the no-resource state so operators can tell whether client-side filtering hid resources or the read model reported none, and when the filter hides every linked resource the top-level recovery cue repeats the unchanged application-detail read route before the section-specific empty states. Application-detail links and filter controls must preserve `q`, `sync`, `account`, `deployment`, and hash state while changing only `resourceFilter`.
 
+Application overview/detail read models may include additive `troubleshootingRecommendation` hints when persisted/joined evidence already identifies a conservative next investigation hop. Operators should treat those hints as read-only route handoffs, not live AWS/log probes: quiet applications omit the object, and recommendation builders must keep existing `_self` application/resource/workspace navigation separate from JSON/read-route handoffs so the Argo-style drill-down hierarchy stays clear.
+
 ## Architecture
 
 Tenet is currently built from four main layers.

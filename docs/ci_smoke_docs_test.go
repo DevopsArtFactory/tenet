@@ -1545,6 +1545,53 @@ func TestOverviewDashboardRuntimeEventCueDocumentsDeterministicTieBreak(t *testi
 	}
 }
 
+func TestApplicationTroubleshootingRecommendationDocsStayReadOnly(t *testing.T) {
+	readmeText := readTextFile(t, "../README.md")
+	statusAPIText := readTextFile(t, "architecture/tenet-v1-deployment-status-api.md")
+	overviewText := readTextFile(t, "features/overview-dashboard.md")
+	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
+
+	for _, fragment := range []string{
+		"Application overview and application detail rows may also carry additive `troubleshootingRecommendation` hints",
+		"quiet applications omit the object",
+		"operator handoffs to existing Tenet reads rather than live cloud or log probes",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README to preserve application troubleshooting recommendation guidance %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"`troubleshootingRecommendation` object when existing joined status/read-model evidence already points at a conservative next investigation hop",
+		"current reasons are `managed_drift`, `unhealthy`, `live_observation_unavailable`, and `recent_runtime_event`",
+		"it does not perform live AWS or log reads",
+	} {
+		if !strings.Contains(statusAPIText, fragment) {
+			t.Fatalf("expected deployment status API docs to preserve recommendation contract %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"Application rows may also include an additive `troubleshootingRecommendation` object",
+		"Recommendations are read-only hints derived from managed drift, unhealthy/error status, unavailable runtime observations, or retained runtime events",
+		"They do not trigger live AWS/log reads while building the overview",
+	} {
+		if !strings.Contains(overviewText, fragment) {
+			t.Fatalf("expected overview dashboard docs to preserve recommendation read-only contract %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"Application overview/detail read models may include additive `troubleshootingRecommendation` hints",
+		"Operators should treat those hints as read-only route handoffs, not live AWS/log probes",
+		"keep existing `_self` application/resource/workspace navigation separate from JSON/read-route handoffs",
+	} {
+		if !strings.Contains(operatorContractsText, fragment) {
+			t.Fatalf("expected operator contracts docs to preserve recommendation handoff guidance %q", fragment)
+		}
+	}
+}
+
 func TestRuntimeStateDocsDescribeConfigurableControllerHistoryRetention(t *testing.T) {
 	runtimeStateText := readTextFile(t, "architecture/tenet-v1-runtime-state-storage.md")
 	statusAPIText := readTextFile(t, "architecture/tenet-v1-deployment-status-api.md")
