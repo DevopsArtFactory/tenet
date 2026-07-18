@@ -502,6 +502,7 @@ func TestOperatorTroubleshootingRunbookDocsContract(t *testing.T) {
 		"| Resource detail | `/?page=resource&deployment={deploymentName}&resourceType={type}&resourceId={stableResourceId}` | `GET /v1/overview/deployments/{deploymentName}`",
 		"| Recent logs | `#resource-recent-logs` | `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}`",
 		"| Live inspection | `#resource-live-inspection` | `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}`",
+		"the `Provider lookup context` card, the `Inspection path · ...` summary, `lookupContext` fields, accepted selectors such as `clusterArn` or `instanceId`, and `resultScope` when bounded",
 		"| Audit | `/?page=audit[&deployment={deploymentName}][&action={action}][&limit={n}]` | `GET /v1/audit-logs`",
 		"`Share audit entry`, `Copy audit entry link`, and action/deployment filters",
 		"row share/copy handoffs should preserve the current audit filters and stable row anchor",
