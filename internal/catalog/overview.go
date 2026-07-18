@@ -74,23 +74,24 @@ type accountOverviewAccumulator struct {
 
 // ApplicationOverview flattens the account overview read model into one application row per deployment.
 type ApplicationOverview struct {
-	Name               string                    `json:"name"`
-	AppRef             string                    `json:"appRef"`
-	EnvironmentRef     string                    `json:"environmentRef"`
-	AccountName        string                    `json:"accountName"`
-	AWSAccountID       string                    `json:"awsAccountId"`
-	Region             string                    `json:"region"`
-	TargetType         string                    `json:"targetType,omitempty"`
-	Strategy           string                    `json:"strategy,omitempty"`
-	ExecutionMode      string                    `json:"executionMode,omitempty"`
-	DesiredArtifact    domain.DeploymentArtifact `json:"desiredArtifact,omitempty"`
-	DeployedArtifact   domain.DeploymentArtifact `json:"deployedArtifact,omitempty"`
-	ObservedGeneration int64                     `json:"observedGeneration,omitempty"`
-	Sync               domain.Sync               `json:"sync"`
-	Health             domain.Health             `json:"health"`
-	RuntimeSummary     *domain.RuntimeSummary    `json:"runtimeSummary,omitempty"`
-	Rollout            *domain.RolloutSummary    `json:"rollout,omitempty"`
-	Conditions         []domain.Condition        `json:"conditions,omitempty"`
+	Name                          string                         `json:"name"`
+	AppRef                        string                         `json:"appRef"`
+	EnvironmentRef                string                         `json:"environmentRef"`
+	AccountName                   string                         `json:"accountName"`
+	AWSAccountID                  string                         `json:"awsAccountId"`
+	Region                        string                         `json:"region"`
+	TargetType                    string                         `json:"targetType,omitempty"`
+	Strategy                      string                         `json:"strategy,omitempty"`
+	ExecutionMode                 string                         `json:"executionMode,omitempty"`
+	DesiredArtifact               domain.DeploymentArtifact      `json:"desiredArtifact,omitempty"`
+	DeployedArtifact              domain.DeploymentArtifact      `json:"deployedArtifact,omitempty"`
+	ObservedGeneration            int64                          `json:"observedGeneration,omitempty"`
+	Sync                          domain.Sync                    `json:"sync"`
+	Health                        domain.Health                  `json:"health"`
+	RuntimeSummary                *domain.RuntimeSummary         `json:"runtimeSummary,omitempty"`
+	TroubleshootingRecommendation *TroubleshootingRecommendation `json:"troubleshootingRecommendation,omitempty"`
+	Rollout                       *domain.RolloutSummary         `json:"rollout,omitempty"`
+	Conditions                    []domain.Condition             `json:"conditions,omitempty"`
 }
 
 // DeploymentOverview joins desired deployment intent with current runtime status.
@@ -144,6 +145,31 @@ type DeploymentOverviewDetail struct {
 	Conditions                 []domain.Condition                `json:"conditions,omitempty"`
 	History                    []domain.StatusHistoryEntry       `json:"history,omitempty"`
 }
+
+// TroubleshootingRecommendation is a conservative read-only next-hop hint for operators.
+// It is derived from already-joined status/read-model evidence only; it does not
+// perform live AWS/log reads and does not imply mutation or comprehensive drift.
+type TroubleshootingRecommendation struct {
+	Summary      string                        `json:"summary"`
+	Reason       string                        `json:"reason"`
+	ResourceType string                        `json:"resourceType,omitempty"`
+	ResourceName string                        `json:"resourceName,omitempty"`
+	Handoffs     []TroubleshootingRouteHandoff `json:"handoffs,omitempty"`
+}
+
+// TroubleshootingRouteHandoff names an existing Tenet read route that can help
+// operators continue investigating a recommendation.
+type TroubleshootingRouteHandoff struct {
+	Label string `json:"label"`
+	Route string `json:"route"`
+}
+
+const (
+	TroubleshootingReasonManagedDrift               = "managed_drift"
+	TroubleshootingReasonUnhealthy                  = "unhealthy"
+	TroubleshootingReasonRecentRuntimeEvent         = "recent_runtime_event"
+	TroubleshootingReasonLiveObservationUnavailable = "live_observation_unavailable"
+)
 
 // ResourceRelatedEventSummary summarizes retained controller-history evidence for one rollout resource.
 type ResourceRelatedEventSummary struct {
@@ -253,32 +279,33 @@ type DeploymentEventsResultScope struct {
 
 // ApplicationOverviewDetail makes the application page contract explicit while preserving deployment detail semantics.
 type ApplicationOverviewDetail struct {
-	Name                       string                            `json:"name"`
-	AppRef                     string                            `json:"appRef"`
-	EnvironmentRef             string                            `json:"environmentRef"`
-	AccountName                string                            `json:"accountName"`
-	AWSAccountID               string                            `json:"awsAccountId"`
-	AllowedRegions             []string                          `json:"allowedRegions,omitempty"`
-	Region                     string                            `json:"region"`
-	TargetType                 string                            `json:"targetType,omitempty"`
-	Strategy                   string                            `json:"strategy,omitempty"`
-	ExecutionMode              string                            `json:"executionMode,omitempty"`
-	DesiredArtifact            domain.DeploymentArtifact         `json:"desiredArtifact,omitempty"`
-	UserData                   domain.DeploymentUserData         `json:"userData,omitempty"`
-	RolloutConfig              domain.DeploymentRolloutConfig    `json:"rolloutConfig,omitempty"`
-	DeployedArtifact           domain.DeploymentArtifact         `json:"deployedArtifact,omitempty"`
-	ObservedGeneration         int64                             `json:"observedGeneration,omitempty"`
-	SourceFingerprint          string                            `json:"sourceFingerprint,omitempty"`
-	Sync                       domain.Sync                       `json:"sync"`
-	Health                     domain.Health                     `json:"health"`
-	ManagedDrift               []domain.ManagedDriftItem         `json:"managedDrift,omitempty"`
-	ManagedDriftSummary        ManagedDriftSummary               `json:"managedDriftSummary"`
-	ManagedDriftSourceCoverage []ManagedDriftSourceCoverageEntry `json:"managedDriftSourceCoverage"`
-	RuntimeSummary             *domain.RuntimeSummary            `json:"runtimeSummary,omitempty"`
-	Rollout                    *domain.RolloutSummary            `json:"rollout,omitempty"`
-	ResourceRelatedEvents      []ResourceRelatedEventSummary     `json:"resourceRelatedEvents"`
-	Conditions                 []domain.Condition                `json:"conditions,omitempty"`
-	History                    []domain.StatusHistoryEntry       `json:"history,omitempty"`
+	Name                          string                            `json:"name"`
+	AppRef                        string                            `json:"appRef"`
+	EnvironmentRef                string                            `json:"environmentRef"`
+	AccountName                   string                            `json:"accountName"`
+	AWSAccountID                  string                            `json:"awsAccountId"`
+	AllowedRegions                []string                          `json:"allowedRegions,omitempty"`
+	Region                        string                            `json:"region"`
+	TargetType                    string                            `json:"targetType,omitempty"`
+	Strategy                      string                            `json:"strategy,omitempty"`
+	ExecutionMode                 string                            `json:"executionMode,omitempty"`
+	DesiredArtifact               domain.DeploymentArtifact         `json:"desiredArtifact,omitempty"`
+	UserData                      domain.DeploymentUserData         `json:"userData,omitempty"`
+	RolloutConfig                 domain.DeploymentRolloutConfig    `json:"rolloutConfig,omitempty"`
+	DeployedArtifact              domain.DeploymentArtifact         `json:"deployedArtifact,omitempty"`
+	ObservedGeneration            int64                             `json:"observedGeneration,omitempty"`
+	SourceFingerprint             string                            `json:"sourceFingerprint,omitempty"`
+	Sync                          domain.Sync                       `json:"sync"`
+	Health                        domain.Health                     `json:"health"`
+	ManagedDrift                  []domain.ManagedDriftItem         `json:"managedDrift,omitempty"`
+	ManagedDriftSummary           ManagedDriftSummary               `json:"managedDriftSummary"`
+	ManagedDriftSourceCoverage    []ManagedDriftSourceCoverageEntry `json:"managedDriftSourceCoverage"`
+	RuntimeSummary                *domain.RuntimeSummary            `json:"runtimeSummary,omitempty"`
+	TroubleshootingRecommendation *TroubleshootingRecommendation    `json:"troubleshootingRecommendation,omitempty"`
+	Rollout                       *domain.RolloutSummary            `json:"rollout,omitempty"`
+	ResourceRelatedEvents         []ResourceRelatedEventSummary     `json:"resourceRelatedEvents"`
+	Conditions                    []domain.Condition                `json:"conditions,omitempty"`
+	History                       []domain.StatusHistoryEntry       `json:"history,omitempty"`
 }
 
 // BuildAccountOverviews groups placement-aware deployment state by account.
@@ -386,23 +413,24 @@ func BuildApplicationOverviews(c manifest.Catalog, snapshots []statusstore.Snaps
 	for _, account := range accounts {
 		for _, deployment := range account.Deployments {
 			applications = append(applications, ApplicationOverview{
-				Name:               deployment.Name,
-				AppRef:             deployment.AppRef,
-				EnvironmentRef:     deployment.EnvironmentRef,
-				AccountName:        deployment.AccountName,
-				AWSAccountID:       deployment.AWSAccountID,
-				Region:             deployment.Region,
-				TargetType:         deployment.TargetType,
-				Strategy:           deployment.Strategy,
-				ExecutionMode:      deployment.ExecutionMode,
-				DesiredArtifact:    deployment.DesiredArtifact,
-				DeployedArtifact:   deployment.DeployedArtifact,
-				ObservedGeneration: deployment.ObservedGeneration,
-				Sync:               deployment.Sync,
-				Health:             deployment.Health,
-				RuntimeSummary:     cloneRuntimeSummary(deployment.RuntimeSummary),
-				Rollout:            cloneRolloutSummary(deployment.Rollout),
-				Conditions:         append([]domain.Condition(nil), deployment.Conditions...),
+				Name:                          deployment.Name,
+				AppRef:                        deployment.AppRef,
+				EnvironmentRef:                deployment.EnvironmentRef,
+				AccountName:                   deployment.AccountName,
+				AWSAccountID:                  deployment.AWSAccountID,
+				Region:                        deployment.Region,
+				TargetType:                    deployment.TargetType,
+				Strategy:                      deployment.Strategy,
+				ExecutionMode:                 deployment.ExecutionMode,
+				DesiredArtifact:               deployment.DesiredArtifact,
+				DeployedArtifact:              deployment.DeployedArtifact,
+				ObservedGeneration:            deployment.ObservedGeneration,
+				Sync:                          deployment.Sync,
+				Health:                        deployment.Health,
+				RuntimeSummary:                cloneRuntimeSummary(deployment.RuntimeSummary),
+				TroubleshootingRecommendation: BuildTroubleshootingRecommendation(deployment.Name, deployment.Sync, deployment.Health, deployment.RuntimeSummary, deployment.Rollout, nil, nil),
+				Rollout:                       cloneRolloutSummary(deployment.Rollout),
+				Conditions:                    append([]domain.Condition(nil), deployment.Conditions...),
 			})
 		}
 	}
@@ -520,32 +548,33 @@ func BuildApplicationOverviewDetail(c manifest.Catalog, snapshots []statusstore.
 	}
 
 	return ApplicationOverviewDetail{
-		Name:                       detail.Name,
-		AppRef:                     detail.AppRef,
-		EnvironmentRef:             detail.EnvironmentRef,
-		AccountName:                detail.AccountName,
-		AWSAccountID:               detail.AWSAccountID,
-		AllowedRegions:             append([]string(nil), detail.AllowedRegions...),
-		Region:                     detail.Region,
-		TargetType:                 detail.TargetType,
-		Strategy:                   detail.Strategy,
-		ExecutionMode:              detail.ExecutionMode,
-		DesiredArtifact:            detail.DesiredArtifact,
-		UserData:                   detail.UserData,
-		RolloutConfig:              cloneDeploymentRolloutConfig(detail.RolloutConfig),
-		DeployedArtifact:           detail.DeployedArtifact,
-		ObservedGeneration:         detail.ObservedGeneration,
-		SourceFingerprint:          detail.SourceFingerprint,
-		Sync:                       detail.Sync,
-		Health:                     detail.Health,
-		ManagedDrift:               cloneManagedDrift(detail.ManagedDrift),
-		ManagedDriftSummary:        detail.ManagedDriftSummary,
-		ManagedDriftSourceCoverage: cloneManagedDriftSourceCoverage(detail.ManagedDriftSourceCoverage),
-		RuntimeSummary:             cloneRuntimeSummary(detail.RuntimeSummary),
-		Rollout:                    cloneRolloutSummaryWithEvidence(detail.Rollout, detail.Name),
-		ResourceRelatedEvents:      cloneResourceRelatedEventSummaries(detail.ResourceRelatedEvents),
-		Conditions:                 append([]domain.Condition(nil), detail.Conditions...),
-		History:                    cloneStatusHistory(detail.History),
+		Name:                          detail.Name,
+		AppRef:                        detail.AppRef,
+		EnvironmentRef:                detail.EnvironmentRef,
+		AccountName:                   detail.AccountName,
+		AWSAccountID:                  detail.AWSAccountID,
+		AllowedRegions:                append([]string(nil), detail.AllowedRegions...),
+		Region:                        detail.Region,
+		TargetType:                    detail.TargetType,
+		Strategy:                      detail.Strategy,
+		ExecutionMode:                 detail.ExecutionMode,
+		DesiredArtifact:               detail.DesiredArtifact,
+		UserData:                      detail.UserData,
+		RolloutConfig:                 cloneDeploymentRolloutConfig(detail.RolloutConfig),
+		DeployedArtifact:              detail.DeployedArtifact,
+		ObservedGeneration:            detail.ObservedGeneration,
+		SourceFingerprint:             detail.SourceFingerprint,
+		Sync:                          detail.Sync,
+		Health:                        detail.Health,
+		ManagedDrift:                  cloneManagedDrift(detail.ManagedDrift),
+		ManagedDriftSummary:           detail.ManagedDriftSummary,
+		ManagedDriftSourceCoverage:    cloneManagedDriftSourceCoverage(detail.ManagedDriftSourceCoverage),
+		RuntimeSummary:                cloneRuntimeSummary(detail.RuntimeSummary),
+		TroubleshootingRecommendation: BuildTroubleshootingRecommendation(detail.Name, detail.Sync, detail.Health, detail.RuntimeSummary, detail.Rollout, detail.ManagedDrift, detail.ResourceRelatedEvents),
+		Rollout:                       cloneRolloutSummaryWithEvidence(detail.Rollout, detail.Name),
+		ResourceRelatedEvents:         cloneResourceRelatedEventSummaries(detail.ResourceRelatedEvents),
+		Conditions:                    append([]domain.Condition(nil), detail.Conditions...),
+		History:                       cloneStatusHistory(detail.History),
 	}, nil
 }
 
@@ -768,6 +797,223 @@ func cloneManagedDriftSourceCoverage(entries []ManagedDriftSourceCoverageEntry) 
 		return []ManagedDriftSourceCoverageEntry{}
 	}
 	return append([]ManagedDriftSourceCoverageEntry(nil), entries...)
+}
+
+// BuildTroubleshootingRecommendation chooses one conservative backend-supported
+// troubleshooting hop from already-joined read-model evidence. It intentionally
+// returns nil for quiet/stable deployments so additive payloads stay non-noisy.
+func BuildTroubleshootingRecommendation(deploymentName string, sync domain.Sync, health domain.Health, runtimeSummary *domain.RuntimeSummary, rollout *domain.RolloutSummary, managedDrift []domain.ManagedDriftItem, relatedEvents []ResourceRelatedEventSummary) *TroubleshootingRecommendation {
+	driftItems := managedDrift
+	if len(driftItems) == 0 && runtimeSummary != nil {
+		driftItems = runtimeSummary.ManagedDrift
+	}
+	if item, ok := highestPriorityManagedDriftItem(driftItems); ok {
+		resourceType, resourceName := managedDriftItemResource(item)
+		return &TroubleshootingRecommendation{
+			Summary:      managedDriftRecommendationSummary(driftItems),
+			Reason:       TroubleshootingReasonManagedDrift,
+			ResourceType: resourceType,
+			ResourceName: resourceName,
+			Handoffs:     troubleshootingHandoffs(deploymentName, resourceType, resourceName, true),
+		}
+	}
+
+	if health.Overall == domain.HealthUnhealthy || sync.State == domain.SyncStateError {
+		summary := strings.TrimSpace(health.Summary)
+		if summary == "" {
+			summary = strings.TrimSpace(sync.Reason)
+		}
+		if summary == "" {
+			summary = "Application health or sync state requires operator investigation."
+		}
+		return &TroubleshootingRecommendation{
+			Summary:  summary,
+			Reason:   TroubleshootingReasonUnhealthy,
+			Handoffs: troubleshootingHandoffs(deploymentName, "", "", true),
+		}
+	}
+
+	observations := runtimeObservationsForRecommendation(runtimeSummary)
+	if observation, ok := firstUnavailableRuntimeObservation(observations); ok {
+		return &TroubleshootingRecommendation{
+			Summary:      unavailableObservationRecommendationSummary(observation),
+			Reason:       TroubleshootingReasonLiveObservationUnavailable,
+			ResourceType: strings.TrimSpace(observation.ResourceType),
+			ResourceName: strings.TrimSpace(observation.ResourceName),
+			Handoffs:     troubleshootingHandoffs(deploymentName, observation.ResourceType, observation.ResourceName, true),
+		}
+	}
+
+	if event, ok := newestRelatedRuntimeEvent(relatedEvents); ok {
+		return &TroubleshootingRecommendation{
+			Summary:      relatedRuntimeEventRecommendationSummary(event),
+			Reason:       TroubleshootingReasonRecentRuntimeEvent,
+			ResourceType: strings.TrimSpace(event.ResourceType),
+			ResourceName: strings.TrimSpace(event.ResourceName),
+			Handoffs:     troubleshootingHandoffs(deploymentName, event.ResourceType, event.ResourceName, false),
+		}
+	}
+
+	if runtimeSummary != nil && strings.TrimSpace(runtimeSummary.Summary) != "" && sync.State != domain.SyncStateSynced {
+		return &TroubleshootingRecommendation{
+			Summary:  strings.TrimSpace(runtimeSummary.Summary),
+			Reason:   TroubleshootingReasonRecentRuntimeEvent,
+			Handoffs: troubleshootingHandoffs(deploymentName, "", "", true),
+		}
+	}
+
+	_ = rollout // reserved for future rollout-resource-specific recommendation rules.
+	return nil
+}
+
+func highestPriorityManagedDriftItem(items []domain.ManagedDriftItem) (domain.ManagedDriftItem, bool) {
+	if len(items) == 0 {
+		return domain.ManagedDriftItem{}, false
+	}
+	best := items[0]
+	for _, item := range items[1:] {
+		if managedDriftSeverityRank(item.Severity) > managedDriftSeverityRank(best.Severity) {
+			best = item
+			continue
+		}
+		if managedDriftSeverityRank(item.Severity) == managedDriftSeverityRank(best.Severity) {
+			bestType, bestName := managedDriftItemResource(best)
+			itemType, itemName := managedDriftItemResource(item)
+			if bestType == "" && bestName == "" && (itemType != "" || itemName != "") {
+				best = item
+			}
+		}
+	}
+	return best, true
+}
+
+func managedDriftSeverityRank(severity domain.ManagedDriftSeverity) int {
+	switch severity {
+	case domain.ManagedDriftSeverityHigh:
+		return 3
+	case domain.ManagedDriftSeverityMedium:
+		return 2
+	case domain.ManagedDriftSeverityLow:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func managedDriftItemResource(item domain.ManagedDriftItem) (string, string) {
+	if item.ResourceRef != nil {
+		resourceType := strings.TrimSpace(item.ResourceRef.ResourceType)
+		resourceName := strings.TrimSpace(item.ResourceRef.ResourceName)
+		if resourceType != "" || resourceName != "" {
+			return resourceType, resourceName
+		}
+	}
+	if item.Source != nil {
+		return strings.TrimSpace(item.Source.ResourceType), strings.TrimSpace(item.Source.ResourceName)
+	}
+	return "", ""
+}
+
+func managedDriftRecommendationSummary(items []domain.ManagedDriftItem) string {
+	summary := summarizeManagedDriftItems(items)
+	parts := []string{fmt.Sprintf("%d managed drift row(s) need review", summary.Total)}
+	if summary.High > 0 {
+		parts = append(parts, fmt.Sprintf("%d high", summary.High))
+	}
+	if summary.Medium > 0 {
+		parts = append(parts, fmt.Sprintf("%d medium", summary.Medium))
+	}
+	if summary.Low > 0 {
+		parts = append(parts, fmt.Sprintf("%d low", summary.Low))
+	}
+	return strings.Join(parts, "; ") + "."
+}
+
+func runtimeObservationsForRecommendation(runtimeSummary *domain.RuntimeSummary) []domain.RuntimeObservation {
+	if runtimeSummary == nil || len(runtimeSummary.RuntimeObservations) == 0 {
+		return nil
+	}
+	return runtimeSummary.RuntimeObservations
+}
+
+func firstUnavailableRuntimeObservation(observations []domain.RuntimeObservation) (domain.RuntimeObservation, bool) {
+	for _, observation := range observations {
+		if !observation.Available {
+			return observation, true
+		}
+	}
+	return domain.RuntimeObservation{}, false
+}
+
+func unavailableObservationRecommendationSummary(observation domain.RuntimeObservation) string {
+	resourceType := strings.TrimSpace(observation.ResourceType)
+	resourceName := strings.TrimSpace(observation.ResourceName)
+	label := managedDriftCoverageLabel(resourceType, resourceName)
+	reason := strings.TrimSpace(observation.UnavailableReason)
+	if reason == "" {
+		reason = "unavailable"
+	}
+	return fmt.Sprintf("Live observation for %s is unavailable (%s); use Tenet evidence routes to confirm the lookup path.", label, reason)
+}
+
+func newestRelatedRuntimeEvent(events []ResourceRelatedEventSummary) (ResourceRelatedEventSummary, bool) {
+	var newest ResourceRelatedEventSummary
+	found := false
+	for _, event := range events {
+		if event.RetainedEventCount <= 0 {
+			continue
+		}
+		if !found || event.NewestEventTimestamp > newest.NewestEventTimestamp {
+			newest = event
+			found = true
+		}
+	}
+	return newest, found
+}
+
+func relatedRuntimeEventRecommendationSummary(event ResourceRelatedEventSummary) string {
+	label := managedDriftCoverageLabel(event.ResourceType, event.ResourceName)
+	if strings.TrimSpace(event.NewestEventTimestamp) == "" {
+		return fmt.Sprintf("%s has retained controller runtime events; inspect the events timeline before changing rollout state.", label)
+	}
+	return fmt.Sprintf("%s has retained controller runtime events through %s; inspect the events timeline before changing rollout state.", label, event.NewestEventTimestamp)
+}
+
+func troubleshootingHandoffs(deploymentName, resourceType, resourceName string, includeApplication bool) []TroubleshootingRouteHandoff {
+	deploymentName = strings.TrimSpace(deploymentName)
+	resourceType = strings.TrimSpace(resourceType)
+	resourceName = strings.TrimSpace(resourceName)
+	handoffs := make([]TroubleshootingRouteHandoff, 0, 5)
+	if deploymentName != "" && includeApplication {
+		handoffs = append(handoffs, TroubleshootingRouteHandoff{Label: "Open application detail", Route: applicationPageRoute(deploymentName)})
+	}
+	if deploymentName != "" {
+		handoffs = append(handoffs, TroubleshootingRouteHandoff{Label: "Open drift workspace", Route: deploymentWorkspaceRoute("drift", deploymentName)})
+		handoffs = append(handoffs, TroubleshootingRouteHandoff{Label: "Open runtime events", Route: "/v1/overview/deployments/" + url.PathEscape(deploymentName) + "/events"})
+	}
+	if deploymentName != "" && resourceType != "" && resourceName != "" {
+		if resourceSupportsLiveInspection(resourceType) {
+			handoffs = append(handoffs, TroubleshootingRouteHandoff{Label: "Open live inspection", Route: resourceEvidenceRoute(deploymentName, "resource-inspection", resourceType, resourceName)})
+		}
+		if resourceSupportsRecentLogs(resourceType) {
+			handoffs = append(handoffs, TroubleshootingRouteHandoff{Label: "Open recent logs", Route: resourceEvidenceRoute(deploymentName, "resource-logs", resourceType, resourceName)})
+		}
+	}
+	return handoffs
+}
+
+func applicationPageRoute(deploymentName string) string {
+	params := url.Values{}
+	params.Set("page", "application")
+	params.Set("deployment", strings.TrimSpace(deploymentName))
+	return "/?" + params.Encode()
+}
+
+func deploymentWorkspaceRoute(page string, deploymentName string) string {
+	params := url.Values{}
+	params.Set("page", strings.TrimSpace(page))
+	params.Set("deployment", strings.TrimSpace(deploymentName))
+	return "/?" + params.Encode()
 }
 
 // BuildResourceRelatedEventSummaries returns one compact retained-history summary per rollout execution resource.

@@ -37,6 +37,24 @@ The deployment overview read models now intentionally copy the latest artifact/c
 - `runtimeSummary.runtimeObservations[]` is derived history-first from the newest controller history entry and falls back to current `status.runtimeObservations[]` when retained history is absent or legacy history lacks the additive field
 - `/v1/overview/deployments/{deploymentName}` now also exposes additive `sourceFingerprint`, a deterministic hash derived from the same rollout/runtime/detail inputs Tenet uses for plan-preview optimistic matching
 - `/v1/overview/applications/{deploymentName}` preserves that same `sourceFingerprint` field because the application detail route currently keeps deployment-detail semantics aligned
+- `/v1/overview/applications` and `/v1/overview/applications/{deploymentName}` may expose an additive top-level `troubleshootingRecommendation` object when existing joined status/read-model evidence already points at a conservative next investigation hop. Quiet synced deployments omit the field. The object uses `summary`, `reason`, optional `resourceType` / `resourceName`, and existing read-route `handoffs`; current reasons are `managed_drift`, `unhealthy`, `live_observation_unavailable`, and `recent_runtime_event`. The recommendation is derived from persisted/joined managed drift, sync/health state, runtime observations, and retained runtime/resource events only; it does not perform live AWS or log reads.
+
+Example recommendation payload:
+
+```json
+{
+  "troubleshootingRecommendation": {
+    "summary": "1 managed drift row(s) need review; 1 high.",
+    "reason": "managed_drift",
+    "resourceType": "candidateAutoScalingGroup",
+    "resourceName": "payments-api-prod-candidate",
+    "handoffs": [
+      {"label": "Open runtime events", "route": "/v1/overview/deployments/payments-api-prod/events"},
+      {"label": "Open live inspection", "route": "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup"}
+    ]
+  }
+}
+```
 
 That additive copy keeps overview/detail consumers from having to diff the full `status` object or scrape the newest history entry just to show the latest runtime artifact/condition context in a compact UI row.
 
