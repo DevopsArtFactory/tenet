@@ -762,6 +762,13 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 		"`source` (stable API token; embedded UI evidence panels translate known values such as `aws_cloudwatch_logs`, `cloudwatch`, `ecs_service`, and `ec2_console` into operator-friendly labels)",
 		"optional `clusterArn` when an ECS service/task recent-log request supplied an accepted cluster selector",
 		"Tenet validates and echoes that selector just like `ecsService`",
+		"When a Recent logs or Live inspection payload includes `lookupContext`, the panel labels it as `Provider lookup context`.",
+		"Recent logs shows a compact lookup-context card with a `Lookup path · ...` summary",
+		"`Lookup region`",
+		"`Control account ID`",
+		"`Target account ID`",
+		"`Cross-account lookup`",
+		"`Observer role configured`",
 	} {
 		if !strings.Contains(recentLogsFeatureText, fragment) {
 			t.Fatalf("expected resource recent logs guide to include %q", fragment)
