@@ -21,6 +21,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/githubcontents"
 	"github.com/DevopsArtFactory/tenet/internal/manifest"
 	"github.com/DevopsArtFactory/tenet/internal/reconcile"
+	"github.com/DevopsArtFactory/tenet/internal/resourceaws"
 	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
@@ -1569,7 +1570,7 @@ func TestEmitRuntimePlansPersistsRuntimeHistory(t *testing.T) {
 	if latest.RolloutPhase != domain.RolloutPhaseProvisioning || latest.CurrentStep != "CreateCandidateCapacity" {
 		t.Fatalf("expected rollout phase/current step in history entry, got %+v", latest)
 	}
-	if !reflect.DeepEqual(latest.Changes, []string{"summary", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}) {
+	if !reflect.DeepEqual(latest.Changes, []string{"summary", "runtimeObservations", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}) {
 		t.Fatalf("expected change labels for appended history entry, got %+v", latest.Changes)
 	}
 	if status.Rollout == nil || latest.Summary != status.Rollout.Summary || latest.RolloutPhase != status.Rollout.Phase || latest.CurrentStep != status.Rollout.CurrentStep {
@@ -1718,11 +1719,12 @@ func TestEmitRuntimePlansBootstrapsRuntimeHistoryForLegacyRolloutOnlySnapshot(t 
 	if latest.RolloutPhase != domain.RolloutPhaseProvisioning || latest.CurrentStep != "CreateCandidateCapacity" {
 		t.Fatalf("expected rollout phase/current step in bootstrapped history entry, got %+v", latest)
 	}
-	if !reflect.DeepEqual(latest.Changes, []string{"initial", "targetType", "strategy", "executionMode"}) {
+	if !reflect.DeepEqual(latest.Changes, []string{"initial", "runtimeObservations", "targetType", "strategy", "executionMode"}) {
 		t.Fatalf("expected first controller-authored history entry to preserve initial labeling and aligned rollout context changes, got %+v", latest.Changes)
 	}
 	if !reflect.DeepEqual(latest.ChangeDetails, []string{
 		"Initial controller-authored history entry",
+		"Runtime observations changed to candidateAutoScalingGroup api-prod-candidate unavailable: cross_account_not_configured, productionListenerRule api-prod-prod-listener available, trafficShiftPlan api-prod-weighted-routing available",
 		"Target type changed from Unknown to ec2",
 		"Strategy changed from Unknown to blueGreen",
 		"Execution mode changed from Unknown to asgWeightedTargetGroups",
@@ -1738,7 +1740,7 @@ func TestEmitRuntimePlansAvoidsDuplicateRuntimeHistory(t *testing.T) {
 	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
 	desiredGeneration := desiredGenerationForTest(t, root, "api-prod")
 	statusPath := filepath.Join(root, "status", "deployments.json")
-	writeJSON(t, statusPath, fmt.Sprintf(`[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[],"rollout":{"desiredGeneration":%d,"observedGeneration":-1,"phase":"Provisioning","currentStep":"CreateCandidateCapacity","summary":"Creating candidate capacity for weighted target groups","steps":[{"kind":"ResolvePlacement"},{"kind":"ObserveCurrentState"},{"kind":"CreateCandidateCapacity","current":true},{"kind":"VerifyCandidateCapacity"},{"kind":"ShiftTrafficFull"},{"kind":"PromoteCandidateCapacity"}]},"history":[{"timestamp":"2026-04-16T05:30:00Z","source":"controller","summary":"Creating candidate capacity for weighted target groups","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"desiredGeneration":%d,"observedGeneration":-1,"rolloutPhase":"Provisioning","currentStep":"CreateCandidateCapacity"}]}}]`, desiredGeneration, desiredGeneration))
+	writeJSON(t, statusPath, fmt.Sprintf(`[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[],"runtimeObservations":[{"resourceType":"candidateAutoScalingGroup","resourceName":"api-prod-candidate","source":"resource_inspection","available":false,"unavailableReason":"cross_account_not_configured","summary":"Live read-only observation for candidateAutoScalingGroup api-prod-candidate is unavailable: cross_account_not_configured"},{"resourceType":"productionListenerRule","resourceName":"api-prod-prod-listener","source":"rollout_execution_summary","available":true,"summary":"Live read-only observation for productionListenerRule api-prod-prod-listener is available."},{"resourceType":"trafficShiftPlan","resourceName":"api-prod-weighted-routing","source":"rollout_execution_summary","available":true,"summary":"Live read-only observation for trafficShiftPlan api-prod-weighted-routing is available."}],"rollout":{"desiredGeneration":%d,"observedGeneration":-1,"phase":"Provisioning","currentStep":"CreateCandidateCapacity","summary":"Creating candidate capacity for weighted target groups","steps":[{"kind":"ResolvePlacement"},{"kind":"ObserveCurrentState"},{"kind":"CreateCandidateCapacity","current":true},{"kind":"VerifyCandidateCapacity"},{"kind":"ShiftTrafficFull"},{"kind":"PromoteCandidateCapacity"}]},"history":[{"timestamp":"2026-04-16T05:30:00Z","runtimeObservations":[{"resourceType":"candidateAutoScalingGroup","resourceName":"api-prod-candidate","source":"resource_inspection","available":false,"unavailableReason":"cross_account_not_configured","summary":"Live read-only observation for candidateAutoScalingGroup api-prod-candidate is unavailable: cross_account_not_configured"},{"resourceType":"productionListenerRule","resourceName":"api-prod-prod-listener","source":"rollout_execution_summary","available":true,"summary":"Live read-only observation for productionListenerRule api-prod-prod-listener is available."},{"resourceType":"trafficShiftPlan","resourceName":"api-prod-weighted-routing","source":"rollout_execution_summary","available":true,"summary":"Live read-only observation for trafficShiftPlan api-prod-weighted-routing is available."}],"source":"controller","summary":"Creating candidate capacity for weighted target groups","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"desiredGeneration":%d,"observedGeneration":-1,"rolloutPhase":"Provisioning","currentStep":"CreateCandidateCapacity"}]}}]`, desiredGeneration, desiredGeneration))
 
 	oldNow := runtimeHistoryNow
 	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 30, 0, 0, time.UTC) }
@@ -2521,9 +2523,12 @@ func TestRuntimeLiveCapacityLookupFromInspectionUsesECSServiceDesiredCount(t *te
 				},
 			})
 
-			got, err := runtimeLiveCapacityLookupFromInspection(context.Background(), inspector, accounts, environments, deployment)
+			got, observations, err := runtimeLiveCapacityLookupFromInspection(context.Background(), inspector, accounts, environments, deployment)
 			if err != nil {
 				t.Fatalf("runtimeLiveCapacityLookupFromInspection returned error: %v", err)
+			}
+			if len(observations) != 1 || observations[0].ResourceType != "ecsService" || !observations[0].Available {
+				t.Fatalf("expected available ECS runtime observation, got %+v", observations)
 			}
 			if !reflect.DeepEqual(got, &runtimeLiveCapacityObservation{
 				ResourceType:                  "ecsService",
@@ -2579,9 +2584,12 @@ func TestRuntimeLiveCapacityLookupFromInspectionUsesAutoScalingBootstrapSource(t
 		},
 	})
 
-	got, err := runtimeLiveCapacityLookupFromInspection(context.Background(), inspector, accounts, environments, deployment)
+	got, observations, err := runtimeLiveCapacityLookupFromInspection(context.Background(), inspector, accounts, environments, deployment)
 	if err != nil {
 		t.Fatalf("runtimeLiveCapacityLookupFromInspection returned error: %v", err)
+	}
+	if len(observations) != 1 || observations[0].ResourceType != "candidateAutoScalingGroup" || !observations[0].Available {
+		t.Fatalf("expected available ASG runtime observation, got %+v", observations)
 	}
 	if !reflect.DeepEqual(got, &runtimeLiveCapacityObservation{
 		ResourceType:                  "candidateAutoScalingGroup",
@@ -2612,8 +2620,8 @@ func TestEmitRuntimePlansSkipsLiveCapacityDriftWhenLookupUnavailable(t *testing.
 	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":4,"min":2,"max":8},"userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
 
 	oldLookup := runtimeLiveCapacityLookup
-	runtimeLiveCapacityLookup = func(context.Context, resourceinspection.Service, []domain.Account, []domain.Environment, domain.Deployment) (*runtimeLiveCapacityObservation, error) {
-		return nil, errors.New("aws unavailable")
+	runtimeLiveCapacityLookup = func(context.Context, resourceinspection.Service, []domain.Account, []domain.Environment, domain.Deployment) (*runtimeLiveCapacityObservation, []domain.RuntimeObservation, error) {
+		return nil, []domain.RuntimeObservation{{ResourceType: "candidateAutoScalingGroup", ResourceName: "api-prod-candidate", Source: "resource_inspection", Available: false, UnavailableReason: resourceaws.UnavailableReasonAWSUnavailable, Summary: "Live read-only observation for candidateAutoScalingGroup api-prod-candidate is unavailable: aws_unavailable"}}, errors.New("aws unavailable")
 	}
 	defer func() { runtimeLiveCapacityLookup = oldLookup }()
 
@@ -2643,8 +2651,8 @@ func TestEmitRuntimePlansSkipsLiveECSCapacityDriftWhenLookupUnavailable(t *testi
 	writeJSON(t, filepath.Join(root, "deployments", "worker-prod.json"), `{"name":"worker-prod","appRef":"payments-worker","environmentRef":"prod-apne2","target":{"type":"ecs"},"strategy":{"type":"rolling"},"traffic":{"port":8080},"capacity":{"desired":3,"min":1,"max":5},"image":"ghcr.io/devopsartfactory/payments-worker:1.2.3"}`)
 
 	oldLookup := runtimeLiveCapacityLookup
-	runtimeLiveCapacityLookup = func(context.Context, resourceinspection.Service, []domain.Account, []domain.Environment, domain.Deployment) (*runtimeLiveCapacityObservation, error) {
-		return nil, errors.New("aws unavailable")
+	runtimeLiveCapacityLookup = func(context.Context, resourceinspection.Service, []domain.Account, []domain.Environment, domain.Deployment) (*runtimeLiveCapacityObservation, []domain.RuntimeObservation, error) {
+		return nil, []domain.RuntimeObservation{{ResourceType: "ecsService", ResourceName: "worker-prod-service", Source: "resource_inspection", Available: false, UnavailableReason: resourceaws.UnavailableReasonAWSUnavailable, Summary: "Live read-only observation for ecsService worker-prod-service is unavailable: aws_unavailable"}}, errors.New("aws unavailable")
 	}
 	defer func() { runtimeLiveCapacityLookup = oldLookup }()
 
@@ -3053,14 +3061,14 @@ func TestEmitRuntimePlansPersistsLiveEC2LaunchTemplateManagedDriftInStatusAndHis
 	statusPath := filepath.Join(root, "status", "deployments.json")
 
 	oldLookup := runtimeLiveCapacityLookup
-	runtimeLiveCapacityLookup = func(context.Context, resourceinspection.Service, []domain.Account, []domain.Environment, domain.Deployment) (*runtimeLiveCapacityObservation, error) {
+	runtimeLiveCapacityLookup = func(context.Context, resourceinspection.Service, []domain.Account, []domain.Environment, domain.Deployment) (*runtimeLiveCapacityObservation, []domain.RuntimeObservation, error) {
 		return &runtimeLiveCapacityObservation{
 			Desired:                    4,
 			Min:                        2,
 			Max:                        8,
 			LaunchTemplateImageID:      "ami-fffffffffffffffff",
 			LaunchTemplateInstanceType: "m6i.large",
-		}, nil
+		}, nil, nil
 	}
 	defer func() { runtimeLiveCapacityLookup = oldLookup }()
 
@@ -3479,8 +3487,11 @@ func compiledRuntimeStatusForTest(t *testing.T, root string, deploymentName stri
 		plan := planner.Build(deployment, status)
 		status = normalizeRuntimeStatus(deployment, status, plan)
 		status.Rollout = deriveRolloutSummary(deployment, status, plan)
-		liveCapacity := runtimeLiveCapacity(context.Background(), nil, resourceinspection.Service{}, compiled.Accounts, compiled.Environments, deployment)
-		status.ManagedDrift = deriveManagedDriftItems(deployment, status, liveCapacity)
+		liveInspectionService := resourceinspection.NewService(resourceinspection.Options{EnableAWS: true})
+		liveCapacity, capacityObservations := runtimeLiveCapacity(context.Background(), nil, liveInspectionService, compiled.Accounts, compiled.Environments, deployment)
+		liveTrafficRouting, trafficRoutingObservations := runtimeLiveTrafficRouting(context.Background(), nil, liveInspectionService, compiled.Accounts, compiled.Environments, deployment)
+		status.RuntimeObservations = normalizeRuntimeObservations(append(capacityObservations, trafficRoutingObservations...))
+		status.ManagedDrift = deriveManagedDriftItems(deployment, status, liveCapacity, liveTrafficRouting...)
 		status.History = appendRuntimeHistory(previous, status)
 		return status
 	}
