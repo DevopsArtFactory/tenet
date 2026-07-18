@@ -27,23 +27,23 @@ Enterprise SSO should extend the second family as provider-neutral managed-login
 
 ## Provider-neutral configuration shape
 
-Provider work is disabled by default. GitHub OAuth, Google Workspace OIDC, and Okta OIDC become active Tenet-managed login providers only when their configured provider mode and required non-secret state, identity, and session settings are complete. Use concrete non-secret provider mode examples in docs and runbooks: `TENET_AUTH_PROVIDER=github`, `TENET_AUTH_PROVIDER=google_oidc`, `TENET_AUTH_PROVIDER=okta_oidc`, or `TENET_AUTH_PROVIDER=okta_saml`. GitHub OAuth uses `TENET_AUTH_PROVIDER=github`, Google Workspace OIDC uses `TENET_AUTH_PROVIDER=google_oidc` (the legacy `google` alias is accepted), Okta OIDC uses `TENET_AUTH_PROVIDER=okta_oidc`, and Okta SAML uses `TENET_AUTH_PROVIDER=okta_saml` for diagnostic-only preflight. Configure the diagnostic/runtime with settings such as:
+Provider work is disabled by default. GitHub OAuth, Google Workspace OIDC, and Okta OIDC become active Tenet-managed login providers only when their configured provider mode and required non-secret state, identity, and session settings are complete. Use concrete non-secret provider mode examples in docs and runbooks: `TENET_AUTH_PROVIDER=github`, `TENET_AUTH_PROVIDER=google_oidc`, `TENET_AUTH_PROVIDER=okta_oidc`, or `TENET_AUTH_PROVIDER=okta_saml`. GitHub OAuth uses `TENET_AUTH_PROVIDER=github`. Google Workspace OIDC uses `TENET_AUTH_PROVIDER=google_oidc` (the legacy `google` alias is accepted), Okta OIDC uses `TENET_AUTH_PROVIDER=okta_oidc`, and Okta SAML uses `TENET_AUTH_PROVIDER=okta_saml` for diagnostic-only preflight. Configure the diagnostic/runtime with settings such as:
 
 ```text
 TENET_AUTH_PROVIDER=google_oidc # use okta_oidc for Okta OIDC, okta_saml for Okta SAML diagnostics, or github for GitHub OAuth
 TENET_GOOGLE_OIDC_CLIENT_ID=google-client-id
-TENET_GOOGLE_OIDC_CLIENT_SECRET=<secret from Google Workspace>
+TENET_GOOGLE_OIDC_CLIENT_SECRET=<redacted from Google Workspace>
 TENET_GOOGLE_OIDC_ISSUER_URL=https://accounts.google.com
 TENET_GOOGLE_OIDC_REDIRECT_URL=https://tenet.example.com/auth/callback/google
 TENET_OKTA_SAML_METADATA_URL=https://okta.example.com/app/tenet/sso/saml/metadata
 TENET_OKTA_SAML_ACS_URL=https://tenet.example.com/auth/callback/okta/saml
 TENET_OKTA_OIDC_ISSUER_URL=https://okta.example.com/oauth2/default
 TENET_OKTA_OIDC_CLIENT_ID=okta-client-id
-TENET_OKTA_OIDC_CLIENT_SECRET=<secret from Okta>
+TENET_OKTA_OIDC_CLIENT_SECRET=<redacted from Okta>
 TENET_OKTA_OIDC_REDIRECT_URL=https://tenet.example.com/auth/callback/okta/oidc
 TENET_AUTH_STATE_STORE_PATH=/var/lib/tenet/auth-state.json
 TENET_AUTH_IDENTITY_STORE_PATH=/var/lib/tenet/auth-identities.json
-TENET_AUTH_SESSION_SECRET=<32+ byte session signing secret>
+TENET_AUTH_SESSION_SECRET=<redacted 32-byte session signing secret>
 ```
 
 The operator contract for these settings is:
