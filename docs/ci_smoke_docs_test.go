@@ -1796,6 +1796,7 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 		"before lazy Related runtime events, Recent logs, or Live inspection panels load",
 		"selected lookup scope (`containerName`, `clusterArn`, or `instanceId`)",
 		"latest lazy Related runtime events, Recent logs, and Live inspection panel states",
+		"Evidence request IDs",
 		"empty-log and unavailable-provider next-step guidance",
 		"Unsupported for this resource type",
 		"points operators back to the current resource read",
@@ -1810,6 +1811,7 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 		"The resource-detail Troubleshooting summary is a derived UI contract, not a separate API read.",
 		"latest completed Related runtime events, Live inspection, and Recent logs panel states",
 		"selected lookup scope (`containerName`, `clusterArn`, or `instanceId`)",
+		"compact Evidence request IDs row",
 		"Current resource read: GET /v1/overview/deployments/{deploymentName}",
 		"keeps `Current resource read: GET /v1/overview/deployments/{deploymentName}` visible before lazy Related runtime events, Recent logs, or Live inspection reads resolve",
 		"keeps the selected resource's `Linked-resource source` cue visible beside it",
@@ -1831,6 +1833,7 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 		"the final resource page also renders a compact `Troubleshooting summary`",
 		"any selected lookup scope (`containerName`, `clusterArn`, or `instanceId`)",
 		"available, loading, empty, unavailable, fetch-error, and unsupported focused-evidence states",
+		"`Evidence request IDs` row",
 		"unsupported-resource guidance",
 	} {
 		if !strings.Contains(overviewDashboardText, fragment) {
@@ -1842,6 +1845,7 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 	for _, fragment := range []string{
 		"top-level `Selected resource context` callout",
 		"the supported live-inspection/recent-log backing reads operators can refresh below",
+		"compact Evidence request IDs",
 		"GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}",
 		"GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}",
 		"Unsupported for this resource type",
