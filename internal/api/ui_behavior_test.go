@@ -9309,7 +9309,7 @@ async function renderResource(logPayload, inspectionPayload, eventsPayload = { d
   if (!guardedText.includes('Recent logs | Fetch error · resource logs request failed (401): unauthenticated: operator identity missing')) throw new Error('expected guarded recent-log error state: ' + guardedText);
   if (!guardedText.includes('Live inspection | Fetch error · resource inspection request failed (403): forbidden: deployment access denied')) throw new Error('expected guarded inspection error state: ' + guardedText);
   if (!guardedText.includes('Evidence request IDs | Logs req-log-401 · Inspection req-inspection-403')) throw new Error('expected guarded summary to surface panel request IDs: ' + guardedText);
-  if (!guardedText.includes('Recommended next check | One evidence read failed; use the panel-specific request route and Tenet request ID, then refresh only the failed panel after access or provider wiring is corrected.')) throw new Error('expected guarded next-check guidance: ' + guardedText);
+  if (!guardedText.includes('Recommended next check | One focused evidence read was denied by the trusted front door; use the Tenet request ID, retry through the authenticated entry point, then refresh only the denied panel.')) throw new Error('expected guarded next-check guidance: ' + guardedText);
 
   const refreshedLogs = [
     {
