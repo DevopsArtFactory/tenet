@@ -15263,6 +15263,9 @@ async function render(search, hash = '#application-current-status') {
   nextInput.dispatch('input');
   await settle();
   text = compactText(run.document.getElementById('accounts'));
+  if (!text.includes('Resource filter "does-not-match" hides all 3 linked resources. The application detail read still uses GET /v1/overview/applications/payments-api-staging.')) throw new Error('expected top-level filtered-empty recovery cue with backing read route: ' + text);
+  const emptyRecovery = collectNodes(run.document.getElementById('accounts'), (node) => String(node.className || '').split(/\s+/).includes('resource-filter-empty-recovery'))[0];
+  if (!emptyRecovery) throw new Error('expected resource-filter-empty-recovery callout when every linked resource is hidden');
   if (!text.includes('No Workloads resources match resource filter "does-not-match". Clear the resource filter to show all Workloads resources.')) throw new Error('expected workload filtered-empty application resource state: ' + text);
   if (!text.includes('No Traffic routing resources match resource filter "does-not-match". Clear the resource filter to show all Traffic routing resources.')) throw new Error('expected traffic-routing filtered-empty application resource state: ' + text);
   if (!text.includes('No Config and access resources match resource filter "does-not-match". Clear the resource filter to show all Config and access resources.')) throw new Error('expected config filtered-empty application resource state: ' + text);

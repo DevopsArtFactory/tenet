@@ -2400,6 +2400,8 @@ for fragment in (
     "Linked resource inventory:",
     "createElement('div', 'account-topology application-resource-inventory-summary'",
     "const inventorySummary = createApplicationResourceInventorySummary(resourceGroups, totalResourceCount, visibleResourceCount, resourceFilter);",
+    "resource-filter-empty-recovery",
+    "Resource filter \"${resourceFilter}\" hides all ${totalResourceCount} linked resources. The application detail read still uses ${applicationDetailReadRoute(deploymentName)}.",
     "createClearApplicationResourceFilterButton(detail, applicationState)",
     "const applicationResourceSectionLinkLabel = (group, resourceFilter = '') => {",
     "const applicationLinkedResourceSourceText = (detail) => {",
