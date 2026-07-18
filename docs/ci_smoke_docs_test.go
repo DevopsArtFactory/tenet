@@ -1617,6 +1617,9 @@ func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditC
 		"newest/oldest visible entry navigation cues",
 		"Jump to newest entry",
 		"Jump to oldest visible entry",
+		"row-level `_self` `Share audit entry` and `Copy audit entry link` handoffs",
+		"preserve the current audit filters and stable row anchor",
+		"exact immutable audit row operators reviewed",
 	} {
 		if !strings.Contains(section, fragment) {
 			t.Fatalf("expected deployment-scoped audit workspace docs to include clearable chip contract %q", fragment)
