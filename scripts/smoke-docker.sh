@@ -2119,6 +2119,7 @@ for fragment in (
     "Open container recent logs",
     "params.set('containerName', containerName);",
     "Lookup path ·",
+    "Inspection path ·",
     "Provider lookup context",
     "recent-log-lookup-context-card",
     "provider-lookup-context-card",

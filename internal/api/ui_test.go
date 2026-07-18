@@ -5024,6 +5024,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"'relatedLogRoutes'",
 			"assert 'recent-log-lookup-context-card' in ui, ui",
 			"assert 'provider-lookup-context-card' in ui, ui",
+			"assert 'Inspection path ·' in ui, ui",
 		},
 		"../../scripts/smoke-docker.sh": {
 			"limited_worker_resource_logs=$(curl -fsS \"$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=1\")",
@@ -5054,6 +5055,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"\"node.setAttribute('aria-atomic', 'true');\"",
 			"\"recent-log-lookup-context-card\"",
 			"\"provider-lookup-context-card\"",
+			"\"Inspection path ·\"",
 			"\"audit-freshness\"",
 			"\"Last refreshed · ${fetchedAt}\"",
 			"\"meta.setAttribute('role', 'status');\"",
