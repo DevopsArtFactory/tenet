@@ -303,7 +303,7 @@ scripts/ci-smoke-runner-evidence.sh --summary <run-id>
 ```
 
 The detailed runner-start evidence bundle remains available by omitting `--summary`; see
-`docs/runbooks/ci-smoke-runner-start.md`, including newer `startup_failure` runs where the Actions jobs API returns `jobs: []` before per-job runner records exist.
+`docs/runbooks/ci-smoke-runner-start.md`, including newer `startup_failure` runs where the Actions jobs API returns `jobs: []` before per-job runner records exist. Runner-start closeout requires a real runner assignment, non-empty `steps[]`, the fast lane reaching repository commands, and the Docker lane reaching `make smoke-docker` or actionable logs on `main` / Docker-scoped changes; PR-head recovery and `main` recovery are separate signals. Before posting another #850 or PR note, avoid duplicate evidence for the same run URL, head SHA, attempt, and failure shape.
 
 ## Documentation Map
 

@@ -88,6 +88,8 @@ Local verification on this branch is green:
 - unset GOROOT GOPATH; export PATH=/opt/homebrew/bin:$PATH; make smoke-docker   # when the slice touches Docker-smoke scope
 ```
 
+Before adding another runner-start note, check the latest comments on the PR and the active runner-availability issue. Do not post duplicate evidence for the same run URL, head SHA, attempt, and failure shape; a newer rerun only needs a fresh comment when it changes the head, reaches a different lane, or produces a materially different runner/log signal.
+
 ## Avoid false recovery signals
 
 A rerun request alone is not recovery evidence. Before closing #850 or telling a reviewer that hosted CI recovered, verify the current run or replacement run has all of these signals:
@@ -128,6 +130,8 @@ After the GitHub account condition is cleared:
 4. Confirm the fast lane reaches `go test ./...`, smoke script syntax checks, and `make smoke-local`.
 5. On `main` or Docker-scoped PRs, confirm the Docker lane reaches `make smoke-docker` or produces normal actionable logs.
 6. Comment on issue #850 with the recovered run URL and whether the repository commands passed or exposed a new actionable repo-side failure.
+
+Treat PR-head recovery and `main` recovery as separate signals. A green or actionable PR-head rerun tells reviewers whether a specific branch is reviewable; it does not close the release-readiness gap for `main`. A green or actionable `main` rerun proves the post-merge release signal recovered, but it does not replace required PR-head evidence for an open branch whose checks were blocked.
 
 ## Post-recovery release-health checklist
 

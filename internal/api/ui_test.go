@@ -5351,7 +5351,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"no job steps, no downloadable repo logs",
 			"failed payments or a spending limit that needs to be increased",
 			"The focused runbook in `docs/runbooks/ci-smoke-runner-start.md` and helper `scripts/ci-smoke-runner-evidence.sh <run-id>` show the exact `gh run view` plus Actions jobs API commands, the `runner_id=0` / `steps=[]` evidence pattern, rerun-target selection, post-recovery release-health checklist, and closeout comment template for issue #850; `scripts/ci-smoke-runner-evidence.sh --summary <run-id>`",
-			"For the first recovered `main` run, require non-empty `steps[]`, real runner assignment, fast-lane evidence that `go test ./...`, smoke-script syntax checks, and `make smoke-local` were reached",
+			"For the first recovered `main` run, require non-empty `steps[]`, a real runner assignment, fast-lane evidence that `go test ./...`, smoke-script syntax checks, and `make smoke-local` were reached",
 			"remaining red checks are normal actionable CI failures: inspect logs, reproduce locally, and link the repo-side follow-up",
 			"rely on local `go test ./...`, `make smoke-local`, and `make smoke-docker` output for code-level reproduction",
 			"syntax-checks `scripts/smoke-local.sh`, `scripts/smoke-docker.sh`, and the runner-start evidence helper `scripts/ci-smoke-runner-evidence.sh` with `bash -n`, then runs `make smoke-local`",

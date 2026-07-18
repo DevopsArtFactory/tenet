@@ -408,6 +408,8 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 	helperText := readTextFile(t, "../scripts/ci-smoke-runner-evidence.sh")
 	readmeText := readTextFile(t, "../README.md")
 	workflowText := readTextFile(t, "../.github/workflows/ci-smoke.yml")
+	localRuntimeText := readTextFile(t, "architecture/tenet-v1-local-runtime.md")
+	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
 
 	for _, fragment := range []string{
 		"scripts/ci-smoke-runner-evidence.sh <run-id>",
@@ -422,6 +424,10 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 		"log not found",
 		"billing/spending-limit",
 		"bash -n scripts/ci-smoke-runner-evidence.sh",
+		"Do not post duplicate evidence for the same run URL, head SHA, attempt, and failure shape",
+		"Treat PR-head recovery and `main` recovery as separate signals",
+		"Fast smoke reached repository commands: go test ./..., smoke script syntax checks, and make smoke-local",
+		"Docker smoke reached make smoke-docker or produced normal actionable logs",
 	} {
 		if !strings.Contains(runbookText, fragment) {
 			t.Fatalf("expected runner-start runbook to include %q", fragment)
@@ -448,6 +454,9 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 	for _, fragment := range []string{
 		"scripts/ci-smoke-runner-evidence.sh --summary <run-id>",
 		"docs/runbooks/ci-smoke-runner-start.md",
+		"Runner-start closeout requires a real runner assignment, non-empty `steps[]`, the fast lane reaching repository commands, and the Docker lane reaching `make smoke-docker` or actionable logs",
+		"PR-head recovery and `main` recovery are separate signals",
+		"avoid duplicate evidence for the same run URL, head SHA, attempt, and failure shape",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README to point operators at runner-start evidence helper/runbook via %q", fragment)
@@ -456,6 +465,24 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 
 	if !strings.Contains(workflowText, "run: bash -n scripts/ci-smoke-runner-evidence.sh") {
 		t.Fatalf("expected CI Smoke workflow to syntax-check runner-start evidence helper")
+	}
+
+	for _, doc := range []struct {
+		name string
+		text string
+	}{
+		{name: "local runtime docs", text: localRuntimeText},
+		{name: "operator contracts docs", text: operatorContractsText},
+	} {
+		for _, fragment := range []string{
+			"non-empty `steps[]`, a real runner assignment",
+			"PR-head and `main` recovery",
+			"duplicate comments for the same run/head/attempt/failure shape",
+		} {
+			if !strings.Contains(doc.text, fragment) {
+				t.Fatalf("expected %s to lock runner-start closeout wording %q", doc.name, fragment)
+			}
+		}
 	}
 }
 
