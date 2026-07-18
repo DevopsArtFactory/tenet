@@ -9252,7 +9252,14 @@ class Document {
 }
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+process.on('unhandledRejection', () => {});
 async function settle(count = 1) { for (let i = 0; i < count; i += 1) { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); } }
+const panelResponse = (payload) => {
+  const headerRequestId = String(payload?.__requestId || '').trim();
+  const headers = { get(name) { return String(name || '').toLowerCase() === 'request-id' ? headerRequestId : ''; } };
+  if (payload?.__status) return Promise.resolve({ ok: false, status: payload.__status, headers, text: () => Promise.resolve(payload.__body || '') });
+  return Promise.resolve({ ok: true, status: 200, headers, json: () => Promise.resolve(payload) });
+};
 async function renderResource(logPayload, inspectionPayload, eventsPayload = { deploymentName: 'payments-api-staging', events: [{ timestamp: '2026-04-18T00:12:00Z', source: 'controller', summary: 'Service stability verified' }] }) {
   const document = new Document();
   document.byID.set('toolbar', document.createElement('section'));
@@ -9266,9 +9273,9 @@ async function renderResource(logPayload, inspectionPayload, eventsPayload = { d
   const history = { replaceState(_state, _title, url) { const [pathAndQuery, hash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
   const fetch = (url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&containerName=app&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(logPayload) });
-    if (url === '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve(inspectionPayload) });
-    if (url === '/v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve(eventsPayload) });
+    if (url === '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&containerName=app&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod') return panelResponse(logPayload);
+    if (url === '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod&limit=10') return panelResponse(inspectionPayload);
+    if (url === '/v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10') return panelResponse(eventsPayload);
     throw new Error('unexpected fetch url: ' + url);
   };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -9328,6 +9335,20 @@ async function renderResource(logPayload, inspectionPayload, eventsPayload = { d
   if (!unavailableText.includes('Live inspection | Unavailable · AWS access unavailable')) throw new Error('expected AWS-unavailable inspection summary state: ' + unavailableText);
   if (!unavailableText.match(/Evidence freshness \| Related runtime events refreshed .+ · Recent logs refreshed .+ · Live inspection refreshed .+/)) throw new Error('expected completed unavailable evidence reads to still surface freshness in summary: ' + unavailableText);
   if (!unavailableText.includes('Recommended next check | Cross-account observer role wiring is missing for this resource evidence lookup; configure the observer role, then refresh Recent logs and Live inspection.')) throw new Error('expected cross-account next-step guidance: ' + unavailableText);
+
+  const guardedRun = await renderResource(
+    { __status: 403, __requestId: 'req-logs-denied-1732', __body: 'forbidden: deployment not allowed' },
+    {
+      available: true,
+      source: 'ecs_service',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true },
+      ecsService: { serviceName: 'payments-api-staging-service', status: 'ACTIVE', desiredCount: 2, runningCount: 2, pendingCount: 0, deployments: [], events: [] },
+    },
+  );
+  const guardedText = guardedRun.accountsText;
+  if (!guardedText.includes('Recent logs | Fetch error · resource logs request failed (403): forbidden: deployment not allowed')) throw new Error('expected guarded recent-log error state: ' + guardedText);
+  if (!guardedText.includes('Evidence request IDs | Logs req-logs-denied-1732')) throw new Error('expected guarded read request ID in summary: ' + guardedText);
+  if (!guardedText.includes('Recommended next check | One focused evidence read was denied by deployment authorization; use the Tenet request ID to verify allowed deployment scope, then refresh only the denied panel.')) throw new Error('expected guarded-read recommended next check: ' + guardedText);
 })();
 `
 
