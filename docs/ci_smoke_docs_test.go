@@ -1114,7 +1114,8 @@ func TestPlanWorkspaceDocsMentionCopyableWorkspaceReadRoute(t *testing.T) {
 	}
 	for _, fragment := range []string{
 		"| Drift workspace | `/?page=drift&deployment={deploymentName}` | `GET /v1/overview/deployments/{deploymentName}` |",
-		"drift-source mode, managed-drift row counts, severity/query filters, and runtime context",
+		"drift-source mode, `Drift source coverage` states, managed-drift row counts, `Share drift row` anchors, `_self` `Open resource evidence` handoffs, severity/query filters, and runtime context",
+		"coverage entries can show sources with rows, checked-empty, unsupported, or unavailable evidence",
 		"filtered-empty rows mean the current query/severity controls are hiding evidence",
 		"`Workspace JSON` / `Copy workspace read route` handoffs to the current deployment-detail read",
 	} {
