@@ -2612,6 +2612,9 @@ assert "const resourceTroubleshootingRequestIDFromState = (state) => {" in ui, u
 assert "['Evidence request IDs', resourceTroubleshootingRequestIDs(states)]" in ui, ui
 assert "['Recommended next check', resourceTroubleshootingNextCheck(states)]" in ui, ui
 assert "resourceTroubleshootingFreshnessPart('Recent logs', states.logsState, states.supportsLogs)" in ui, ui
+assert "`${label} refresh in progress`" in ui, ui
+assert "`${label} attempted ${attemptedAt} (failed)`" in ui, ui
+assert "`${label} attempted but failed`" in ui, ui
 assert "refreshResourceTroubleshootingSummary(deploymentName, resource);" in ui, ui
 assert "pushResourceSection(troubleshootingSection, 'resource-troubleshooting-summary', 'Troubleshooting summary');" in ui, ui
 assert "pushResourceSection(historySection, 'resource-runtime-history', 'Runtime history');" in ui, ui
@@ -2674,6 +2677,7 @@ assert "createCopyReadRouteButton(readRoute, 'Copy recent logs route')" in ui, u
 assert "const responseRequestID = (response) => {" in ui, ui
 assert "Tenet request ID" in ui, ui
 assert "Last refreshed" in ui, ui
+assert "const withResourcePanelAttemptedAt = (error) => {" in ui, ui
 assert "tenetRequestId: requestId" in ui, ui
 assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('resource', {" in ui, ui

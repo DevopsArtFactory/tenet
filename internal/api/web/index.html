@@ -4502,6 +4502,11 @@
       };
       const resourceTroubleshootingFreshnessPart = (label, state, supported = true) => {
         if (!supported) return `${label} unsupported for this resource type`;
+        if (state?.status === 'loading') return `${label} refresh in progress`;
+        if (state?.status === 'error') {
+          const attemptedAt = resourcePanelFetchedAtText(state.error);
+          return attemptedAt ? `${label} attempted ${attemptedAt} (failed)` : `${label} attempted but failed`;
+        }
         if (state?.status !== 'ready') return `${label} not refreshed yet`;
         const fetchedAt = resourcePanelFetchedAtText(state.result);
         return fetchedAt ? `${label} refreshed ${fetchedAt}` : `${label} not refreshed yet`;
@@ -6476,9 +6481,9 @@
             scrollToCurrentHashTarget();
             return result;
           })
-          .catch((error) => {
+          .catch((rawError) => {
             const current = resourceLogStateByKey.get(logsKey);
-            const stampedError = withResourcePanelAttemptedAt(error);
+            const stampedError = withResourcePanelAttemptedAt(rawError);
             resourceLogStateByKey.set(logsKey, { status: 'error', error: stampedError });
             (current?.sections || []).forEach((target) => {
               const container = target?.section || target;
@@ -7916,9 +7921,9 @@
             scrollToCurrentHashTarget();
             return result;
           })
-          .catch((error) => {
+          .catch((rawError) => {
             const current = resourceInspectionStateByKey.get(inspectionKey);
-            const stampedError = withResourcePanelAttemptedAt(error);
+            const stampedError = withResourcePanelAttemptedAt(rawError);
             resourceInspectionStateByKey.set(inspectionKey, { status: 'error', error: stampedError });
             (current?.sections || []).forEach((target) => {
               const container = target?.section || target;
