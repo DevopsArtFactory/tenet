@@ -73,7 +73,7 @@ gh pr view <pr-number> --json statusCheckRollup \
 
 ## Triage decision
 
-- If `runner_id=0`, `steps=[]`, and an account-level billing/spending-limit annotation is present, classify the incident as external GitHub Actions runner availability. Track it on issue #850 or the current runner-availability issue instead of opening a product-fix PR.
+- If `runner_id=0`, `steps=[]`, and an account-level billing/spending-limit annotation is present, classify the incident as external GitHub Actions runner availability. Track it on issue #1661 or the current runner-availability issue instead of opening a product-fix PR.
 - If the job has normal steps and logs, diagnose it as an ordinary CI failure: read the failed command output, reproduce locally, and fix the repo-side regression.
 
 ## Temporary PR evidence
@@ -92,7 +92,7 @@ Before adding another runner-start note, check the latest comments on the PR and
 
 ## Avoid false recovery signals
 
-A rerun request alone is not recovery evidence. Before closing #850 or telling a reviewer that hosted CI recovered, verify the current run or replacement run has all of these signals:
+A rerun request alone is not recovery evidence. Before closing #1661 or telling a reviewer that hosted CI recovered, verify the current run or replacement run has all of these signals:
 
 - at least one real runner assignment (`runner_id` is not `0`, or `runner_name` is populated)
 - non-empty `steps[]` that include repository setup or checkout work
@@ -129,20 +129,20 @@ After the GitHub account condition is cleared:
 3. Verify the rerun has non-empty job steps and a real runner assignment.
 4. Confirm the fast lane reaches `go test ./...`, smoke script syntax checks, and `make smoke-local`.
 5. On `main` or Docker-scoped PRs, confirm the Docker lane reaches `make smoke-docker` or produces normal actionable logs.
-6. Comment on issue #850 with the recovered run URL and whether the repository commands passed or exposed a new actionable repo-side failure.
+6. Comment on issue #1661 with the recovered run URL and whether the repository commands passed or exposed a new actionable repo-side failure.
 
 Treat PR-head recovery and `main` recovery as separate signals. A green or actionable PR-head rerun tells reviewers whether a specific branch is reviewable; it does not close the release-readiness gap for `main`. A green or actionable `main` rerun proves the post-merge release signal recovered, but it does not replace required PR-head evidence for an open branch whose checks were blocked.
 
 ## Post-recovery release-health checklist
 
-Use this checklist for the first `main` run that starts after the account-level runner blocker is fixed. The goal is to prove the hosted release signal recovered before anyone treats remaining red checks as product regressions or closes issue #850.
+Use this checklist for the first `main` run that starts after the account-level runner blocker is fixed. The goal is to prove the hosted release signal recovered before anyone treats remaining red checks as product regressions or closes issue #1661.
 
 - Rerun the newest failed `main` `CI Smoke` run, or dispatch a fresh `CI Smoke` run on `main` if GitHub no longer allows rerunning the old run.
 - Confirm `Fast smoke` and `Docker smoke scope` have non-empty `steps[]` plus a real runner assignment. A recovered run must show repository steps such as checkout/setup instead of the pre-runner `runner_id=0` / `steps=[]` pattern.
 - Confirm the fast lane reaches the repository commands documented in `.github/workflows/ci-smoke.yml`: `go test ./...`, `bash -n scripts/smoke-local.sh`, `bash -n scripts/smoke-docker.sh`, `bash -n scripts/ci-smoke-runner-evidence.sh`, and `make smoke-local`.
 - For `main`, confirm the Docker lane either reaches `make smoke-docker` or fails with normal downloadable logs from repository commands. Do not require the Docker lane on unrelated PRs just to prove runner recovery; keep the existing CI cost profile intact.
 - If any command fails after steps are non-empty, classify it as a normal actionable CI failure: read the logs, reproduce locally, and open or link the repo-side follow-up. Do not keep labeling post-recovery command failures as the billing/spending-limit blocker.
-- Leave one concrete #850 comment with the run URL, the non-empty `steps[]` evidence, the first repository command reached in each lane, and the follow-up issue/PR for any remaining product failure. Close #850 only after this evidence is recorded.
+- Leave one concrete #1661 comment with the run URL, the non-empty `steps[]` evidence, the first repository command reached in each lane, and the follow-up issue/PR for any remaining product failure. Close #1661 only after this evidence is recorded.
 
 ## Closeout comment template
 
