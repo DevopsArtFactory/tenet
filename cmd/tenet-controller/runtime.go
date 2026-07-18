@@ -14,6 +14,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/placement"
 	"github.com/DevopsArtFactory/tenet/internal/reconcile"
+	"github.com/DevopsArtFactory/tenet/internal/resourceaws"
 	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
@@ -128,8 +129,9 @@ func emitRuntimePlansForRefresh(ctx context.Context, logger *log.Logger, config 
 		plan := planner.Build(deployment, status)
 		status = normalizeRuntimeStatus(deployment, status, plan)
 		status.Rollout = deriveRolloutSummary(deployment, status, plan)
-		liveCapacity := runtimeLiveCapacity(ctx, logger, liveInspectionService, compiled.Accounts, compiled.Environments, deployment)
-		liveTrafficRouting := runtimeLiveTrafficRouting(ctx, logger, liveInspectionService, compiled.Accounts, compiled.Environments, deployment)
+		liveCapacity, capacityObservations := runtimeLiveCapacity(ctx, logger, liveInspectionService, compiled.Accounts, compiled.Environments, deployment)
+		liveTrafficRouting, trafficRoutingObservations := runtimeLiveTrafficRouting(ctx, logger, liveInspectionService, compiled.Accounts, compiled.Environments, deployment)
+		status.RuntimeObservations = normalizeRuntimeObservations(append(capacityObservations, trafficRoutingObservations...))
 		status.ManagedDrift = deriveManagedDriftItems(deployment, status, liveCapacity, liveTrafficRouting...)
 		status = applyControllerManagedDriftStatus(status, plan)
 		status.History = appendRuntimeHistoryWithLimit(previousStatus, status, runtimeHistoryLimit)
@@ -312,10 +314,10 @@ func normalizeRuntimeHistoryEntryContext(entry domain.StatusHistoryEntry, fallba
 	return entry
 }
 
-func runtimeLiveCapacity(ctx context.Context, logger *log.Logger, inspector resourceinspection.Service, accounts []domain.Account, environments []domain.Environment, deployment domain.Deployment) *runtimeLiveCapacityObservation {
-	observation, err := runtimeLiveCapacityLookup(ctx, inspector, accounts, environments, deployment)
+func runtimeLiveCapacity(ctx context.Context, logger *log.Logger, inspector resourceinspection.Service, accounts []domain.Account, environments []domain.Environment, deployment domain.Deployment) (*runtimeLiveCapacityObservation, []domain.RuntimeObservation) {
+	observation, runtimeObservations, err := runtimeLiveCapacityLookup(ctx, inspector, accounts, environments, deployment)
 	if err == nil {
-		return observation
+		return observation, runtimeObservations
 	}
 	if logger != nil {
 		logger.Printf(
@@ -325,13 +327,13 @@ func runtimeLiveCapacity(ctx context.Context, logger *log.Logger, inspector reso
 			err,
 		)
 	}
-	return nil
+	return nil, runtimeObservations
 }
 
-func runtimeLiveTrafficRouting(ctx context.Context, logger *log.Logger, inspector resourceinspection.Service, accounts []domain.Account, environments []domain.Environment, deployment domain.Deployment) []runtimeLiveTrafficRoutingObservation {
-	observations, err := runtimeLiveTrafficRoutingLookupFromInspection(ctx, inspector, accounts, environments, deployment)
+func runtimeLiveTrafficRouting(ctx context.Context, logger *log.Logger, inspector resourceinspection.Service, accounts []domain.Account, environments []domain.Environment, deployment domain.Deployment) ([]runtimeLiveTrafficRoutingObservation, []domain.RuntimeObservation) {
+	observations, runtimeObservations, err := runtimeLiveTrafficRoutingLookupFromInspection(ctx, inspector, accounts, environments, deployment)
 	if err == nil {
-		return observations
+		return observations, runtimeObservations
 	}
 	if logger != nil {
 		logger.Printf(
@@ -341,31 +343,36 @@ func runtimeLiveTrafficRouting(ctx context.Context, logger *log.Logger, inspecto
 			err,
 		)
 	}
-	return nil
+	return observations, runtimeObservations
 }
 
-func runtimeLiveTrafficRoutingLookupFromInspection(ctx context.Context, inspector resourceinspection.Service, accounts []domain.Account, environments []domain.Environment, deployment domain.Deployment) ([]runtimeLiveTrafficRoutingObservation, error) {
+func runtimeLiveTrafficRoutingLookupFromInspection(ctx context.Context, inspector resourceinspection.Service, accounts []domain.Account, environments []domain.Environment, deployment domain.Deployment) ([]runtimeLiveTrafficRoutingObservation, []domain.RuntimeObservation, error) {
 	resources := runtimeLiveTrafficRoutingResources(deployment)
 	if len(resources) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
-	resolved, err := (placement.Resolver{}).Resolve(accounts, environments, deployment)
+	resolved, account, err := resolveRuntimeObservationPlacement(accounts, environments, deployment)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	observations := make([]runtimeLiveTrafficRoutingObservation, 0, len(resources))
+	runtimeObservations := make([]domain.RuntimeObservation, 0, len(resources))
 	for _, resource := range resources {
 		result, err := inspector.Inspect(ctx, resourceinspection.Request{
 			DeploymentName:      deployment.Name,
 			ResourceType:        resource.Resource,
 			ResourceName:        resource.Name,
 			ResourceDescription: resource.Description,
+			ControlAccountID:    resolved.AccountID,
 			TargetAccountID:     resolved.AccountID,
 			Region:              resolved.Region,
+			ObserverRoleARN:     account.ObserverRoleARN,
 		})
 		if err != nil {
-			return observations, err
+			runtimeObservations = append(runtimeObservations, runtimeObservationFromError(resource.Resource, resource.Name, err))
+			return observations, runtimeObservations, err
 		}
+		runtimeObservations = append(runtimeObservations, runtimeObservationFromInspectionResult(result))
 		if !result.Available || result.TrafficRoutingResource == nil || result.TrafficRoutingResource.InspectionMode != "live" {
 			continue
 		}
@@ -375,7 +382,7 @@ func runtimeLiveTrafficRoutingLookupFromInspection(ctx context.Context, inspecto
 			Detail:       *result.TrafficRoutingResource,
 		})
 	}
-	return observations, nil
+	return observations, runtimeObservations, nil
 }
 
 func runtimeLiveTrafficRoutingResources(deployment domain.Deployment) []domain.RolloutExecutionDetail {
@@ -389,27 +396,30 @@ func runtimeLiveTrafficRoutingResources(deployment domain.Deployment) []domain.R
 	return resources
 }
 
-func runtimeLiveCapacityLookupFromInspection(ctx context.Context, inspector resourceinspection.Service, accounts []domain.Account, environments []domain.Environment, deployment domain.Deployment) (*runtimeLiveCapacityObservation, error) {
+func runtimeLiveCapacityLookupFromInspection(ctx context.Context, inspector resourceinspection.Service, accounts []domain.Account, environments []domain.Environment, deployment domain.Deployment) (*runtimeLiveCapacityObservation, []domain.RuntimeObservation, error) {
 	resourceType, resourceName, ok := runtimeLiveCapacityResource(deployment)
 	if !ok {
-		return nil, nil
+		return nil, nil, nil
 	}
-	resolved, err := (placement.Resolver{}).Resolve(accounts, environments, deployment)
+	resolved, account, err := resolveRuntimeObservationPlacement(accounts, environments, deployment)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	result, err := inspector.Inspect(ctx, resourceinspection.Request{
-		DeploymentName:  deployment.Name,
-		ResourceType:    resourceType,
-		ResourceName:    resourceName,
-		TargetAccountID: resolved.AccountID,
-		Region:          resolved.Region,
+		DeploymentName:   deployment.Name,
+		ResourceType:     resourceType,
+		ResourceName:     resourceName,
+		ControlAccountID: resolved.AccountID,
+		TargetAccountID:  resolved.AccountID,
+		Region:           resolved.Region,
+		ObserverRoleARN:  account.ObserverRoleARN,
 	})
 	if err != nil {
-		return nil, err
+		return nil, []domain.RuntimeObservation{runtimeObservationFromError(resourceType, resourceName, err)}, err
 	}
+	runtimeObservations := []domain.RuntimeObservation{runtimeObservationFromInspectionResult(result)}
 	if !result.Available {
-		return nil, nil
+		return nil, runtimeObservations, nil
 	}
 	if result.AutoScalingGroup != nil {
 		launchTemplateImageID := ""
@@ -427,7 +437,7 @@ func runtimeLiveCapacityLookupFromInspection(ctx context.Context, inspector reso
 			LaunchTemplateImageID:         launchTemplateImageID,
 			LaunchTemplateInstanceType:    launchTemplateInstanceType,
 			LaunchTemplateBootstrapSource: strings.TrimSpace(result.AutoScalingGroup.LaunchTemplateBootstrapSource),
-		}, nil
+		}, runtimeObservations, nil
 	}
 	if result.ECSService != nil {
 		return &runtimeLiveCapacityObservation{
@@ -438,9 +448,9 @@ func runtimeLiveCapacityLookupFromInspection(ctx context.Context, inspector reso
 			MinimumHealthyPercent:         result.ECSService.MinimumHealthyPercent,
 			MaximumPercent:                result.ECSService.MaximumPercent,
 			HealthCheckGracePeriodSeconds: result.ECSService.HealthCheckGracePeriodSeconds,
-		}, nil
+		}, runtimeObservations, nil
 	}
-	return nil, nil
+	return nil, runtimeObservations, nil
 }
 
 func runtimeLiveCapacityResource(deployment domain.Deployment) (resourceType string, resourceName string, ok bool) {
@@ -451,6 +461,69 @@ func runtimeLiveCapacityResource(deployment domain.Deployment) (resourceType str
 		}
 	}
 	return "", "", false
+}
+
+func resolveRuntimeObservationPlacement(accounts []domain.Account, environments []domain.Environment, deployment domain.Deployment) (placement.Placement, domain.Account, error) {
+	resolved, err := (placement.Resolver{}).Resolve(accounts, environments, deployment)
+	if err != nil {
+		return placement.Placement{}, domain.Account{}, err
+	}
+	for _, account := range accounts {
+		if account.Name == resolved.AccountName {
+			return resolved, account, nil
+		}
+	}
+	return resolved, domain.Account{}, nil
+}
+
+func runtimeObservationFromInspectionResult(result resourceinspection.Result) domain.RuntimeObservation {
+	resourceType := strings.TrimSpace(result.ResourceType)
+	resourceName := strings.TrimSpace(result.ResourceName)
+	source := strings.TrimSpace(result.Source)
+	if source == "" {
+		source = "resource_inspection"
+	}
+	reason := strings.TrimSpace(result.UnavailableReason)
+	observation := domain.RuntimeObservation{
+		ResourceType:      resourceType,
+		ResourceName:      resourceName,
+		Source:            source,
+		Available:         result.Available,
+		UnavailableReason: reason,
+	}
+	observation.Summary = runtimeObservationSummary(observation)
+	return observation
+}
+
+func runtimeObservationFromError(resourceType string, resourceName string, err error) domain.RuntimeObservation {
+	reason, ok := resourceaws.UnavailableReasonForError(err)
+	if !ok {
+		reason = resourceaws.UnavailableReasonProviderError
+	}
+	observation := domain.RuntimeObservation{
+		ResourceType:      strings.TrimSpace(resourceType),
+		ResourceName:      strings.TrimSpace(resourceName),
+		Source:            "resource_inspection",
+		Available:         false,
+		UnavailableReason: reason,
+	}
+	observation.Summary = runtimeObservationSummary(observation)
+	return observation
+}
+
+func runtimeObservationSummary(observation domain.RuntimeObservation) string {
+	label := strings.TrimSpace(observation.ResourceType + " " + observation.ResourceName)
+	if label == "" {
+		label = "rollout resource"
+	}
+	if observation.Available {
+		return "Live read-only observation for " + label + " is available."
+	}
+	reason := strings.TrimSpace(observation.UnavailableReason)
+	if reason == "" {
+		reason = "unknown"
+	}
+	return "Live read-only observation for " + label + " is unavailable: " + reason
 }
 
 func managedDriftResourceRef(observation *runtimeLiveCapacityObservation) *domain.ManagedDriftResourceRef {
@@ -816,6 +889,60 @@ func normalizeManagedDriftItems(items []domain.ManagedDriftItem) []domain.Manage
 	return domain.AssignManagedDriftIDs(normalized)
 }
 
+func normalizeRuntimeObservations(observations []domain.RuntimeObservation) []domain.RuntimeObservation {
+	if len(observations) == 0 {
+		return nil
+	}
+	normalized := make([]domain.RuntimeObservation, 0, len(observations))
+	seen := make(map[string]struct{}, len(observations))
+	for _, observation := range observations {
+		observation.ResourceType = strings.TrimSpace(observation.ResourceType)
+		observation.ResourceName = strings.TrimSpace(observation.ResourceName)
+		observation.Source = strings.TrimSpace(observation.Source)
+		if observation.Source == "" {
+			observation.Source = "resource_inspection"
+		}
+		observation.UnavailableReason = strings.TrimSpace(observation.UnavailableReason)
+		observation.Summary = strings.TrimSpace(observation.Summary)
+		if observation.Summary == "" {
+			observation.Summary = runtimeObservationSummary(observation)
+		}
+		if observation.ResourceType == "" && observation.ResourceName == "" && observation.UnavailableReason == "" && observation.Summary == "" {
+			continue
+		}
+		key := strings.Join([]string{observation.ResourceType, observation.ResourceName, observation.Source, fmt.Sprintf("%t", observation.Available), observation.UnavailableReason, observation.Summary}, "\x00")
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, observation)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	sort.Slice(normalized, func(i, j int) bool {
+		left := normalized[i]
+		right := normalized[j]
+		if left.ResourceType != right.ResourceType {
+			return left.ResourceType < right.ResourceType
+		}
+		if left.ResourceName != right.ResourceName {
+			return left.ResourceName < right.ResourceName
+		}
+		if left.Source != right.Source {
+			return left.Source < right.Source
+		}
+		if left.Available != right.Available {
+			return !left.Available && right.Available
+		}
+		if left.UnavailableReason != right.UnavailableReason {
+			return left.UnavailableReason < right.UnavailableReason
+		}
+		return left.Summary < right.Summary
+	})
+	return normalized
+}
+
 func managedDriftItemLess(left domain.ManagedDriftItem, right domain.ManagedDriftItem) bool {
 	if left.Field != right.Field {
 		return left.Field < right.Field
@@ -885,6 +1012,10 @@ func runtimeHistoryDiff(previous domain.StatusHistoryEntry, current domain.Statu
 		changes = append(changes, "managedDrift")
 		details = append(details, describeManagedDriftDelta(previous.ManagedDrift, current.ManagedDrift))
 	}
+	if !reflect.DeepEqual(previous.RuntimeObservations, current.RuntimeObservations) {
+		changes = append(changes, "runtimeObservations")
+		details = append(details, describeRuntimeObservationDelta(previous.RuntimeObservations, current.RuntimeObservations))
+	}
 	if !runtimeHistoryConditionsEqual(previous.Conditions, current.Conditions) {
 		changes = append(changes, "conditions")
 		details = append(details, fmt.Sprintf("Conditions changed to %s", describeConditions(current.Conditions)))
@@ -953,6 +1084,42 @@ func describeManagedDrift(items []domain.ManagedDriftItem) string {
 			part += fmt.Sprintf(" [%s]", item.Severity)
 		}
 		parts = append(parts, part)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func describeRuntimeObservationDelta(previous []domain.RuntimeObservation, current []domain.RuntimeObservation) string {
+	previousObservations := normalizeRuntimeObservations(previous)
+	currentObservations := normalizeRuntimeObservations(current)
+	if len(currentObservations) == 0 {
+		return "Runtime observations changed to none"
+	}
+	if len(previousObservations) == 0 {
+		return "Runtime observations changed to " + describeRuntimeObservations(currentObservations)
+	}
+	return "Runtime observations changed to " + describeRuntimeObservations(currentObservations)
+}
+
+func describeRuntimeObservations(observations []domain.RuntimeObservation) string {
+	observations = normalizeRuntimeObservations(observations)
+	if len(observations) == 0 {
+		return "none"
+	}
+	parts := make([]string, 0, len(observations))
+	for _, observation := range observations {
+		label := strings.TrimSpace(observation.ResourceType + " " + observation.ResourceName)
+		if label == "" {
+			label = "rollout resource"
+		}
+		if observation.Available && observation.UnavailableReason == "" {
+			parts = append(parts, label+" available")
+			continue
+		}
+		reason := strings.TrimSpace(observation.UnavailableReason)
+		if reason == "" {
+			reason = "unknown"
+		}
+		parts = append(parts, label+" unavailable: "+reason)
 	}
 	return strings.Join(parts, ", ")
 }
@@ -1176,14 +1343,15 @@ func buildRuntimeHistoryRetention(limit int, retainedEventCount int) *domain.Run
 
 func deriveRuntimeHistoryEntry(status domain.DeploymentStatus) domain.StatusHistoryEntry {
 	entry := domain.StatusHistoryEntry{
-		Source:             runtimeHistorySourceController,
-		Summary:            "Runtime status updated",
-		ManagedDrift:       normalizeManagedDriftItems(status.ManagedDrift),
-		DeployedArtifact:   status.DeployedArtifact,
-		Conditions:         normalizeRuntimeHistoryConditions(status.Conditions),
-		Sync:               status.Sync,
-		Health:             status.Health,
-		ObservedGeneration: status.ObservedGeneration,
+		Source:              runtimeHistorySourceController,
+		Summary:             "Runtime status updated",
+		ManagedDrift:        normalizeManagedDriftItems(status.ManagedDrift),
+		RuntimeObservations: normalizeRuntimeObservations(status.RuntimeObservations),
+		DeployedArtifact:    status.DeployedArtifact,
+		Conditions:          normalizeRuntimeHistoryConditions(status.Conditions),
+		Sync:                status.Sync,
+		Health:              status.Health,
+		ObservedGeneration:  status.ObservedGeneration,
 	}
 	if status.Rollout != nil {
 		entry.Summary = status.Rollout.Summary
@@ -1255,6 +1423,7 @@ func runtimeHistoryMeaningfullyChanged(previous domain.StatusHistoryEntry, curre
 		previous.Summary != current.Summary ||
 		previous.DeployedArtifact != current.DeployedArtifact ||
 		!reflect.DeepEqual(previous.ManagedDrift, current.ManagedDrift) ||
+		!reflect.DeepEqual(previous.RuntimeObservations, current.RuntimeObservations) ||
 		!reflect.DeepEqual(previous.ResourceRefs, current.ResourceRefs) ||
 		!runtimeHistoryConditionsEqual(previous.Conditions, current.Conditions) ||
 		previous.Sync != current.Sync ||

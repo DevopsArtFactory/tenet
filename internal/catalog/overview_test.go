@@ -477,6 +477,46 @@ func TestDeriveRuntimeSummaryReturnsManagedDriftWithoutOtherRuntimeSignals(t *te
 	}
 }
 
+func TestDeriveRuntimeSummaryPreservesRuntimeObservationsFromHistoryAndFallback(t *testing.T) {
+	historyObservation := domain.RuntimeObservation{
+		ResourceType:      "candidateAutoScalingGroup",
+		ResourceName:      "payments-api-prod-candidate",
+		Source:            "resource_inspection",
+		Available:         false,
+		UnavailableReason: "aws_unavailable",
+		Summary:           "Live read-only observation for candidateAutoScalingGroup payments-api-prod-candidate is unavailable: aws_unavailable",
+	}
+	currentObservation := domain.RuntimeObservation{
+		ResourceType: "trafficShiftPlan",
+		ResourceName: "payments-api-prod-weighted-routing",
+		Source:       "rollout_execution_summary",
+		Available:    true,
+		Summary:      "Live read-only observation for trafficShiftPlan payments-api-prod-weighted-routing is available.",
+	}
+
+	summary := deriveRuntimeSummary(domain.DeploymentStatus{
+		RuntimeObservations: []domain.RuntimeObservation{currentObservation},
+		History: []domain.StatusHistoryEntry{{
+			Timestamp:           "2026-04-16T06:30:00Z",
+			Source:              "controller",
+			Summary:             "Runtime status updated",
+			RuntimeObservations: []domain.RuntimeObservation{historyObservation},
+		}},
+	})
+	if summary == nil || !reflect.DeepEqual(summary.RuntimeObservations, []domain.RuntimeObservation{historyObservation}) {
+		t.Fatalf("expected runtime summary to prefer history-backed runtime observations, got %+v", summary)
+	}
+	summary.RuntimeObservations[0].Summary = "mutated-by-caller"
+	fallback := deriveRuntimeSummary(domain.DeploymentStatus{RuntimeObservations: []domain.RuntimeObservation{currentObservation}})
+	if fallback == nil || !reflect.DeepEqual(fallback.RuntimeObservations, []domain.RuntimeObservation{currentObservation}) {
+		t.Fatalf("expected runtime summary fallback to preserve current runtime observations, got %+v", fallback)
+	}
+	fallback.RuntimeObservations[0].Summary = "fallback-mutated"
+	if currentObservation.Summary == "fallback-mutated" {
+		t.Fatalf("expected runtime observation fallback to be cloned defensively")
+	}
+}
+
 func TestBuildAccountOverviewsRuntimeEventCueUsesRetainedHistory(t *testing.T) {
 	catalog := manifest.Catalog{
 		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},

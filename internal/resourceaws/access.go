@@ -25,6 +25,7 @@ const (
 	UnavailableReasonNoInstances               = "no_instances"
 	UnavailableReasonResourceNotFound          = "resource_not_found"
 	UnavailableReasonAWSUnavailable            = "aws_unavailable"
+	UnavailableReasonProviderError             = "provider_error"
 )
 
 var awsUnavailableErrorSubstrings = []string{

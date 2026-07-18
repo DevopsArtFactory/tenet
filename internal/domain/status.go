@@ -251,28 +251,41 @@ type RuntimeEventResourceRef struct {
 	Context      string `json:"context,omitempty"`
 }
 
+// RuntimeObservation captures read-only controller-owned live observation
+// evidence for rollout resources. Unavailable observations are troubleshooting
+// evidence, not managed drift rows or mutation/execution telemetry.
+type RuntimeObservation struct {
+	ResourceType      string `json:"resourceType"`
+	ResourceName      string `json:"resourceName"`
+	Source            string `json:"source"`
+	Available         bool   `json:"available"`
+	UnavailableReason string `json:"unavailableReason,omitempty"`
+	Summary           string `json:"summary"`
+}
+
 // StatusHistoryEntry captures one operator-facing runtime history event.
 type StatusHistoryEntry struct {
-	EventID            string                     `json:"eventId,omitempty"`
-	Timestamp          string                     `json:"timestamp"`
-	Source             string                     `json:"source"`
-	Summary            string                     `json:"summary"`
-	Changes            []string                   `json:"changes,omitempty"`
-	ChangeDetails      []string                   `json:"changeDetails,omitempty"`
-	ControllerRefresh  *ControllerRefreshEvidence `json:"controllerRefresh,omitempty"`
-	ManagedDrift       []ManagedDriftItem         `json:"managedDrift,omitempty"`
-	ResourceRefs       []RuntimeEventResourceRef  `json:"resourceRefs,omitempty"`
-	DeployedArtifact   DeploymentArtifact         `json:"deployedArtifact,omitempty"`
-	Conditions         []Condition                `json:"conditions,omitempty"`
-	Sync               Sync                       `json:"sync"`
-	Health             Health                     `json:"health"`
-	DesiredGeneration  int64                      `json:"desiredGeneration"`
-	ObservedGeneration int64                      `json:"observedGeneration"`
-	RolloutPhase       RolloutPhase               `json:"rolloutPhase,omitempty"`
-	CurrentStep        string                     `json:"currentStep,omitempty"`
-	TargetType         string                     `json:"targetType,omitempty"`
-	Strategy           string                     `json:"strategy,omitempty"`
-	ExecutionMode      string                     `json:"executionMode,omitempty"`
+	EventID             string                     `json:"eventId,omitempty"`
+	Timestamp           string                     `json:"timestamp"`
+	Source              string                     `json:"source"`
+	Summary             string                     `json:"summary"`
+	Changes             []string                   `json:"changes,omitempty"`
+	ChangeDetails       []string                   `json:"changeDetails,omitempty"`
+	ControllerRefresh   *ControllerRefreshEvidence `json:"controllerRefresh,omitempty"`
+	ManagedDrift        []ManagedDriftItem         `json:"managedDrift,omitempty"`
+	RuntimeObservations []RuntimeObservation       `json:"runtimeObservations,omitempty"`
+	ResourceRefs        []RuntimeEventResourceRef  `json:"resourceRefs,omitempty"`
+	DeployedArtifact    DeploymentArtifact         `json:"deployedArtifact,omitempty"`
+	Conditions          []Condition                `json:"conditions,omitempty"`
+	Sync                Sync                       `json:"sync"`
+	Health              Health                     `json:"health"`
+	DesiredGeneration   int64                      `json:"desiredGeneration"`
+	ObservedGeneration  int64                      `json:"observedGeneration"`
+	RolloutPhase        RolloutPhase               `json:"rolloutPhase,omitempty"`
+	CurrentStep         string                     `json:"currentStep,omitempty"`
+	TargetType          string                     `json:"targetType,omitempty"`
+	Strategy            string                     `json:"strategy,omitempty"`
+	ExecutionMode       string                     `json:"executionMode,omitempty"`
 }
 
 // MarshalJSON omits zero-value deployedArtifact while preserving additive status fields.
@@ -291,24 +304,25 @@ func (e StatusHistoryEntry) MarshalJSON() ([]byte, error) {
 
 // RuntimeSummary captures the latest stable operator-facing runtime metadata.
 type RuntimeSummary struct {
-	Timestamp          string             `json:"timestamp,omitempty"`
-	Source             string             `json:"source,omitempty"`
-	Summary            string             `json:"summary,omitempty"`
-	Changes            []string           `json:"changes,omitempty"`
-	ChangeDetails      []string           `json:"changeDetails,omitempty"`
-	ManagedDrift       []ManagedDriftItem `json:"managedDrift,omitempty"`
-	DeployedArtifact   DeploymentArtifact `json:"deployedArtifact,omitempty"`
-	Conditions         []Condition        `json:"conditions,omitempty"`
-	Sync               Sync               `json:"sync"`
-	Health             Health             `json:"health"`
-	DesiredGeneration  int64              `json:"desiredGeneration"`
-	ObservedGeneration int64              `json:"observedGeneration"`
-	RolloutPhase       RolloutPhase       `json:"rolloutPhase,omitempty"`
-	CurrentStep        string             `json:"currentStep,omitempty"`
-	TargetType         string             `json:"targetType,omitempty"`
-	Strategy           string             `json:"strategy,omitempty"`
-	ExecutionMode      string             `json:"executionMode,omitempty"`
-	HistoryCount       int                `json:"historyCount"`
+	Timestamp           string               `json:"timestamp,omitempty"`
+	Source              string               `json:"source,omitempty"`
+	Summary             string               `json:"summary,omitempty"`
+	Changes             []string             `json:"changes,omitempty"`
+	ChangeDetails       []string             `json:"changeDetails,omitempty"`
+	ManagedDrift        []ManagedDriftItem   `json:"managedDrift,omitempty"`
+	RuntimeObservations []RuntimeObservation `json:"runtimeObservations,omitempty"`
+	DeployedArtifact    DeploymentArtifact   `json:"deployedArtifact,omitempty"`
+	Conditions          []Condition          `json:"conditions,omitempty"`
+	Sync                Sync                 `json:"sync"`
+	Health              Health               `json:"health"`
+	DesiredGeneration   int64                `json:"desiredGeneration"`
+	ObservedGeneration  int64                `json:"observedGeneration"`
+	RolloutPhase        RolloutPhase         `json:"rolloutPhase,omitempty"`
+	CurrentStep         string               `json:"currentStep,omitempty"`
+	TargetType          string               `json:"targetType,omitempty"`
+	Strategy            string               `json:"strategy,omitempty"`
+	ExecutionMode       string               `json:"executionMode,omitempty"`
+	HistoryCount        int                  `json:"historyCount"`
 }
 
 // MarshalJSON omits zero-value deployedArtifact while preserving additive runtime summary fields.
@@ -332,6 +346,7 @@ type DeploymentStatus struct {
 	Health                  Health                   `json:"health"`
 	Conditions              []Condition              `json:"conditions"`
 	ManagedDrift            []ManagedDriftItem       `json:"managedDrift,omitempty"`
+	RuntimeObservations     []RuntimeObservation     `json:"runtimeObservations,omitempty"`
 	History                 []StatusHistoryEntry     `json:"history,omitempty"`
 	RuntimeHistoryRetention *RuntimeHistoryRetention `json:"runtimeHistoryRetention,omitempty"`
 	DeployedArtifact        DeploymentArtifact       `json:"deployedArtifact,omitempty"`

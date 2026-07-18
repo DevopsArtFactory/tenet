@@ -1093,24 +1093,25 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 	if len(status.History) > 0 {
 		latest := status.History[len(status.History)-1]
 		summary := &domain.RuntimeSummary{
-			Timestamp:          latest.Timestamp,
-			Source:             latest.Source,
-			Summary:            latest.Summary,
-			Changes:            append([]string(nil), latest.Changes...),
-			ChangeDetails:      append([]string(nil), latest.ChangeDetails...),
-			ManagedDrift:       cloneManagedDrift(latest.ManagedDrift),
-			DeployedArtifact:   latest.DeployedArtifact,
-			Conditions:         append([]domain.Condition(nil), latest.Conditions...),
-			Sync:               latest.Sync,
-			Health:             latest.Health,
-			DesiredGeneration:  latest.DesiredGeneration,
-			ObservedGeneration: latest.ObservedGeneration,
-			RolloutPhase:       latest.RolloutPhase,
-			CurrentStep:        latest.CurrentStep,
-			TargetType:         latest.TargetType,
-			Strategy:           latest.Strategy,
-			ExecutionMode:      latest.ExecutionMode,
-			HistoryCount:       len(status.History),
+			Timestamp:           latest.Timestamp,
+			Source:              latest.Source,
+			Summary:             latest.Summary,
+			Changes:             append([]string(nil), latest.Changes...),
+			ChangeDetails:       append([]string(nil), latest.ChangeDetails...),
+			ManagedDrift:        cloneManagedDrift(latest.ManagedDrift),
+			RuntimeObservations: cloneRuntimeObservations(latest.RuntimeObservations),
+			DeployedArtifact:    latest.DeployedArtifact,
+			Conditions:          append([]domain.Condition(nil), latest.Conditions...),
+			Sync:                latest.Sync,
+			Health:              latest.Health,
+			DesiredGeneration:   latest.DesiredGeneration,
+			ObservedGeneration:  latest.ObservedGeneration,
+			RolloutPhase:        latest.RolloutPhase,
+			CurrentStep:         latest.CurrentStep,
+			TargetType:          latest.TargetType,
+			Strategy:            latest.Strategy,
+			ExecutionMode:       latest.ExecutionMode,
+			HistoryCount:        len(status.History),
 		}
 		if summary.DeployedArtifact == (domain.DeploymentArtifact{}) {
 			summary.DeployedArtifact = status.DeployedArtifact
@@ -1120,6 +1121,9 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 		}
 		if len(summary.ManagedDrift) == 0 && len(status.ManagedDrift) > 0 {
 			summary.ManagedDrift = cloneManagedDrift(status.ManagedDrift)
+		}
+		if len(summary.RuntimeObservations) == 0 && len(status.RuntimeObservations) > 0 {
+			summary.RuntimeObservations = cloneRuntimeObservations(status.RuntimeObservations)
 		}
 		if status.Rollout != nil {
 			if summary.TargetType == "" {
@@ -1134,18 +1138,19 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 		}
 		return summary
 	}
-	if status.Sync == (domain.Sync{}) && status.Health == (domain.Health{}) && status.Rollout == nil && status.DeployedArtifact == (domain.DeploymentArtifact{}) && len(status.Conditions) == 0 && len(status.ManagedDrift) == 0 {
+	if status.Sync == (domain.Sync{}) && status.Health == (domain.Health{}) && status.Rollout == nil && status.DeployedArtifact == (domain.DeploymentArtifact{}) && len(status.Conditions) == 0 && len(status.ManagedDrift) == 0 && len(status.RuntimeObservations) == 0 {
 		return nil
 	}
 
 	summary := &domain.RuntimeSummary{
-		ManagedDrift:       cloneManagedDrift(status.ManagedDrift),
-		DeployedArtifact:   status.DeployedArtifact,
-		Conditions:         append([]domain.Condition(nil), status.Conditions...),
-		Sync:               status.Sync,
-		Health:             status.Health,
-		ObservedGeneration: status.ObservedGeneration,
-		HistoryCount:       len(status.History),
+		ManagedDrift:        cloneManagedDrift(status.ManagedDrift),
+		RuntimeObservations: cloneRuntimeObservations(status.RuntimeObservations),
+		DeployedArtifact:    status.DeployedArtifact,
+		Conditions:          append([]domain.Condition(nil), status.Conditions...),
+		Sync:                status.Sync,
+		Health:              status.Health,
+		ObservedGeneration:  status.ObservedGeneration,
+		HistoryCount:        len(status.History),
 	}
 	if status.Rollout != nil {
 		summary.Summary = status.Rollout.Summary
@@ -1168,6 +1173,7 @@ func cloneRuntimeSummary(summary *domain.RuntimeSummary) *domain.RuntimeSummary 
 	copy.Changes = append([]string(nil), summary.Changes...)
 	copy.ChangeDetails = append([]string(nil), summary.ChangeDetails...)
 	copy.ManagedDrift = cloneManagedDrift(summary.ManagedDrift)
+	copy.RuntimeObservations = cloneRuntimeObservations(summary.RuntimeObservations)
 	copy.Conditions = append([]domain.Condition(nil), summary.Conditions...)
 	return &copy
 }
@@ -1177,6 +1183,13 @@ func cloneManagedDrift(items []domain.ManagedDriftItem) []domain.ManagedDriftIte
 		return nil
 	}
 	return domain.AssignManagedDriftIDs(items)
+}
+
+func cloneRuntimeObservations(observations []domain.RuntimeObservation) []domain.RuntimeObservation {
+	if len(observations) == 0 {
+		return nil
+	}
+	return append([]domain.RuntimeObservation(nil), observations...)
 }
 
 func cloneRuntimeEventResourceRefs(refs []domain.RuntimeEventResourceRef) []domain.RuntimeEventResourceRef {
