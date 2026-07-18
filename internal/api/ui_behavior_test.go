@@ -9254,12 +9254,15 @@ const collectText = (node) => [node.textContent, ...(node.children || []).flatMa
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
 process.on('unhandledRejection', () => {});
 async function settle(count = 1) { for (let i = 0; i < count; i += 1) { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); } }
-const panelResponse = (payload) => {
-  const headerRequestId = String(payload?.__requestId || '').trim();
-  const headers = { get(name) { return String(name || '').toLowerCase() === 'request-id' ? headerRequestId : ''; } };
-  if (payload?.__status) return Promise.resolve({ ok: false, status: payload.__status, headers, text: () => Promise.resolve(payload.__body || '') });
-  return Promise.resolve({ ok: true, status: 200, headers, json: () => Promise.resolve(payload) });
-};
+const testHeader = (requestId) => ({ get: (name) => ['request-id', 'x-request-id'].includes(String(name || '').toLowerCase()) ? requestId : '' });
+const okResponse = (payload, requestId = '') => ({ ok: true, status: 200, json: () => Promise.resolve(payload), headers: testHeader(requestId) });
+const errorResponse = (status, body, requestId = '') => ({ ok: false, status, text: () => Promise.resolve(body), headers: testHeader(requestId) });
+const panelResponse = (payload, url) => Promise.resolve(typeof payload === 'function' ? payload(url) : payload).then((value) => {
+  if (value && Object.prototype.hasOwnProperty.call(value, 'ok')) return value;
+  const headerRequestId = String(value?.__requestId || '').trim();
+  if (value?.__status) return errorResponse(value.__status, value.__body || '', headerRequestId);
+  return okResponse(value, headerRequestId);
+});
 async function renderResource(logPayload, inspectionPayload, eventsPayload = { deploymentName: 'payments-api-staging', events: [{ timestamp: '2026-04-18T00:12:00Z', source: 'controller', summary: 'Service stability verified' }] }) {
   const document = new Document();
   document.byID.set('toolbar', document.createElement('section'));
@@ -9272,19 +9275,72 @@ async function renderResource(logPayload, inspectionPayload, eventsPayload = { d
   const window = { location: { pathname: '/', search: '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID) + '&containerName=' + encodeURIComponent(selectedContainer) + '&instanceId=' + encodeURIComponent(selectedInstance) + '&clusterArn=' + encodeURIComponent(selectedCluster), hash: '' } };
   const history = { replaceState(_state, _title, url) { const [pathAndQuery, hash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
   const fetch = (url) => {
-    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&containerName=app&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod') return panelResponse(logPayload);
-    if (url === '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod&limit=10') return panelResponse(inspectionPayload);
-    if (url === '/v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10') return panelResponse(eventsPayload);
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve(okResponse(detailBody));
+    if (url === '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&containerName=app&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod') return panelResponse(logPayload, url);
+    if (url === '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod&limit=10') return panelResponse(inspectionPayload, url);
+    if (url === '/v1/overview/deployments/payments-api-staging/events?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10') return panelResponse(eventsPayload, url);
     throw new Error('unexpected fetch url: ' + url);
   };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
   await settle(4);
   const accounts = document.getElementById('accounts');
   const troubleshootingSummary = collectNodes(accounts, (node) => node.id === 'resource-troubleshooting-summary')[0];
-  return { accountsText: collectText(accounts).join(' | '), summaryText: collectText(troubleshootingSummary).join(' | ') };
+  const text = () => collectText(accounts).join(' | ');
+  const summaryText = () => collectText(troubleshootingSummary).join(' | ');
+  const clickButton = (label) => {
+    const button = collectNodes(accounts, (node) => node.tagName === 'BUTTON' && collectText(node).join(' ').includes(label))[0];
+    if (!button) throw new Error('button not found: ' + label + ' in ' + text());
+    button.dispatch('click', { preventDefault() {} });
+  };
+  return { accounts, accountsText: text(), summaryText: summaryText(), text, summaryTextNow: summaryText, clickButton, window };
 }
 (async () => {
+  const pendingRun = await renderResource(
+    () => new Promise(() => {}),
+    () => new Promise(() => {}),
+    () => new Promise(() => {}),
+  );
+  const pendingText = pendingRun.accountsText;
+  if (!pendingText.includes('Related runtime events | Loading')) throw new Error('expected pending related-events summary state: ' + pendingText);
+  if (!pendingText.includes('Recent logs | Loading')) throw new Error('expected pending recent-logs summary state: ' + pendingText);
+  if (!pendingText.includes('Live inspection | Loading')) throw new Error('expected pending live-inspection summary state: ' + pendingText);
+  if (!pendingText.includes('Evidence request IDs | —')) throw new Error('expected pending summary to omit request IDs until a panel resolves or fails: ' + pendingText);
+  if (!pendingText.includes('Recommended next check | Evidence panels are still loading; wait for Live inspection and Recent logs before deciding the next troubleshooting action.')) throw new Error('expected pending next-check guidance: ' + pendingText);
+
+  const refreshedLogs = [
+    {
+      available: true,
+      source: 'cloudwatch',
+      emptyReason: 'no_recent_events',
+      resultScope: { requestedLimit: null, effectiveLimit: 25, returnedEntryCount: 0, truncationStatus: 'not_truncated' },
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
+      entries: [],
+    },
+    {
+      available: true,
+      source: 'cloudwatch',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
+      entries: [{ timestamp: '2026-04-18T00:20:00Z', message: 'steady state reached' }],
+    },
+  ];
+  const refreshRun = await renderResource(
+    () => okResponse(refreshedLogs.shift()),
+    {
+      available: true,
+      source: 'ecs_service',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true },
+      ecsService: { serviceName: 'payments-api-staging-service', status: 'ACTIVE', desiredCount: 2, runningCount: 2, pendingCount: 0, deployments: [], events: [] },
+    },
+  );
+  if (!refreshRun.text().includes('Recommended next check | Recent logs returned no rows in the selected window; increase the log cap or refresh after deployment activity before treating logs as absent.')) throw new Error('expected refresh setup to start with empty-log recommendation: ' + refreshRun.text());
+  const beforeRefreshSearch = refreshRun.window.location.search;
+  refreshRun.clickButton('Refresh recent logs');
+  await settle(4);
+  const refreshedText = refreshRun.text();
+  if (refreshRun.window.location.search !== beforeRefreshSearch) throw new Error('recent-log refresh should preserve bookmarkable resource URL state: ' + refreshRun.window.location.search);
+  if (!refreshedText.includes('Recent logs | Available · 1 entry · CloudWatch Logs')) throw new Error('expected refreshed recent-log summary state: ' + refreshedText);
+  if (!refreshedText.includes('Recommended next check | Compare the latest log entries with live resource state, deployment sync, health, rollout phase, and current step before retrying or escalating.')) throw new Error('expected successful refresh to update recommendation: ' + refreshedText);
+
   const emptyRun = await renderResource(
     {
       available: true,
