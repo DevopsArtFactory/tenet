@@ -908,6 +908,52 @@ func TestBuildApplicationOverviewDetailTroubleshootingRecommendationOmittedWhenQ
 	}
 }
 
+func TestBuildTroubleshootingRecommendationPrefersHighestSignalEvidence(t *testing.T) {
+	recommendation := BuildTroubleshootingRecommendation(
+		"payments-api-prod",
+		domain.Sync{State: domain.SyncStateReconciling, Reason: "controller is still reconciling"},
+		domain.Health{Overall: domain.HealthUnhealthy, Summary: "service is degraded"},
+		&domain.RuntimeSummary{
+			Summary: "latest controller history says rollout is still noisy",
+			ManagedDrift: []domain.ManagedDriftItem{{
+				Field:    "runtimeContext.capacity.desired",
+				Desired:  "6",
+				Actual:   "4",
+				Severity: domain.ManagedDriftSeverityHigh,
+				ResourceRef: &domain.ManagedDriftResourceRef{
+					ResourceType: "ecsService",
+					ResourceName: "payments-api",
+				},
+			}},
+			RuntimeObservations: []domain.RuntimeObservation{{
+				ResourceType:      "ecsService",
+				ResourceName:      "payments-api",
+				Source:            "resource_inspection",
+				Available:         false,
+				UnavailableReason: "aws_unavailable",
+				Summary:           "AWS credentials are not configured locally",
+			}},
+		},
+		nil,
+		nil,
+		[]ResourceRelatedEventSummary{{
+			ResourceType:         "ecsService",
+			ResourceName:         "payments-api",
+			RetainedEventCount:   2,
+			NewestEventTimestamp: "2026-04-16T06:40:00Z",
+		}},
+	)
+	if recommendation == nil {
+		t.Fatalf("expected recommendation from combined troubleshooting evidence")
+	}
+	if recommendation.Reason != TroubleshootingReasonManagedDrift || recommendation.ResourceType != "ecsService" || recommendation.ResourceName != "payments-api" {
+		t.Fatalf("expected managed drift to win over unhealthy, unavailable observation, and runtime-event signals, got %+v", recommendation)
+	}
+	if !strings.Contains(recommendation.Summary, "1 high") {
+		t.Fatalf("expected managed drift severity summary, got %q", recommendation.Summary)
+	}
+}
+
 func TestBuildApplicationOverviewDetailTroubleshootingRecommendationPrefersUnavailableObservation(t *testing.T) {
 	catalog := manifest.Catalog{
 		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},

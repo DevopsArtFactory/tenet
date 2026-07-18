@@ -1556,6 +1556,7 @@ func TestApplicationTroubleshootingRecommendationDocsStayReadOnly(t *testing.T) 
 		"Application overview and application detail rows may also carry additive `troubleshootingRecommendation` hints",
 		"quiet applications omit the object",
 		"operator handoffs to existing Tenet reads rather than live cloud or log probes",
+		"conservative priority is managed drift first, then unhealthy/error status, then unavailable live-observation evidence, then retained runtime-event context",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README to preserve application troubleshooting recommendation guidance %q", fragment)
@@ -1565,6 +1566,7 @@ func TestApplicationTroubleshootingRecommendationDocsStayReadOnly(t *testing.T) 
 	for _, fragment := range []string{
 		"`troubleshootingRecommendation` object when existing joined status/read-model evidence already points at a conservative next investigation hop",
 		"current reasons are `managed_drift`, `unhealthy`, `live_observation_unavailable`, and `recent_runtime_event`",
+		"chooses a single conservative hint in this order: managed drift, unhealthy/error status, unavailable live-observation evidence, then retained runtime-event context",
 		"it does not perform live AWS or log reads",
 	} {
 		if !strings.Contains(statusAPIText, fragment) {
@@ -1575,6 +1577,7 @@ func TestApplicationTroubleshootingRecommendationDocsStayReadOnly(t *testing.T) 
 	for _, fragment := range []string{
 		"Application rows may also include an additive `troubleshootingRecommendation` object",
 		"Recommendations are read-only hints derived from managed drift, unhealthy/error status, unavailable runtime observations, or retained runtime events",
+		"triage order conservative: managed drift, then unhealthy/error status, then unavailable live-observation evidence, then retained runtime-event context",
 		"They do not trigger live AWS/log reads while building the overview",
 	} {
 		if !strings.Contains(overviewText, fragment) {
