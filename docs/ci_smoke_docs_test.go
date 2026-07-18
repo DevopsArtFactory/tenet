@@ -1556,6 +1556,7 @@ func TestApplicationTroubleshootingRecommendationDocsStayReadOnly(t *testing.T) 
 		"Application overview and application detail rows may also carry additive `troubleshootingRecommendation` hints",
 		"quiet applications omit the object",
 		"operator handoffs to existing Tenet reads rather than live cloud or log probes",
+		"preserves safe backend-provided query/hash targets such as drift filters, audit actions, plan/apply IDs, and row/section anchors",
 		"conservative priority is managed drift first, then unhealthy/error status, then unavailable live-observation evidence, then retained runtime-event context",
 	} {
 		if !strings.Contains(readmeText, fragment) {
@@ -1578,6 +1579,7 @@ func TestApplicationTroubleshootingRecommendationDocsStayReadOnly(t *testing.T) 
 		"Application rows may also include an additive `troubleshootingRecommendation` object",
 		"Recommendations are read-only hints derived from managed drift, unhealthy/error status, unavailable runtime observations, or retained runtime events",
 		"triage order conservative: managed drift, then unhealthy/error status, then unavailable live-observation evidence, then retained runtime-event context",
+		"preserves backend-provided embedded-shell query/hash targets such as drift filters, audit actions, plan/apply IDs, and row/section anchors",
 		"They do not trigger live AWS/log reads while building the overview",
 	} {
 		if !strings.Contains(overviewText, fragment) {
@@ -1589,6 +1591,7 @@ func TestApplicationTroubleshootingRecommendationDocsStayReadOnly(t *testing.T) 
 		"Application overview/detail read models may include additive `troubleshootingRecommendation` hints",
 		"Operators should treat those hints as read-only route handoffs, not live AWS/log probes",
 		"keep existing `_self` application/resource/workspace navigation separate from JSON/read-route handoffs",
+		"the embedded UI preserves safe same-shell query/hash targets from those handoffs",
 	} {
 		if !strings.Contains(operatorContractsText, fragment) {
 			t.Fatalf("expected operator contracts docs to preserve recommendation handoff guidance %q", fragment)

@@ -2418,6 +2418,8 @@ for fragment in (
     "Server-authored troubleshooting hint from existing runtime evidence.",
     "No urgent next check is currently recommended for this application.",
     "const createApplicationTroubleshootingRecommendation = (detail) => {",
+    "const applicationRecommendationEmbeddedHandoffURL = (route, fallbackPage, fallbackExtras = {}) => {",
+    "const [routeWithoutHash, hashFragment = ''] = rawRoute.split('#');",
     "applicationRecommendationHandoffURL(detail, recommendation, handoff)",
     "#resource-live-inspection",
     "#resource-recent-logs",
