@@ -123,11 +123,18 @@ devtools.
 For local development and no-AWS runs, treat unavailable live inspection as an
 operator-friendly route envelope rather than a backend failure: the payload keeps
 `available=false`, `unavailableReason`, `lookupContext`, optional selector echoes,
-and any `resultScope` sample metadata for scripts. A successful empty inspection
-read instead stays `available=true` with `source`, `lookupContext`, request
-metadata, and optional `resultScope`, but no typed body such as `ecsService` or
-`autoScalingGroup`; the embedded UI renders this as an empty details state
-without exposing raw unavailable reason codes.
+and any `resultScope` sample metadata for scripts. Missing provider wiring is a
+separate release-guard row: after Tenet validates the deployment/resource
+selectors, a `503 Service Unavailable` response still returns JSON with
+`deploymentName`, `resourceType`, `resourceName`, accepted `clusterArn` or
+`instanceId` echoes, `available=false`, and
+`unavailableReason="overview deployment resource inspection unavailable"` so
+operators can retry the same bookmark after wiring the provider instead of
+changing selectors first. A successful empty inspection read instead stays
+`available=true` with `source`, `lookupContext`, request metadata, and optional
+`resultScope`, but no typed body such as `ecsService` or `autoScalingGroup`; the
+embedded UI renders this as an empty details state without exposing raw
+unavailable reason codes.
 
 ## Result Scope
 
