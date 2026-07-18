@@ -2297,6 +2297,9 @@ async function render(search, fetchImpl, clipboardImpl) {
   if (resourceView.document.lastScrolledTarget?.id !== 'ecs-service-event-evt-deployment-steady') throw new Error('expected bookmarked ECS service event hash to scroll after live-inspection render');
   const resourceBodyText = collectText(resourceView.document.getElementById('accounts')).join(' | ');
   const resourceToolbarText = collectText(resourceView.document.getElementById('toolbar')).join(' | ');
+  if (!resourceBodyText.includes('Live inspection last refreshed')) throw new Error('expected live-inspection panel to show last-refreshed freshness cue, got ' + resourceBodyText);
+  if (!resourceBodyText.includes('Recent logs last refreshed')) throw new Error('expected recent-logs panel to show last-refreshed freshness cue, got ' + resourceBodyText);
+  if (!resourceBodyText.includes('Last refreshed')) throw new Error('expected resource panel metadata to retain last refreshed field labels, got ' + resourceBodyText);
   if (!resourceBodyText.includes('Current resource read: GET /v1/overview/deployments/payments-api-staging')) throw new Error('expected resource detail body to show the top-level read route');
   if (!resourceBodyText.includes('Linked-resource source: Fallback rollout inventory')) throw new Error('expected resource detail body to preserve fallback linked-resource source cue, got ' + resourceBodyText);
   if (resourceToolbarText.includes('Current resource read: GET /v1/overview/deployments/payments-api-staging')) throw new Error('expected current resource read route outside toolbar');

@@ -218,8 +218,7 @@ without treating the selected resource as broken, and the resource-inspection gu
 evidence is not treated as a generic backend failure. Successful-empty Recent logs panels also tell operators to adjust
 the Log limit, refresh after activity, and review lookup context before
 escalating. The local and Docker smoke scripts keep a compact no-AWS resource-evidence matrix for ECS service/task, ASG/bootstrap, traffic-routing no-log-source, selector validation, successful-empty, and guarded-auth paths.
-The embedded UI release guard keeps lazy Recent logs and Live inspection panels aligned so request routes, request IDs, lookup context, and bounded-scope metadata
-stay visible even when AWS evidence is unavailable.
+The embedded UI release guard keeps lazy Recent logs and Live inspection panels aligned so request routes, request IDs, lookup context, bounded-scope metadata, and panel-local `Last refreshed` / `Last refresh attempt` cues stay visible even when AWS evidence is unavailable or a guarded refresh fails.
 Use `Share ECS service event` or the adjacent `Copy ECS service event link` from a Live inspection event row to hand off one ECS service event without changing the resource-page selector state.
 In the embedded resource page, log and inspection caps stay bookmarkable as `resourceLogLimit=` and `resourceInspectionLimit=` UI state; positive caps are sent only to the matching lazy `resource-logs` or `resource-inspection` read as backend `limit=` query parameters.
 Recent logs and Live inspection lazy-panel state messages such as loading, empty, unavailable, and non-auth fetch failures are polite atomic status regions, so assistive technology announces focused panel state changes without making the full evidence payload live.

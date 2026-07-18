@@ -100,6 +100,27 @@ func TestEmbeddedUICopyControlsAnnounceLabelChangesPolitely(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIResourcePanelFreshnessCuesReleaseGuard(t *testing.T) {
+	script := embeddedUIScriptForTest(t)
+	for _, want := range []string{
+		"const resourcePanelFetchedAtText = (result) => {",
+		"const withResourcePanelFetchedAt = (result) => {",
+		"const withResourcePanelAttemptedAt = (error) => {",
+		"const createResourcePanelFreshnessCue = (label, result, action = 'last refreshed') => {",
+		"resource-panel-freshness-cue",
+		"`${label} ${action} · ${fetchedAtText}`",
+		"Last refresh attempt · ${fetchedAtText}",
+		"createResourcePanelFreshnessCue('Recent logs', result)",
+		"createResourcePanelFreshnessCue('Live inspection', result)",
+		"const freshnessCue = createResourcePanelFreshnessCue(title, error, 'last refresh attempt');",
+		"...(freshnessCue ? [freshnessCue] : [])",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("expected embedded UI resource-panel freshness contract %q", want)
+		}
+	}
+}
+
 func TestEmbeddedUIResourceUnavailableAndEmptyStateReleaseGuard(t *testing.T) {
 	script := embeddedUIScriptForTest(t)
 
@@ -1875,7 +1896,7 @@ func TestEmbeddedUIIncludesOperatorReadAuthGuidanceContract(t *testing.T) {
 		"const resourceInspectionRequestIDFields = resourcePanelRequestIDFields;",
 		"const createResourceInspectionRequestIDMeta = createResourcePanelRequestIDMeta;",
 		"...resourceInspectionRequestIDFields(result),",
-		"const requestIDMeta = createResourceInspectionRequestIDMeta(error);",
+		"const requestIDMeta = createResourceInspectionRequestIDMeta(stampedError);",
 		"requestIDMeta ? [requestIDMeta] : []",
 		"if (response.status === 401 || response.status === 403) {",
 		"throw requestError('fetch-error', message, response.status, requestId);",
@@ -2857,7 +2878,7 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"const handoffSection = createResourceLogsBackingResourceHandoffSection(detail, result);",
 		"const relatedLogRoutesHandoffSection = createRelatedLogRoutesHandoffSection(result);",
 		"const supplementalSections = [handoffSection, relatedLogRoutesHandoffSection].filter(Boolean);",
-		"const beforeNodes = (metadata) => [capNote, ...lookupContextNodes, metadata, ...supplementalSections];",
+		"const beforeNodes = (metadata) => [freshnessCue, capNote, ...lookupContextNodes, metadata, ...supplementalSections].filter(Boolean);",
 		"const scopeFields = resourceLogsResultScopeFields(result?.resultScope);",
 		"const requestRouteFields = resourceLogsRequestRouteFields(deploymentName, resource, selectedLimit);",
 		"[...resourceLogsRequestIDFields(result), ...requestRouteFields, ...backingResourceFields, ...scopeFields]",
@@ -2884,7 +2905,7 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"[createResourceLogsLimitNote(targetLimit), createResourceLogsRequestContext(deploymentName, resource, targetLimit)],",
 		"resourceLogsReadRoute(deploymentName, resource, target?.limit ?? selectedLimit),",
 		"renderResourceLogsState(",
-		"`Failed to load recent logs: ${error.message}`",
+		"`Failed to load recent logs: ${stampedError.message}`",
 		"createResourceLogsActions(container, deploymentName, resource, false, target?.detail || detail),",
 		"createDetailSection('Recent logs');",
 		"Recent logs",
@@ -3274,7 +3295,7 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"[createResourceInspectionRequestContext(deploymentName, resource, targetLimit)],",
 		"resourceInspectionReadRoute(deploymentName, resource, targetLimit),",
 		"renderResourceInspectionState(",
-		"`Failed to load live inspection: ${error.message}`",
+		"`Failed to load live inspection: ${stampedError.message}`",
 		"createResourceInspectionActions(container, targetDetail, resource),",
 		"createDetailSection('Live inspection');",
 		"renderResourceInspectionSection(inspectionSection, detail, resource).catch(() => {});",
@@ -5566,7 +5587,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"renderResourceLogsState(section, 'Loading recent logs…', '', pendingContext(), [], loadingActions);\",",
 		"\"Log entry cap · ${resourceLogsLimitText(limit)}\",",
 		"\"params.set('limit', String(normalizedLimit));\",",
-		"\"`Failed to load recent logs: ${error.message}`\",",
+		"\"`Failed to load recent logs: ${stampedError.message}`\",",
 		"\"'Recent logs'\",",
 		"\"'Recent logs request'\",",
 		"\"resourceLogsReadRoute(deploymentName, resource, target?.limit ?? selectedLimit)\",",
@@ -5584,7 +5605,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}\",",
 		"\"[createECSTaskScopeSummary(service?.tasksScope)]\",",
 		"\"renderResourceInspectionState(section, 'Loading live inspection…', '', pendingContext(), [], loadingActions);\",",
-		"\"`Failed to load live inspection: ${error.message}`\",",
+		"\"`Failed to load live inspection: ${stampedError.message}`\",",
 		"\"'Live inspection'\",",
 		"\"'Live inspection request'\",",
 		"\"resourceInspectionReadRoute(deploymentName, resource, targetLimit)\",",

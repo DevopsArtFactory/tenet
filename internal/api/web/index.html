@@ -5919,14 +5919,20 @@
       };
       const createOperatorReadFailureRequestIDMeta = (error) => {
         const requestId = String(error?.requestId || '').trim();
-        return requestId ? createElement('div', 'detail-condition-meta', `Tenet request ID · ${requestId}`) : null;
+        const fetchedAtText = resourcePanelFetchedAtText(error);
+        const parts = [];
+        if (requestId) parts.push(`Tenet request ID · ${requestId}`);
+        if (fetchedAtText) parts.push(`Last refresh attempt · ${fetchedAtText}`);
+        return parts.length ? createElement('div', 'detail-condition-meta resource-panel-freshness-cue', parts.join(' · ')) : null;
       };
       const renderOperatorReadFailurePanel = (container, title, actions, route, error) => {
         const heading = operatorReadFailureHeading(error);
         if (!heading) return false;
         const requestIdMeta = createOperatorReadFailureRequestIDMeta(error);
+        const freshnessCue = createResourcePanelFreshnessCue(title, error, 'last refresh attempt');
         container.replaceChildren(
           createDetailSectionHeader(title, actions),
+          ...(freshnessCue ? [freshnessCue] : []),
           createElement('div', 'detail-state error', heading),
           createElement('div', 'detail-condition-meta', operatorReadFailureMessage(route, error)),
           ...(requestIdMeta ? [requestIdMeta] : []),
@@ -6072,6 +6078,16 @@
         if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
         return { ...result, tenetFetchedAt: new Date() };
       };
+      const withResourcePanelAttemptedAt = (error) => {
+        if (!error || typeof error !== 'object' || Array.isArray(error)) return error;
+        error.tenetFetchedAt = new Date();
+        return error;
+      };
+      const createResourcePanelFreshnessCue = (label, result, action = 'last refreshed') => {
+        const fetchedAtText = resourcePanelFetchedAtText(result);
+        if (!fetchedAtText) return null;
+        return createElement('p', 'detail-section-copy resource-panel-freshness-cue', `${label} ${action} · ${fetchedAtText}`);
+      };
       const resourcePanelRequestIDFields = (result) => {
         const fields = [];
         const requestId = String(result?.tenetRequestId || result?.requestId || '').trim();
@@ -6082,7 +6098,11 @@
       };
       const createResourcePanelRequestIDMeta = (error) => {
         const requestId = String(error?.requestId || '').trim();
-        return requestId ? createElement('div', 'detail-condition-meta', `Tenet request ID · ${requestId}`) : null;
+        const fetchedAtText = resourcePanelFetchedAtText(error);
+        const parts = [];
+        if (requestId) parts.push(`Tenet request ID · ${requestId}`);
+        if (fetchedAtText) parts.push(`Last refresh attempt · ${fetchedAtText}`);
+        return parts.length ? createElement('div', 'detail-condition-meta resource-panel-freshness-cue', parts.join(' · ')) : null;
       };
       const resourceLogsRequestIDFields = resourcePanelRequestIDFields;
       const createResourceLogsRequestIDMeta = createResourcePanelRequestIDMeta;
@@ -6264,7 +6284,8 @@
         const handoffSection = createResourceLogsBackingResourceHandoffSection(detail, result);
         const relatedLogRoutesHandoffSection = createRelatedLogRoutesHandoffSection(result);
         const supplementalSections = [handoffSection, relatedLogRoutesHandoffSection].filter(Boolean);
-        const beforeNodes = (metadata) => [capNote, ...lookupContextNodes, metadata, ...supplementalSections];
+        const freshnessCue = createResourcePanelFreshnessCue('Recent logs', result);
+        const beforeNodes = (metadata) => [freshnessCue, capNote, ...lookupContextNodes, metadata, ...supplementalSections].filter(Boolean);
         const scopeFields = resourceLogsResultScopeFields(result?.resultScope);
         const requestRouteFields = resourceLogsRequestRouteFields(deploymentName, resource, selectedLimit);
         if (!result?.available) {
@@ -6375,7 +6396,8 @@
           })
           .catch((error) => {
             const current = resourceLogStateByKey.get(logsKey);
-            resourceLogStateByKey.set(logsKey, { status: 'error', error });
+            const stampedError = withResourcePanelAttemptedAt(error);
+            resourceLogStateByKey.set(logsKey, { status: 'error', error: stampedError });
             (current?.sections || []).forEach((target) => {
               const container = target?.section || target;
               if (renderOperatorReadFailurePanel(
@@ -6383,15 +6405,15 @@
                 'Recent logs',
                 createResourceLogsActions(container, deploymentName, resource, false, target?.detail || detail),
                 resourceLogsReadRoute(deploymentName, resource, target?.limit ?? selectedLimit),
-                error,
+                stampedError,
               )) {
                 return;
               }
-              const requestIDMeta = createResourceLogsRequestIDMeta(error);
+              const requestIDMeta = createResourceLogsRequestIDMeta(stampedError);
               const targetLimit = target?.limit ?? selectedLimit;
               renderResourceLogsState(
                 container,
-                `Failed to load recent logs: ${error.message}`,
+                `Failed to load recent logs: ${stampedError.message}`,
                 'error',
                 [createResourceLogsLimitNote(targetLimit), createResourceLogsRequestContext(deploymentName, resource, targetLimit)],
                 requestIDMeta ? [requestIDMeta] : [],
@@ -6857,6 +6879,7 @@
         );
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
+          createResourcePanelFreshnessCue('Live inspection', result),
           createElement('p', 'detail-section-copy', 'Live ECS service inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
@@ -7141,6 +7164,7 @@
           : null;
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
+          createResourcePanelFreshnessCue('Live inspection', result),
           createElement('p', 'detail-section-copy', 'Live Auto Scaling Group inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
@@ -7218,6 +7242,7 @@
         );
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
+          createResourcePanelFreshnessCue('Live inspection', result),
           createElement('p', 'detail-section-copy', 'Live bootstrap-source inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
@@ -7676,6 +7701,7 @@
         );
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
+          createResourcePanelFreshnessCue('Live inspection', result),
           createElement('p', 'detail-section-copy', 'Live ECS task inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
@@ -7706,6 +7732,7 @@
         const targetGroupSection = createTrafficRoutingTargetGroupSection(detail, trafficRouting);
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
+          createResourcePanelFreshnessCue('Live inspection', result),
           createElement('p', 'detail-section-copy', 'Read-only traffic-routing inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
@@ -7809,7 +7836,8 @@
           })
           .catch((error) => {
             const current = resourceInspectionStateByKey.get(inspectionKey);
-            resourceInspectionStateByKey.set(inspectionKey, { status: 'error', error });
+            const stampedError = withResourcePanelAttemptedAt(error);
+            resourceInspectionStateByKey.set(inspectionKey, { status: 'error', error: stampedError });
             (current?.sections || []).forEach((target) => {
               const container = target?.section || target;
               const targetDetail = target?.detail || detail;
@@ -7819,14 +7847,14 @@
                 'Live inspection',
                 createResourceInspectionActions(container, targetDetail, resource),
                 resourceInspectionReadRoute(deploymentName, resource, targetLimit),
-                error,
+                stampedError,
               )) {
                 return;
               }
-              const requestIDMeta = createResourceInspectionRequestIDMeta(error);
+              const requestIDMeta = createResourceInspectionRequestIDMeta(stampedError);
               renderResourceInspectionState(
                 container,
-                `Failed to load live inspection: ${error.message}`,
+                `Failed to load live inspection: ${stampedError.message}`,
                 'error',
                 [createResourceInspectionRequestContext(deploymentName, resource, targetLimit)],
                 requestIDMeta ? [requestIDMeta] : [],
@@ -7835,7 +7863,7 @@
             });
             refreshResourceTroubleshootingSummary(deploymentName, resource);
             scrollToCurrentHashTarget();
-            throw error;
+            throw stampedError;
           });
 
         resourceInspectionStateByKey.set(inspectionKey, { status: 'loading', promise, sections: [{ section, detail, limit: selectedLimit }] });
