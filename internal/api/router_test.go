@@ -6076,6 +6076,13 @@ func TestRouterOverviewApplications(t *testing.T) {
 					Strategy:           "canary",
 					ExecutionMode:      "asgWeightedTargetGroups",
 				},
+				TroubleshootingRecommendation: &catalog.TroubleshootingRecommendation{
+					Summary:      "1 managed drift row(s) need review; 1 high.",
+					Reason:       catalog.TroubleshootingReasonManagedDrift,
+					ResourceType: "candidateAutoScalingGroup",
+					ResourceName: "payments-api-prod-candidate",
+					Handoffs:     []catalog.TroubleshootingRouteHandoff{{Label: "Open live inspection", Route: "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup"}},
+				},
 				Rollout: &domain.RolloutSummary{
 					DesiredGeneration:  8,
 					ObservedGeneration: 7,
@@ -6120,6 +6127,17 @@ func TestRouterOverviewApplications(t *testing.T) {
 	if runtimeSummary["targetType"] != "ec2" || runtimeSummary["strategy"] != "canary" || runtimeSummary["executionMode"] != "asgWeightedTargetGroups" {
 		t.Fatalf("expected runtimeSummary rollout-context fields in raw overview applications payload, got %#v", runtimeSummary)
 	}
+	recommendation, ok := rawPayload[0]["troubleshootingRecommendation"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected troubleshootingRecommendation object in raw overview applications payload, got %#v", rawPayload[0])
+	}
+	if recommendation["reason"] != "managed_drift" || recommendation["resourceType"] != "candidateAutoScalingGroup" || recommendation["resourceName"] != "payments-api-prod-candidate" {
+		t.Fatalf("expected troubleshootingRecommendation contract fields, got %#v", recommendation)
+	}
+	handoffs, ok := recommendation["handoffs"].([]any)
+	if !ok || len(handoffs) != 1 || handoffs[0].(map[string]any)["route"] != "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup" {
+		t.Fatalf("expected troubleshootingRecommendation handoff route, got %#v", recommendation["handoffs"])
+	}
 }
 
 func TestRouterOverviewApplicationsUnavailable(t *testing.T) {
@@ -6159,23 +6177,24 @@ func TestRouterOverviewApplication(t *testing.T) {
 					t.Fatalf("unexpected deployment name: %s", name)
 				}
 				return catalog.ApplicationOverviewDetail{
-					Name:               "payments-api-prod",
-					AppRef:             "payments-api",
-					EnvironmentRef:     "prod-apne2",
-					AccountName:        "prod-core",
-					AWSAccountID:       "123456789012",
-					AllowedRegions:     []string{"ap-northeast-2", "us-west-2"},
-					Region:             "ap-northeast-2",
-					TargetType:         "ec2",
-					Strategy:           "canary",
-					ExecutionMode:      "asgWeightedTargetGroups",
-					DesiredArtifact:    domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"},
-					DeployedArtifact:   domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"},
-					ObservedGeneration: 7,
-					SourceFingerprint:  "plan_1234abcd5678ef",
-					Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"},
-					Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
-					RuntimeSummary:     &domain.RuntimeSummary{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", ObservedGeneration: 7, CurrentStep: "ShiftTrafficCanary", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups"},
+					Name:                          "payments-api-prod",
+					AppRef:                        "payments-api",
+					EnvironmentRef:                "prod-apne2",
+					AccountName:                   "prod-core",
+					AWSAccountID:                  "123456789012",
+					AllowedRegions:                []string{"ap-northeast-2", "us-west-2"},
+					Region:                        "ap-northeast-2",
+					TargetType:                    "ec2",
+					Strategy:                      "canary",
+					ExecutionMode:                 "asgWeightedTargetGroups",
+					DesiredArtifact:               domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"},
+					DeployedArtifact:              domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"},
+					ObservedGeneration:            7,
+					SourceFingerprint:             "plan_1234abcd5678ef",
+					Sync:                          domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"},
+					Health:                        domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
+					RuntimeSummary:                &domain.RuntimeSummary{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", ObservedGeneration: 7, CurrentStep: "ShiftTrafficCanary", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups"},
+					TroubleshootingRecommendation: &catalog.TroubleshootingRecommendation{Summary: "candidate ASG needs review", Reason: catalog.TroubleshootingReasonLiveObservationUnavailable, ResourceType: "candidateAutoScalingGroup", ResourceName: "payments-api-prod-candidate", Handoffs: []catalog.TroubleshootingRouteHandoff{{Label: "Open runtime events", Route: "/v1/overview/deployments/payments-api-prod/events"}}},
 					Rollout: &domain.RolloutSummary{DesiredGeneration: 8, ObservedGeneration: 7, Phase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary", Execution: []domain.RolloutExecutionDetail{
 						{Resource: "candidateAutoScalingGroup", Name: "payments-api-prod-candidate", EvidenceCapabilities: &domain.ResourceEvidenceCapabilities{LiveInspectionSupported: true, LiveInspectionRoute: &domain.ResourceEvidenceCapabilityRoute{Route: "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup"}, RecentLogsSupported: true, RecentLogsRoute: &domain.ResourceEvidenceCapabilityRoute{Route: "/v1/overview/deployments/payments-api-prod/resource-logs?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup"}, RelatedRuntimeEventsSupported: true, RelatedRuntimeEventsRoute: &domain.ResourceEvidenceCapabilityRoute{Route: "/v1/overview/deployments/payments-api-prod/events?resourceName=payments-api-prod-candidate&resourceType=candidateAutoScalingGroup"}}},
 						{Resource: "trafficShiftPlan", Name: "payments-api-prod-weighted-routing", EvidenceCapabilities: &domain.ResourceEvidenceCapabilities{LiveInspectionSupported: true, LiveInspectionRoute: &domain.ResourceEvidenceCapabilityRoute{Route: "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceName=payments-api-prod-weighted-routing&resourceType=trafficShiftPlan"}, RecentLogsSupported: true, RecentLogsRoute: &domain.ResourceEvidenceCapabilityRoute{Route: "/v1/overview/deployments/payments-api-prod/resource-logs?resourceName=payments-api-prod-weighted-routing&resourceType=trafficShiftPlan"}, RelatedRuntimeEventsSupported: true, RelatedRuntimeEventsRoute: &domain.ResourceEvidenceCapabilityRoute{Route: "/v1/overview/deployments/payments-api-prod/events?resourceName=payments-api-prod-weighted-routing&resourceType=trafficShiftPlan"}}},
@@ -6204,8 +6223,11 @@ func TestRouterOverviewApplication(t *testing.T) {
 		if detail.SourceFingerprint != "plan_1234abcd5678ef" {
 			t.Fatalf("expected source fingerprint in overview application detail response, got %+v", detail)
 		}
-		if detail.RuntimeSummary == nil || detail.Rollout == nil || len(detail.Conditions) != 1 || len(detail.History) != 1 {
+		if detail.RuntimeSummary == nil || detail.Rollout == nil || len(detail.Conditions) != 1 || len(detail.History) != 1 || detail.TroubleshootingRecommendation == nil {
 			t.Fatalf("expected joined status metadata in overview application detail response, got %+v", detail)
+		}
+		if detail.TroubleshootingRecommendation.Reason != catalog.TroubleshootingReasonLiveObservationUnavailable || detail.TroubleshootingRecommendation.ResourceType != "candidateAutoScalingGroup" {
+			t.Fatalf("expected troubleshooting recommendation in overview application detail response, got %+v", detail.TroubleshootingRecommendation)
 		}
 		var payload map[string]any
 		if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
@@ -6213,6 +6235,10 @@ func TestRouterOverviewApplication(t *testing.T) {
 		}
 		if payload["sourceFingerprint"] != "plan_1234abcd5678ef" {
 			t.Fatalf("expected sourceFingerprint field in raw overview application detail payload, got %#v", payload)
+		}
+		recommendation, ok := payload["troubleshootingRecommendation"].(map[string]any)
+		if !ok || recommendation["reason"] != "live_observation_unavailable" || recommendation["resourceType"] != "candidateAutoScalingGroup" {
+			t.Fatalf("expected troubleshootingRecommendation in raw overview application detail payload, got %#v", payload["troubleshootingRecommendation"])
 		}
 		rollout, ok := payload["rollout"].(map[string]any)
 		if !ok {
