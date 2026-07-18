@@ -1952,6 +1952,23 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 	}
 }
 
+func TestRuntimeRolloutSummaryDocumentsManagedDriftSourceEvidence(t *testing.T) {
+	overviewText := readTextFile(t, "architecture/tenet-v1-runtime-rollout-summary.md")
+	section := markdownSection(t, overviewText, "## API/UI usage")
+
+	for _, fragment := range []string{
+		"Rows backed by a known evidence path can additionally include sparse `source` metadata",
+		"legacy, fixture-only, or derived read-model rows omit `source` entirely instead of serializing an empty object",
+		"\"source\":{\"kind\":\"resourceInspection\"",
+		"\"resourceType\":\"candidateAutoScalingGroup\"",
+		"\"resourceName\":\"payments-api-prod-candidate\"",
+	} {
+		if !strings.Contains(section, fragment) {
+			t.Fatalf("expected runtime rollout docs to describe managedDrift source evidence contract %q", fragment)
+		}
+	}
+}
+
 func markdownSection(t *testing.T, text, heading string) string {
 	t.Helper()
 
