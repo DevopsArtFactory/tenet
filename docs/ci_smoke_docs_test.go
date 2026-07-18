@@ -1893,7 +1893,7 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 		"selected lookup scope (`containerName`, `clusterArn`, or `instanceId`)",
 		"latest lazy Related runtime events, Recent logs, and Live inspection panel states",
 		"Evidence request IDs",
-		"guarded-read, empty-log, and unavailable-provider `Recommended next check` guidance",
+		"guarded-read, empty-log, unavailable-provider, no-instances/no-running-tasks, and stale-resource-selection `Recommended next check` guidance",
 		"Unsupported for this resource type",
 		"points operators back to the current resource read",
 	} {
@@ -1913,7 +1913,7 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 		"keeps the selected resource's `Linked-resource source` cue visible beside it",
 		"controller-authored-versus-fallback resource provenance remain clear",
 		"unsupported focused-evidence states",
-		"routes the `Recommended next check` back to the current resource read",
+		"distinguishes provider/auth failures from precise capacity, task, and stale-resource-selection evidence",
 	} {
 		if !strings.Contains(overviewUIText, fragment) {
 			t.Fatalf("expected overview UI docs to include resource-detail troubleshooting summary contract %q", fragment)

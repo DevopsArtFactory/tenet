@@ -9423,6 +9423,25 @@ async function renderResource(logPayload, inspectionPayload, eventsPayload = { d
   if (!unavailableText.match(/Evidence freshness \| Related runtime events refreshed .+ · Recent logs refreshed .+ · Live inspection refreshed .+/)) throw new Error('expected completed unavailable evidence reads to still surface freshness in summary: ' + unavailableText);
   if (!unavailableText.includes('Recommended next check | Cross-account observer role wiring is missing for this resource evidence lookup; configure the observer role, then refresh Recent logs and Live inspection.')) throw new Error('expected cross-account next-step guidance: ' + unavailableText);
 
+  const noInstancesRun = await renderResource(
+    {
+      available: true,
+      source: 'cloudwatch',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
+      entries: [{ timestamp: '2026-04-18T00:21:00Z', message: 'ASG remained below desired capacity' }],
+    },
+    {
+      available: false,
+      source: '',
+      unavailableReason: 'no_instances',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true },
+    },
+  );
+  const noInstancesText = noInstancesRun.accountsText;
+  if (!noInstancesText.includes('Live inspection | Unavailable · No instances found')) throw new Error('expected no-instances live-inspection summary state: ' + noInstancesText);
+  if (!noInstancesText.includes('Recommended next check | Live inspection found no current instances for this resource; check desired/min capacity, instance health, and rollout warmup, then refresh Live inspection after capacity appears.')) throw new Error('expected no-instances next-step guidance: ' + noInstancesText);
+  if (noInstancesText.includes('provider unavailable')) throw new Error('expected no-instances summary not to imply provider access failure: ' + noInstancesText);
+
   const guardedRun = await renderResource(
     { __status: 403, __requestId: 'req-logs-denied-1732', __body: 'forbidden: deployment not allowed' },
     {
