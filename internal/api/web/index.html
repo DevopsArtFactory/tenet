@@ -6012,10 +6012,6 @@
         if (fetchedAtText) parts.push(`Last refresh attempt · ${fetchedAtText}`);
         return parts.length ? createElement('div', 'detail-condition-meta resource-panel-freshness-cue', parts.join(' · ')) : null;
       };
-      const createOperatorReadFailureAttemptedMeta = (error) => {
-        const attemptedAt = resourcePanelFetchedAtText(error);
-        return attemptedAt ? createElement('div', 'detail-condition-meta', `Last attempted · ${attemptedAt}`) : null;
-      };
       const renderOperatorReadFailurePanel = (container, title, actions, route, error) => {
         const heading = operatorReadFailureHeading(error);
         if (!heading) return false;
@@ -6194,10 +6190,6 @@
         if (requestId) parts.push(`Tenet request ID · ${requestId}`);
         if (fetchedAtText) parts.push(`Last refresh attempt · ${fetchedAtText}`);
         return parts.length ? createElement('div', 'detail-condition-meta resource-panel-freshness-cue', parts.join(' · ')) : null;
-      };
-      const createResourcePanelAttemptedMeta = (error) => {
-        const attemptedAt = resourcePanelFetchedAtText(error);
-        return attemptedAt ? createElement('div', 'detail-condition-meta', `Last attempted · ${attemptedAt}`) : null;
       };
       const resourceLogsRequestIDFields = resourcePanelRequestIDFields;
       const createResourceLogsRequestIDMeta = createResourcePanelRequestIDMeta;

@@ -2677,7 +2677,6 @@ assert "createCopyReadRouteButton(readRoute, 'Copy recent logs route')" in ui, u
 assert "const responseRequestID = (response) => {" in ui, ui
 assert "Tenet request ID" in ui, ui
 assert "Last refreshed" in ui, ui
-assert "Last attempted · ${attemptedAt}" in ui, ui
 assert "const withResourcePanelAttemptedAt = (error) => {" in ui, ui
 assert "tenetRequestId: requestId" in ui, ui
 assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in ui, ui

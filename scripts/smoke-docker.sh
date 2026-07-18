@@ -2591,7 +2591,6 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
         "const responseRequestID = (response) => {",
         "Tenet request ID",
         "Last refreshed",
-        "Last attempted · ${attemptedAt}",
         "const withResourcePanelAttemptedAt = (error) => {",
         "tenetRequestId: requestId",
         "renderOperatorReadFailurePanel(",
