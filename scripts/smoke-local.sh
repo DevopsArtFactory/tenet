@@ -2606,8 +2606,12 @@ assert "const renderResourceTroubleshootingSummary = (section, detail, resource)
 assert "Derived from selected deployment/resource context plus the latest Related runtime events, Live inspection, and Recent logs panel results." in ui, ui
 assert "const selectedLookupScope = selectedResourceScopeText(resource);" in ui, ui
 assert "...(selectedLookupScope ? [['Selected lookup scope', selectedLookupScope]] : [])," in ui, ui
+assert "const resourceTroubleshootingGuardedErrorStatus = (states) => [states.logsState, states.inspectionState, states.relatedEventsState]" in ui, ui
+assert "One focused evidence read was denied by deployment authorization" in ui, ui
 assert "const resourceTroubleshootingRequestIDFromState = (state) => {" in ui, ui
 assert "['Evidence request IDs', resourceTroubleshootingRequestIDs(states)]" in ui, ui
+assert "['Recommended next check', resourceTroubleshootingNextCheck(states)]" in ui, ui
+assert "resourceTroubleshootingFreshnessPart('Recent logs', states.logsState, states.supportsLogs)" in ui, ui
 assert "refreshResourceTroubleshootingSummary(deploymentName, resource);" in ui, ui
 assert "pushResourceSection(troubleshootingSection, 'resource-troubleshooting-summary', 'Troubleshooting summary');" in ui, ui
 assert "pushResourceSection(historySection, 'resource-runtime-history', 'Runtime history');" in ui, ui
