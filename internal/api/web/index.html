@@ -4486,6 +4486,19 @@
         states.logsState?.status === 'ready' && states.logsState.result?.available === false ? states.logsState.result?.unavailableReason : '',
         states.inspectionState?.status === 'ready' && states.inspectionState.result?.available === false ? states.inspectionState.result?.unavailableReason : '',
       ].filter(Boolean);
+      const resourceTroubleshootingRequestIDFromState = (state) => {
+        if (state?.status === 'ready') return String(state.result?.tenetRequestId || state.result?.requestId || '').trim();
+        if (state?.status === 'error') return String(state.error?.requestId || '').trim();
+        return '';
+      };
+      const resourceTroubleshootingRequestIDs = (states) => {
+        const fields = [
+          ['Events', resourceTroubleshootingRequestIDFromState(states.relatedEventsState)],
+          ['Logs', resourceTroubleshootingRequestIDFromState(states.logsState)],
+          ['Inspection', resourceTroubleshootingRequestIDFromState(states.inspectionState)],
+        ].filter(([, requestId]) => requestId);
+        return fields.length ? fields.map(([label, requestId]) => `${label} ${requestId}`).join(' · ') : '—';
+      };
       const resourceTroubleshootingNextCheck = (states) => {
         if (!states.supportsLogs && !states.supportsInspection) {
           return 'Focused evidence panels are not supported for this resource type yet; use the current resource read, rollout context, status conditions, and related runtime events before escalating.';
@@ -4532,6 +4545,7 @@
           ['Related runtime events', resourceTroubleshootingState(states.relatedEventsState, resourceTroubleshootingRelatedEventsLabel, states.supportsRelatedEvents)],
           ['Recent logs', resourceTroubleshootingState(states.logsState, resourceTroubleshootingLogsLabel, states.supportsLogs)],
           ['Live inspection', resourceTroubleshootingState(states.inspectionState, resourceTroubleshootingInspectionLabel, states.supportsInspection)],
+          ['Evidence request IDs', resourceTroubleshootingRequestIDs(states)],
           ['Evidence freshness', resourceTroubleshootingFreshness(states)],
           ['Next check', resourceTroubleshootingNextCheck(states)],
         ];

@@ -2507,6 +2507,8 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
         "buildPageSectionURL('resource', 'resource-recent-logs'",
         "const renderResourceTroubleshootingSummary = (section, detail, resource) => {",
         "Derived from selected deployment/resource context plus the latest Related runtime events, Live inspection, and Recent logs panel results.",
+        "const resourceTroubleshootingRequestIDFromState = (state) => {",
+        "['Evidence request IDs', resourceTroubleshootingRequestIDs(states)]",
         "Unsupported for this resource type",
         "Focused evidence panels are not supported for this resource type yet; use the current resource read, rollout context, status conditions, and related runtime events before escalating.",
         "refreshResourceTroubleshootingSummary(deploymentName, resource);",

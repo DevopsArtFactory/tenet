@@ -6632,12 +6632,14 @@ async function renderScenario(hash, fetchImpl) {
     const link = pendingContainerSectionLinks.find((node) => node.href.endsWith(hashSuffix));
     if (!link || !link.href.includes('containerName=worker')) throw new Error('expected container section link to preserve containerName for ' + hashSuffix + ', got ' + (link?.href || '<missing>'));
   });
-  resolvePendingContainerLogs({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable', entries: [] }) });
-  resolvePendingContainerInspection({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable' }) });
+  const headerWithRequestID = (requestID) => ({ get: (name) => String(name).toLowerCase() === 'request-id' ? requestID : '' });
+  resolvePendingContainerLogs({ ok: true, headers: headerWithRequestID('req-logs-container-001'), json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable', entries: [] }) });
+  resolvePendingContainerInspection({ ok: true, headers: headerWithRequestID('req-inspection-container-002'), json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable' }) });
   await settle();
   const pendingContainerResolvedText = collectText(pendingContainerRun.document.getElementById('accounts')).join(' | ');
   if (!pendingContainerResolvedText.includes('Recent logs request | GET ' + containerLogsURL)) throw new Error('expected unavailable container recent-log state to show the exact request route, got ' + pendingContainerResolvedText);
   if (!pendingContainerResolvedText.includes('Live inspection request | GET ' + containerInspectionURL)) throw new Error('expected unavailable container live-inspection state to show the exact request route, got ' + pendingContainerResolvedText);
+  if (!pendingContainerResolvedText.includes('Evidence request IDs | Logs req-logs-container-001 · Inspection req-inspection-container-002')) throw new Error('expected troubleshooting summary to aggregate panel request IDs, got ' + pendingContainerResolvedText);
 
   const containerRun = await (async () => {
     const document = createDocument();
