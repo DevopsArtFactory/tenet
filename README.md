@@ -326,7 +326,7 @@ The detailed runner-start evidence bundle remains available by omitting `--summa
   drift, audit, and plan/apply workspaces.
 - `docs/features/resource-recent-logs.md` documents recent-log resource contracts, including lookup context, selector echoes, and friendly empty/unavailable states.
 - `docs/features/resource-inspection.md` documents the focused live resource inspection route, selectors, lookup context, unavailable states, and detailed field contracts.
-- `docs/runbooks/operator-troubleshooting.md` documents the auth, route, evidence, state, and verification troubleshooting quick-reference.
+- `docs/runbooks/operator-troubleshooting.md` documents the auth, route, evidence, state, and verification troubleshooting quick-reference. It also covers the end-to-end application detail -> resource detail -> Related runtime events -> Recent logs / Live inspection -> request-correlation handoff workflow.
 - `docs/runbooks/ci-smoke-runner-start.md` documents GitHub Actions runner-start
   failure triage for CI smoke checks.
 

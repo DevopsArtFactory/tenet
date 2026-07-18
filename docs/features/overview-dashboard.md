@@ -16,7 +16,11 @@ The dashboard routes are source-agnostic on the backend: `tenet-api` can now fee
 Operator troubleshooting quick-reference: use `docs/runbooks/operator-troubleshooting.md`
 for the compact route/evidence/state/verification matrix across applications
 overview, application detail, resource detail, Recent logs, Live inspection,
-audit, plan/apply, and queued applies.
+audit, plan/apply, and queued applies. Its end-to-end resource workflow is the
+release-guarded operator path for application detail -> resource detail ->
+Related runtime events -> Recent logs / Live inspection -> request-correlation
+handoff evidence, so docs and smoke changes should preserve those labels without
+requiring live AWS credentials.
 
 ## What shipped so far
 

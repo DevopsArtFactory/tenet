@@ -370,6 +370,17 @@ func TestOperatorTroubleshootingRunbookDocumentsDailyTriageFlow(t *testing.T) {
 		"GET /v1/controller/refresh/status",
 		"/?page=application&deployment={deploymentName}",
 		"/?page=resource&deployment={deploymentName}&resourceType={type}&resourceId={stableResourceId}",
+		"## End-to-End Resource Troubleshooting Workflow",
+		"Recommended next check",
+		"Related events · N",
+		"Current resource read",
+		"Evidence hints",
+		"Provider lookup context",
+		"resultScope",
+		"emptyReason",
+		"unavailableReason",
+		"Distinguish browser read freshness,",
+		"request-correlation IDs in the handoff",
 		"Request-Id",
 		"Tenet request ID",
 		"lookupContext",
@@ -387,6 +398,7 @@ func TestOperatorTroubleshootingRunbookDocumentsDailyTriageFlow(t *testing.T) {
 	orderedFragments := []string{
 		"## Identity and Refresh Preflight",
 		"## Surface Matrix",
+		"## End-to-End Resource Troubleshooting Workflow",
 		"## Unavailable-State Decoder",
 		"## Verification Commands",
 	}
@@ -658,6 +670,8 @@ func TestOperatorTroubleshootingCallsOutRelatedRuntimeEvents(t *testing.T) {
 		"application detail lists the linked resource, resource detail narrows retained controller history to that resource",
 		"Source-filtered empty states also include a one-click `Show all related event sources` recovery action",
 		"empty related-event results mean no retained matching rollout/drift/resource evidence in the selected source/window rather than missing Recent logs, Live inspection, or immutable audit data",
+		"release-guarded operator path for application detail -> resource detail ->",
+		"Related runtime events -> Recent logs / Live inspection -> request-correlation",
 	} {
 		if !strings.Contains(overviewGuideText, fragment) {
 			t.Fatalf("expected overview dashboard guide to include resource-events journey fragment %q", fragment)
@@ -698,6 +712,7 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 		"Resource drill-down Related runtime events, Recent logs, and Live inspection panels summarize controller history, lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract.",
 		"Capture the HTTP `Request-Id` response header with the `Provider lookup context`",
 		"card when escalating a failed or unavailable Recent logs or Live inspection",
+		"end-to-end application detail -> resource detail -> Related runtime events -> Recent logs / Live inspection -> request-correlation handoff workflow",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README documentation map to include %q", fragment)
