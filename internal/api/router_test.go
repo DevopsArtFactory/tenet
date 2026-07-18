@@ -6075,6 +6075,29 @@ func TestRouterOverviewApplications(t *testing.T) {
 					TargetType:         "ec2",
 					Strategy:           "canary",
 					ExecutionMode:      "asgWeightedTargetGroups",
+					ManagedDrift: []domain.ManagedDriftItem{
+						{
+							DriftID:  "drift_backend_authored",
+							Field:    "runtimeContext.capacity.desired",
+							Desired:  "6",
+							Actual:   "4",
+							Severity: domain.ManagedDriftSeverityHigh,
+							Source: &domain.ManagedDriftSource{
+								Kind:         "resourceInspection",
+								Label:        "candidateAutoScalingGroup payments-api-prod-candidate",
+								Route:        "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate",
+								ResourceType: "candidateAutoScalingGroup",
+								ResourceName: "payments-api-prod-candidate",
+							},
+						},
+						{
+							DriftID:  "drift_legacy_read_model",
+							Field:    "generation",
+							Desired:  "8",
+							Actual:   "7",
+							Severity: domain.ManagedDriftSeverityMedium,
+						},
+					},
 				},
 				TroubleshootingRecommendation: &catalog.TroubleshootingRecommendation{
 					Summary:      "1 managed drift row(s) need review; 1 high.",
@@ -6126,6 +6149,19 @@ func TestRouterOverviewApplications(t *testing.T) {
 	}
 	if runtimeSummary["targetType"] != "ec2" || runtimeSummary["strategy"] != "canary" || runtimeSummary["executionMode"] != "asgWeightedTargetGroups" {
 		t.Fatalf("expected runtimeSummary rollout-context fields in raw overview applications payload, got %#v", runtimeSummary)
+	}
+	managedDrift, ok := runtimeSummary["managedDrift"].([]any)
+	if !ok || len(managedDrift) != 2 {
+		t.Fatalf("expected runtimeSummary managedDrift rows in overview applications payload, got %#v", runtimeSummary["managedDrift"])
+	}
+	sourcedDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.capacity.desired")
+	if sourcedDrift["driftId"] != "drift_backend_authored" || sourcedDrift["desired"] != "6" || sourcedDrift["actual"] != "4" || sourcedDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
+		t.Fatalf("expected sourced managedDrift row fields in overview applications payload, got %#v", sourcedDrift)
+	}
+	requireManagedDriftSource(t, sourcedDrift, "resourceInspection", "candidateAutoScalingGroup payments-api-prod-candidate", "/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate", "candidateAutoScalingGroup", "payments-api-prod-candidate")
+	legacyDrift := requireManagedDriftItemByField(t, managedDrift, "generation")
+	if _, exists := legacyDrift["source"]; exists {
+		t.Fatalf("expected legacy/read-model-only managedDrift row to omit source metadata, got %#v", legacyDrift)
 	}
 	recommendation, ok := rawPayload[0]["troubleshootingRecommendation"].(map[string]any)
 	if !ok {
