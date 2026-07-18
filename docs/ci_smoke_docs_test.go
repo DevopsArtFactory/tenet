@@ -706,6 +706,16 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 	}
 
 	for _, fragment := range []string{
+		"The Live inspection card uses the same `Provider lookup context` label",
+		"inspection-specific `Inspection path · ...` summary",
+		"capturing the same region/account/observer-role evidence",
+	} {
+		if !strings.Contains(overviewUIText, fragment) {
+			t.Fatalf("expected overview UI docs to include live inspection lookup-context guidance %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
 		"GET /v1/overview/deployments/{deploymentName}/resource-inspection",
 		"`clusterArn`",
 		"`limit`",
