@@ -907,6 +907,7 @@ func TestResourceUnavailableSmokeMatrixDocsAndScripts(t *testing.T) {
 
 	for _, fragment := range []string{
 		"compact no-AWS resource-evidence matrix for ECS service/task, ASG/bootstrap, traffic-routing no-log-source, selector validation, successful-empty, and guarded-auth paths",
+		"Direct and Docker smoke both lock the route builders behind `Copy recent logs route` and `Copy live inspection route`",
 		"Local/no-AWS release-guard matrix",
 		"the resource-inspection guide maps each unavailable reason to a",
 	} {

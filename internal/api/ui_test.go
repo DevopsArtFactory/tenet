@@ -5483,11 +5483,26 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			}
 		}
 	}
+	localSmokeBody, err := os.ReadFile("../../scripts/smoke-local.sh")
+	if err != nil {
+		t.Fatalf("read ../../scripts/smoke-local.sh: %v", err)
+	}
+	localSmoke := string(localSmokeBody)
 	dockerSmokeBody, err := os.ReadFile("../../scripts/smoke-docker.sh")
 	if err != nil {
 		t.Fatalf("read ../../scripts/smoke-docker.sh: %v", err)
 	}
 	dockerSmoke := string(dockerSmokeBody)
+	for _, fragment := range []string{
+		"assert \"const buildResourceLogsRoute = (deploymentName, resource, limit = 0) => {\" in ui, ui",
+		"assert \"const resourceLogsReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceLogsRoute(deploymentName, resource, limit)}`;\" in ui, ui",
+		"assert \"const buildResourceInspectionRoute = (deploymentName, resource, limit = 0) => {\" in ui, ui",
+		"assert \"const resourceInspectionReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceInspectionRoute(deploymentName, resource, limit)}`;\" in ui, ui",
+	} {
+		if !strings.Contains(localSmoke, fragment) {
+			t.Fatalf("expected smoke-local.sh to lock resource copy-route builder fragment %q", fragment)
+		}
+	}
 	for _, fragment := range []string{
 		"DEPLOYMENT_DETAIL_JSON=\"$deployment_detail\"",
 		"PLAN_PREVIEW_JSON=\"$plan_preview\"",
@@ -5953,12 +5968,17 @@ func TestDockerSmokeDocsDescribeResourceRefreshCoverage(t *testing.T) {
 	files := map[string][]string{
 		"../../docs/architecture/tenet-v1-operator-contracts.md": {
 			"compose-backed shell coverage now also locks the bookmarkable resource page's top-level `Refresh resource detail` and `Resource JSON` shell (`Resource JSON` handoff builder, `GET /v1/overview/deployments/{deploymentName}` route-builder text, plus the preserved-detail loading/error copy) alongside the existing `Refresh recent logs` and `Refresh live inspection` lazy-panel route-builder/loading/error/auth-guidance hooks",
+			"Direct and compose smoke both guard the copyable resource-evidence route builders that back `Copy recent logs route` / `Copy live inspection route`",
 		},
 		"../../docs/features/overview-dashboard.md": {
 			"`make smoke-docker`, including raw shell-contract checks for the root applications overview refresh hooks",
 			"the bookmarkable resource page's top-level JSON/refresh shell (`Resource JSON`, its `/v1/overview/deployments/{deploymentName}` handoff builder, `Refresh resource detail`, the `GET /v1/overview/deployments/{deploymentName}` route-builder text, and the preserved-detail loading/error copy)",
 			"the drift workspace `Open resource evidence` handoff shell plus optional `managedDrift[].resourceRef` payload-shape validation when live AWS evidence is present",
 			"the bookmarkable resource page's lazy-panel refresh hooks (`Refresh recent logs`, `Refresh live inspection`, their route-builder helpers, and the loading/error/auth-guidance copy)",
+			"direct and compose smoke both guard the embedded lazy-read route builders behind `Copy recent logs route` and `Copy live inspection route`",
+		},
+		"../../README.md": {
+			"Direct and Docker smoke both lock the route builders behind `Copy recent logs route` and `Copy live inspection route`",
 		},
 	}
 
