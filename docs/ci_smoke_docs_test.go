@@ -458,8 +458,10 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 
 	for _, fragment := range []string{
 		"Usage: scripts/ci-smoke-runner-evidence.sh [--summary|--markdown] <run-id>",
-		"run summary with head SHA, attempt, timestamps, and URL",
-		"databaseId,name,status,conclusion,attempt,headSha,url,createdAt,updatedAt",
+		"run summary with workflow name, branch, head SHA, attempt, timestamps, and URL",
+		"databaseId,name,workflowName,status,conclusion,attempt,headBranch,headSha,url,createdAt,updatedAt",
+		"printf -- '- Workflow: `%s`",
+		"printf -- '- Head branch: `%s`",
 		"printf -- '- Attempt: `%s`",
 		"if [[ \"${1:-}\" == \"--summary\" || \"${1:-}\" == \"--markdown\" ]]",
 		"section \"Runner-start verdict\"",
@@ -483,7 +485,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 
 	for _, fragment := range []string{
 		"scripts/ci-smoke-runner-evidence.sh --summary <run-id>",
-		"summary includes the current attempt plus created/updated timestamps",
+		"summary includes the workflow/run name, branch, current attempt, and created/updated timestamps",
 		"prefers check-run rows whose `details_url` matches the requested run ID",
 		"same-SHA rerun attempts do not bleed into the evidence",
 		"docs/runbooks/ci-smoke-runner-start.md",

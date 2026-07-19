@@ -9,7 +9,7 @@ Collect GitHub Actions CI Smoke runner-start evidence for a workflow run.
 Use --summary or --markdown to print a concise Markdown block for PR/issue comments.
 
 The report includes:
-  - run summary with head SHA, attempt, timestamps, and URL
+  - run summary with workflow name, branch, head SHA, attempt, timestamps, and URL
   - compact Runner-start verdict for likely pre-runner blockers
   - Actions jobs API output with runner_id, runner_name, and steps[]
   - failed workflow logs when GitHub exposes them (missing logs are reported, not fatal)
@@ -133,6 +133,9 @@ print_markdown_summary() {
   local run_json
   local sha
   local url
+  local workflow_name
+  local run_name
+  local head_branch
   local attempt
   local created_at
   local updated_at
@@ -141,10 +144,13 @@ print_markdown_summary() {
   local docker_smoke
   local log_output
 
-  run_json=$(gh run view "$run_id" --json databaseId,name,status,conclusion,attempt,headSha,url,createdAt,updatedAt \
-    --jq '{id:.databaseId,name,status,conclusion,attempt,headSha,url,createdAt,updatedAt}')
+  run_json=$(gh run view "$run_id" --json databaseId,name,workflowName,status,conclusion,attempt,headBranch,headSha,url,createdAt,updatedAt \
+    --jq '{id:.databaseId,name,workflowName,status,conclusion,attempt,headBranch,headSha,url,createdAt,updatedAt}')
   sha=$(gh run view "$run_id" --json headSha --jq .headSha)
   url=$(gh run view "$run_id" --json url --jq .url)
+  workflow_name=$(gh run view "$run_id" --json workflowName --jq '.workflowName // ""')
+  run_name=$(gh run view "$run_id" --json name --jq '.name // ""')
+  head_branch=$(gh run view "$run_id" --json headBranch --jq '.headBranch // ""')
   attempt=$(gh run view "$run_id" --json attempt --jq .attempt)
   created_at=$(gh run view "$run_id" --json createdAt --jq .createdAt)
   updated_at=$(gh run view "$run_id" --json updatedAt --jq .updatedAt)
@@ -152,6 +158,8 @@ print_markdown_summary() {
 
   printf '### CI Smoke runner-start evidence\n\n'
   printf -- '- Run: %s\n' "$url"
+  printf -- '- Workflow: `%s` (`%s`)\n' "$workflow_name" "$run_name"
+  printf -- '- Head branch: `%s`\n' "$head_branch"
   printf -- '- Head SHA: `%s`\n' "$sha"
   printf -- '- Attempt: `%s`\n' "$attempt"
   printf -- '- Created: `%s`\n' "$created_at"
@@ -198,8 +206,8 @@ if [[ "$SUMMARY_MODE" == true ]]; then
 fi
 
 section "Run summary"
-gh run view "$RUN_ID" --json databaseId,name,status,conclusion,attempt,headSha,url,createdAt,updatedAt \
-  --jq '{id:.databaseId,name,status,conclusion,attempt,headSha,url,createdAt,updatedAt}'
+gh run view "$RUN_ID" --json databaseId,name,workflowName,status,conclusion,attempt,headBranch,headSha,url,createdAt,updatedAt \
+  --jq '{id:.databaseId,name,workflowName,status,conclusion,attempt,headBranch,headSha,url,createdAt,updatedAt}'
 
 SHA=$(gh run view "$RUN_ID" --json headSha --jq .headSha)
 CHECK_RUNS=$(ci_smoke_check_runs_tsv "$SHA" "$RUN_ID")
