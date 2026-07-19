@@ -8951,7 +8951,7 @@
           scopeParts.push(`Deployment ${currentPageState.deployment}`);
         }
         scopeParts.push(`Action ${currentPageState.auditAction ? auditActionDisplayLabel(currentPageState.auditAction) : 'All actions'}`);
-        scopeParts.push(`Window ${currentPageState.auditLimit > 0 ? `latest ${currentPageState.auditLimit} entries` : 'default window'}`);
+        scopeParts.push(`Window ${currentPageState.auditLimit > 0 ? `latest ${currentPageState.auditLimit} entries` : 'uncapped (all entries)'}`);
         return scopeParts.join(' · ');
       };
       const createAuditDeploymentContextCallout = () => {

@@ -1561,7 +1561,7 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"Current audit read: ${buildEmbeddedPageReadRoute(currentPageState)}",
 		"const auditScopeSummaryText = () => {",
 		"scopeParts.push(`Action ${currentPageState.auditAction ? auditActionDisplayLabel(currentPageState.auditAction) : 'All actions'}`);",
-		"scopeParts.push(`Window ${currentPageState.auditLimit > 0 ? `latest ${currentPageState.auditLimit} entries` : 'default window'}`);",
+		"scopeParts.push(`Window ${currentPageState.auditLimit > 0 ? `latest ${currentPageState.auditLimit} entries` : 'uncapped (all entries)'}`);",
 		"metrics audit-scope-summary",
 		"createMetric('Audit scope', auditScopeSummaryText())",
 		"const auditEntryCountLabel = (count) => `${count} entr${count === 1 ? 'y' : 'ies'}`;",

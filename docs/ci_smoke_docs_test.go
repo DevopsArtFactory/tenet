@@ -1768,6 +1768,7 @@ func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditC
 		"row-level `_self` `Share audit entry` and `Copy audit entry link` handoffs",
 		"preserve the current audit filters and stable row anchor",
 		"exact immutable audit row operators reviewed",
+		"using explicit uncapped wording when no `limit` is active",
 	} {
 		if !strings.Contains(section, fragment) {
 			t.Fatalf("expected deployment-scoped audit workspace docs to include clearable chip contract %q", fragment)

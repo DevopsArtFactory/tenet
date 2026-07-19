@@ -14226,6 +14226,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/audit-logs?deployment=payments-api-prod&action=apply.transitioned') throw new Error('expected transition-filtered audit route');
   if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action Apply lifecycle transitioned')) throw new Error('expected transition filter label, got ' + toolbarText);
   if (!accountsText.includes('Apply lifecycle transitioned')) throw new Error('expected transition row label');
+  if (!accountsText.includes('Audit scope | Deployment payments-api-prod · Action Apply lifecycle transitioned · Window uncapped (all entries)')) throw new Error('expected uncapped deployment audit scope copy, got ' + accountsText);
   if (!accountsText.includes('Apply transitions | 1')) throw new Error('expected transition summary count');
   if (!accountsText.includes('Apply requests | 0')) throw new Error('expected apply-request count to stay separate from transition count');
   if (!accountsText.includes('Transition · queued → running')) throw new Error('expected previous/new transition metadata');
