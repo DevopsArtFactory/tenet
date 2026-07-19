@@ -9,7 +9,7 @@ Collect GitHub Actions CI Smoke runner-start evidence for a workflow run.
 Use --summary or --markdown to print a concise Markdown block for PR/issue comments.
 
 The report includes:
-  - run summary with workflow name, branch, head SHA, attempt, timestamps, and URL
+  - run summary with workflow name, branch, status/conclusion, head SHA, attempt, timestamps, and URL
   - compact Runner-start verdict for likely pre-runner blockers
   - Actions jobs API output with runner_id, runner_name, and steps[]
   - failed workflow logs when GitHub exposes them (missing logs are reported, not fatal)
@@ -142,6 +142,8 @@ print_markdown_summary() {
   local workflow_name
   local run_name
   local head_branch
+  local status
+  local conclusion
   local attempt
   local created_at
   local updated_at
@@ -157,6 +159,8 @@ print_markdown_summary() {
   workflow_name=$(gh run view "$run_id" --json workflowName --jq '.workflowName // ""')
   run_name=$(gh run view "$run_id" --json name --jq '.name // ""')
   head_branch=$(gh run view "$run_id" --json headBranch --jq '.headBranch // ""')
+  status=$(gh run view "$run_id" --json status --jq '.status // ""')
+  conclusion=$(gh run view "$run_id" --json conclusion --jq '.conclusion // ""')
   attempt=$(gh run view "$run_id" --json attempt --jq .attempt)
   created_at=$(gh run view "$run_id" --json createdAt --jq .createdAt)
   updated_at=$(gh run view "$run_id" --json updatedAt --jq .updatedAt)
@@ -165,6 +169,7 @@ print_markdown_summary() {
   printf '### CI Smoke runner-start evidence\n\n'
   printf -- '- Run: %s\n' "$url"
   printf -- '- Workflow: `%s` (`%s`)\n' "$workflow_name" "$run_name"
+  printf -- '- Status: `%s` / conclusion `%s`\n' "$status" "$conclusion"
   printf -- '- Head branch: `%s`\n' "$head_branch"
   printf -- '- Head SHA: `%s`\n' "$sha"
   printf -- '- Attempt: `%s`\n' "$attempt"
