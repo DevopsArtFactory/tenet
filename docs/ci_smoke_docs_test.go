@@ -442,6 +442,8 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 		"jobs: []",
 		"startup_failure",
 		"log not found",
+		"record that missing-log line as evidence",
+		"do not keep rerunning or debugging the repository just to chase logs",
 		"billing/spending-limit",
 		"whose `details_url` belongs to the requested run ID",
 		"stale same-SHA attempts",
@@ -488,6 +490,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 	for _, fragment := range []string{
 		"scripts/ci-smoke-runner-evidence.sh --summary <run-id>",
 		"summary includes the workflow/run name, branch, current attempt, and created/updated timestamps",
+		"records `log not found` as missing-log evidence instead of an in-repo failure",
 		"prefers check-run rows whose `details_url` matches the requested run ID",
 		"same-SHA rerun attempts do not bleed into the evidence",
 		"docs/runbooks/ci-smoke-runner-start.md",
@@ -514,6 +517,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 	} {
 		for _, fragment := range []string{
 			"non-empty `steps[]`, a real runner assignment",
+			"Treat `log not found` from `gh run view --log-failed` as missing-log evidence",
 			"PR-head and `main` recovery",
 			"duplicate comments for the same run/head/attempt/failure shape",
 			"watch that in-progress attempt instead of dispatching a second ad-hoc run",
