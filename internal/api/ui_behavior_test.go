@@ -14283,6 +14283,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!accountsText.includes('Current audit read: GET /v1/audit-logs?deployment=payments-api-prod&limit=2')) throw new Error('expected scoped audit read route copy, got ' + accountsText);
   if (!accountsText.includes('Active deployment context')) throw new Error('expected deployment context callout');
   if (!accountsText.includes('payments-api-prod')) throw new Error('expected deployment context value');
+  if (!accountsText.includes('Audit scope | Deployment payments-api-prod · Action All actions · Window latest 2 entries')) throw new Error('expected deployment callout to summarize active audit scope, got ' + accountsText);
   const deploymentContextCallout = collectNodes(document.getElementById('accounts'), (node) => node.className === 'workspace-callout')
     .find((node) => collectText(node).join(' | ').includes('Active deployment context'));
   if (!deploymentContextCallout) throw new Error('expected deployment context callout node');
