@@ -2432,6 +2432,8 @@ assert 'Live inspection is unavailable for this resource.' in ui, ui
 assert 'Refresh live inspection' in ui, ui
 assert 'Copy live inspection route' in ui, ui
 assert "createCopyReadRouteButton(readRoute, 'Copy live inspection route')" in ui, ui
+assert "const buildResourceInspectionRoute = (deploymentName, resource, limit = 0) => {" in ui, ui
+assert "const resourceInspectionReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceInspectionRoute(deploymentName, resource, limit)}`;" in ui, ui
 assert "const markResourcePanelStatusNode = (node) => {" in ui, ui
 assert "markResourcePanelStatusNode(stateNode);" in ui, ui
 assert "node.setAttribute('role', 'status');" in ui, ui
@@ -2674,6 +2676,8 @@ assert "syncResourcePanelLimitQueryParams(deploymentName, resource);" in ui, ui
 assert "Refresh recent logs" in ui, ui
 assert "Copy recent logs route" in ui, ui
 assert "createCopyReadRouteButton(readRoute, 'Copy recent logs route')" in ui, ui
+assert "const buildResourceLogsRoute = (deploymentName, resource, limit = 0) => {" in ui, ui
+assert "const resourceLogsReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceLogsRoute(deploymentName, resource, limit)}`;" in ui, ui
 assert "const responseRequestID = (response) => {" in ui, ui
 assert "Tenet request ID" in ui, ui
 assert "Last refreshed" in ui, ui
