@@ -32,15 +32,15 @@ For a pasteable PR or issue comment, use the concise Markdown mode:
 scripts/ci-smoke-runner-evidence.sh --summary <run-id>
 ```
 
-`--summary` and `--markdown` are aliases. The Markdown summary keeps the run URL and head SHA, `Fast smoke` and `Docker smoke scope` runner assignment evidence (`runner_id`, `runner_name`, and `steps` count), a Docker smoke skipped note when that check-run is skipped, a missing failed-log note when `gh run view --log-failed` cannot download logs, and any billing/spending-limit annotations found on the CI Smoke check-runs.
+`--summary` and `--markdown` are aliases. The Markdown summary keeps the run URL and head SHA, the current attempt plus created/updated timestamps, `Fast smoke` and `Docker smoke scope` runner assignment evidence (`runner_id`, `runner_name`, and `steps` count), a Docker smoke skipped note when that check-run is skipped, a missing failed-log note when `gh run view --log-failed` cannot download logs, and any billing/spending-limit annotations found on the CI Smoke check-runs.
 
 The CI Smoke fast lane syntax-checks this helper with `bash -n` alongside the local and Docker smoke scripts. If an edit breaks the evidence collector itself, expect the hosted fast lane to fail before operators need it during a runner-start incident.
 
 If you need to collect each piece manually or paste individual commands into a PR comment, use the same sequence:
 
 ```bash
-gh run view <run-id> --json databaseId,name,status,conclusion,headSha,url \
-  --jq '{id:.databaseId,name,status,conclusion,headSha,url}'
+gh run view <run-id> --json databaseId,name,status,conclusion,attempt,headSha,url,createdAt,updatedAt \
+  --jq '{id:.databaseId,name,status,conclusion,attempt,headSha,url,createdAt,updatedAt}'
 
 gh api "repos/:owner/:repo/actions/runs/<run-id>/jobs" \
   --jq '.jobs[] | {name,status,conclusion,runner_id,runner_name,steps}'

@@ -434,6 +434,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 		"scripts/ci-smoke-runner-evidence.sh <run-id>",
 		"scripts/ci-smoke-runner-evidence.sh --summary <run-id>",
 		"`--summary` and `--markdown` are aliases",
+		"current attempt plus created/updated timestamps",
 		"Keep `scripts/ci-smoke-runner-evidence.sh` directly executable",
 		"Runner-start verdict",
 		"runner_id=0",
@@ -455,6 +456,9 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 
 	for _, fragment := range []string{
 		"Usage: scripts/ci-smoke-runner-evidence.sh [--summary|--markdown] <run-id>",
+		"run summary with head SHA, attempt, timestamps, and URL",
+		"databaseId,name,status,conclusion,attempt,headSha,url,createdAt,updatedAt",
+		"printf -- '- Attempt: `%s`",
 		"if [[ \"${1:-}\" == \"--summary\" || \"${1:-}\" == \"--markdown\" ]]",
 		"section \"Runner-start verdict\"",
 		"runner_id=",
@@ -472,6 +476,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 
 	for _, fragment := range []string{
 		"scripts/ci-smoke-runner-evidence.sh --summary <run-id>",
+		"summary includes the current attempt plus created/updated timestamps",
 		"docs/runbooks/ci-smoke-runner-start.md",
 		"Runner-start closeout requires a real runner assignment, non-empty `steps[]`, the fast lane reaching repository commands, and the Docker lane reaching `make smoke-docker` or actionable logs",
 		"PR-head recovery and `main` recovery are separate signals",

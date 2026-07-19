@@ -9,7 +9,7 @@ Collect GitHub Actions CI Smoke runner-start evidence for a workflow run.
 Use --summary or --markdown to print a concise Markdown block for PR/issue comments.
 
 The report includes:
-  - run summary with head SHA and URL
+  - run summary with head SHA, attempt, timestamps, and URL
   - compact Runner-start verdict for likely pre-runner blockers
   - Actions jobs API output with runner_id, runner_name, and steps[]
   - failed workflow logs when GitHub exposes them (missing logs are reported, not fatal)
@@ -118,20 +118,29 @@ print_markdown_summary() {
   local run_json
   local sha
   local url
+  local attempt
+  local created_at
+  local updated_at
   local check_runs
   local jobs
   local docker_smoke
   local log_output
 
-  run_json=$(gh run view "$run_id" --json databaseId,name,status,conclusion,headSha,url \
-    --jq '{id:.databaseId,name,status,conclusion,headSha,url}')
+  run_json=$(gh run view "$run_id" --json databaseId,name,status,conclusion,attempt,headSha,url,createdAt,updatedAt \
+    --jq '{id:.databaseId,name,status,conclusion,attempt,headSha,url,createdAt,updatedAt}')
   sha=$(gh run view "$run_id" --json headSha --jq .headSha)
   url=$(gh run view "$run_id" --json url --jq .url)
+  attempt=$(gh run view "$run_id" --json attempt --jq .attempt)
+  created_at=$(gh run view "$run_id" --json createdAt --jq .createdAt)
+  updated_at=$(gh run view "$run_id" --json updatedAt --jq .updatedAt)
   check_runs=$(ci_smoke_check_runs_tsv "$sha")
 
   printf '### CI Smoke runner-start evidence\n\n'
   printf -- '- Run: %s\n' "$url"
   printf -- '- Head SHA: `%s`\n' "$sha"
+  printf -- '- Attempt: `%s`\n' "$attempt"
+  printf -- '- Created: `%s`\n' "$created_at"
+  printf -- '- Updated: `%s`\n' "$updated_at"
   printf '\n'
 
   printf 'Run summary:\n\n'
@@ -174,8 +183,8 @@ if [[ "$SUMMARY_MODE" == true ]]; then
 fi
 
 section "Run summary"
-gh run view "$RUN_ID" --json databaseId,name,status,conclusion,headSha,url \
-  --jq '{id:.databaseId,name,status,conclusion,headSha,url}'
+gh run view "$RUN_ID" --json databaseId,name,status,conclusion,attempt,headSha,url,createdAt,updatedAt \
+  --jq '{id:.databaseId,name,status,conclusion,attempt,headSha,url,createdAt,updatedAt}'
 
 SHA=$(gh run view "$RUN_ID" --json headSha --jq .headSha)
 
