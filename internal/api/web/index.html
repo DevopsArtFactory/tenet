@@ -8945,6 +8945,15 @@
         }
         return actions.children.length ? actions : null;
       };
+      const auditScopeSummaryText = () => {
+        const scopeParts = [];
+        if (currentPageState.deployment) {
+          scopeParts.push(`Deployment ${currentPageState.deployment}`);
+        }
+        scopeParts.push(`Action ${currentPageState.auditAction ? auditActionDisplayLabel(currentPageState.auditAction) : 'All actions'}`);
+        scopeParts.push(`Window ${currentPageState.auditLimit > 0 ? `latest ${currentPageState.auditLimit} entries` : 'default window'}`);
+        return scopeParts.join(' · ');
+      };
       const createAuditDeploymentContextCallout = () => {
         const deploymentName = auditDeploymentName();
         if (!deploymentName) return null;
@@ -8954,9 +8963,12 @@
           createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Open plan/apply workspace', '_self'),
         );
         const callout = createElement('div', 'workspace-callout');
+        const scopeMetrics = createElement('div', 'metrics audit-scope-summary');
+        scopeMetrics.append(createMetric('Audit scope', auditScopeSummaryText()));
         callout.append(
           createElement('div', 'workspace-callout-label', 'Active deployment context'),
           createElement('div', 'workspace-callout-copy', deploymentName),
+          scopeMetrics,
           createElement('div', 'workspace-callout-factors', 'Audit rows, in-app drill-down links, and empty-state copy remain scoped to this deployment until the filter is cleared.'),
           contextLinks,
         );

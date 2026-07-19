@@ -3075,6 +3075,8 @@ assert 'Uncapped read; all matching audit entries returned' in audit_ui, audit_u
 assert 'Showing the latest ${limit}-entry capped audit window. Older matching audit entries may be hidden; increase Limit or clear audit controls before concluding no earlier activity exists.' in audit_ui, audit_ui
 assert 'audit-limit-cap-hint' in audit_ui, audit_ui
 assert 'Active deployment context' in audit_ui, audit_ui
+assert "const auditScopeSummaryText = () => {" in audit_ui, audit_ui
+assert "createMetric('Audit scope', auditScopeSummaryText())" in audit_ui, audit_ui
 assert "const contextLinks = createElement('div', 'row-links');" in audit_ui, audit_ui
 assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Open application drill-down', '_self')" in audit_ui, audit_ui
 assert "createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Open plan/apply workspace', '_self')" in audit_ui, audit_ui

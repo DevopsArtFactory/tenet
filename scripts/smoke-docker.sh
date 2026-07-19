@@ -2293,6 +2293,8 @@ for fragment in (
     "const clearAuditControl = (control) => {",
     "Clear audit controls",
     "Active deployment context",
+    "const auditScopeSummaryText = () => {",
+    "createMetric('Audit scope', auditScopeSummaryText())",
     "const contextLinks = createElement('div', 'row-links');",
     "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Open application drill-down', '_self')",
     "createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Open plan/apply workspace', '_self')",

@@ -1559,6 +1559,11 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"failure: 'audit log request failed',",
 		"const createAuditLogsIntro = () => {",
 		"Current audit read: ${buildEmbeddedPageReadRoute(currentPageState)}",
+		"const auditScopeSummaryText = () => {",
+		"scopeParts.push(`Action ${currentPageState.auditAction ? auditActionDisplayLabel(currentPageState.auditAction) : 'All actions'}`);",
+		"scopeParts.push(`Window ${currentPageState.auditLimit > 0 ? `latest ${currentPageState.auditLimit} entries` : 'default window'}`);",
+		"metrics audit-scope-summary",
+		"createMetric('Audit scope', auditScopeSummaryText())",
 		"const auditEntryCountLabel = (count) => `${count} entr${count === 1 ? 'y' : 'ies'}`;",
 		"const createAuditResultScopeSummary = (result, entries) => {",
 		"const scope = result?.resultScope;",
@@ -4528,6 +4533,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Current audit read: ${buildEmbeddedPageReadRoute(currentPageState)}' in audit_ui, audit_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains current audit read route copy")
 	}
+	if !strings.Contains(text, "assert \"createMetric('Audit scope', auditScopeSummaryText())\" in audit_ui, audit_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit scope summary contract")
+	}
 	if !strings.Contains(text, "assert 'Refresh audit log' in audit_ui, audit_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh audit log")
 	}
@@ -4659,6 +4667,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert 'Open audit log' in ui, ui",
 		"assert 'Deployment audit timeline' in audit_ui, audit_ui",
 		"assert 'Active deployment context' in audit_ui, audit_ui",
+		"assert \"createMetric('Audit scope', auditScopeSummaryText())\" in audit_ui, audit_ui",
 		"assert 'Quick navigation' in audit_ui, audit_ui",
 		"assert 'Deployment workspaces' in audit_ui, audit_ui",
 		"assert 'Current section' in audit_ui, audit_ui",
