@@ -3230,6 +3230,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Linked-resource source')) throw new Error('expected application route linked-resource source label');
   if (!accountsText.includes('Fallback rollout inventory')) throw new Error('expected application route to explain fallback linked-resource source, got ' + accountsText);
   if (!accountsText.includes('rollout.execution[] is missing or empty, so Tenet is showing canonical fallback resources for this execution mode.')) throw new Error('expected application route to explain why fallback linked resources are visible, got ' + accountsText);
+  if (!accountsText.includes('No Config and access resources are reported in this application detail read.')) throw new Error('expected application route to name suppressed zero-resource groups, got ' + accountsText);
+  if (accountsText.includes('No Workloads, Traffic routing')) throw new Error('expected coverage note to name only missing resource groups');
   if (!accountsText.includes('Quick navigation')) throw new Error('expected application route quick navigation');
   if (!accountsText.includes('Hierarchy')) throw new Error('expected application route hierarchy quick-nav group');
   if (!accountsText.includes('Applications overview')) throw new Error('expected application route overview quick-nav entry');
