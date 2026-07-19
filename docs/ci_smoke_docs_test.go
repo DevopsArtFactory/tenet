@@ -921,6 +921,9 @@ func TestResourceUnavailableSmokeMatrixDocsAndScripts(t *testing.T) {
 		"ASG console logs",
 		"Traffic-routing no-log-source",
 		"Successful-empty provider read",
+		"`Copy recent logs route` sits beside those controls and copies the exact",
+		"lazy-read route for the currently selected resource, selector, and log cap",
+		"not a raw-JSON navigation that changes the embedded page",
 		"`available=false`, `unavailableReason=no_log_source`, `entries=[]`, populated `lookupContext`, `resultScope.truncationStatus=not_applicable`, and `relatedLogRoutes[]` handoffs to sibling recent-log sources when Tenet can derive them",
 	} {
 		if !strings.Contains(recentLogsText, fragment) {
