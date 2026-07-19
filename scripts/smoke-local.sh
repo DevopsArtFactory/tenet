@@ -2849,6 +2849,9 @@ assert "createElement('div', 'account-topology resource-filter-summary')" in app
 assert "const applicationResourceInventorySummaryText = (groups, totalResourceCount, visibleResourceCount, resourceFilter = '') => {" in application_ui, application_ui
 assert 'Linked resource inventory:' in application_ui, application_ui
 assert "createElement('div', 'account-topology application-resource-inventory-summary'" in application_ui, application_ui
+assert "const applicationResourceMissingGroupTitles = (detail) => groupResourceSections(detail)" in application_ui, application_ui
+assert 'application-resource-coverage-note' in application_ui, application_ui
+assert "No ${missingGroups.join(', ')} resources are reported in this application detail read." in application_ui, application_ui
 assert "const inventorySummary = createApplicationResourceInventorySummary(resourceGroups, totalResourceCount, visibleResourceCount, resourceFilter);" in application_ui, application_ui
 assert "resource-filter-empty-recovery" in application_ui, application_ui
 assert 'Resource filter "${resourceFilter}" hides all ${totalResourceCount} linked resources. The application detail read still uses ${applicationDetailReadRoute(deploymentName)}.' in application_ui, application_ui

@@ -3926,6 +3926,16 @@
         if (!totalResourceCount) return null;
         return createElement('div', 'account-topology application-resource-inventory-summary', applicationResourceInventorySummaryText(groups, totalResourceCount, visibleResourceCount, resourceFilter));
       };
+      const applicationResourceMissingGroupTitles = (detail) => groupResourceSections(detail)
+        .filter((group) => Array.isArray(group?.resources) && group.resources.length === 0)
+        .map((group) => group.title)
+        .filter(Boolean);
+      const createApplicationResourceCoverageNote = (detail, totalResourceCount, resourceFilter = '') => {
+        if (!totalResourceCount || resourceFilter) return null;
+        const missingGroups = applicationResourceMissingGroupTitles(detail);
+        if (!missingGroups.length) return null;
+        return createElement('div', 'account-topology application-resource-coverage-note', `No ${missingGroups.join(', ')} resources are reported in this application detail read.`);
+      };
       const applicationResourceSectionLinkLabel = (group, resourceFilter = '') => {
         const visibleCount = (group?.resources || []).length;
         if (resourceFilter) return `${group.title} (${visibleCount} of ${applicationResourceGroupTotal(group)})`;
@@ -4918,6 +4928,10 @@
         const inventorySummary = createApplicationResourceInventorySummary(resourceGroups, totalResourceCount, visibleResourceCount, resourceFilter);
         if (inventorySummary) {
           page.append(inventorySummary);
+        }
+        const resourceCoverageNote = createApplicationResourceCoverageNote(detail, totalResourceCount, resourceFilter);
+        if (resourceCoverageNote) {
+          page.append(resourceCoverageNote);
         }
         if (resourceFilter && totalResourceCount > 0) {
           const filterSummary = createElement('div', 'account-topology resource-filter-summary');

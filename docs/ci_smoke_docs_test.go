@@ -1522,7 +1522,7 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`Application JSON`, `Copy read route`, and render the server-authored `Recommended next check` hint when `troubleshootingRecommendation` is present",
 		"The page also includes a lightweight `resourceFilter=` search",
-		"with visible/total impact, a compact `Linked resource inventory` summary with per-group counts, and section-specific empty guidance alongside the inline",
+		"with visible/total impact, a compact `Linked resource inventory` summary with per-group counts, a zero-resource coverage note that names suppressed groups such as `No Config and access resources are reported in this application detail read.`, and section-specific empty guidance alongside the inline",
 		"`Clear resource filter`; when the filter hides every linked resource, the page adds a top-level recovery cue that names the unchanged `GET /v1/overview/applications/{deploymentName}` backing read before the per-section empty states.",
 		"Their linked-resource summary also includes `Linked-resource source`, distinguishing controller-authored `rollout.execution[]` rows from canonical fallback rollout inventory when that array is missing or empty, plus compact resource-row `Evidence cues`:",
 		"`Live evidence available` / `Recent logs supported` / `Related runtime events supported` `_self` handoffs to the final",
@@ -1550,6 +1550,7 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 		"Filtering never changes the backing read route: application detail still reads `GET /v1/overview/applications/{deploymentName}`",
 		"deeper resource/drift/plan links still preserve their existing route contracts",
 		"The resource list starts with a compact `Linked resource inventory` line that shows total/visible resources and per-group counts",
+		"inventory summary adds a small coverage note for suppressed zero-resource groups such as `No Config and access resources are reported in this application detail read.`",
 		"When `resourceFilter` hides every linked resource, the page adds a top-level recovery cue such as `Resource filter \"does-not-match\" hides all 3 linked resources. The application detail read still uses GET /v1/overview/applications/{deploymentName}.`",
 		"When `resourceFilter` hides rows in one or more reported resource groups, the UI keeps those sections visible with section-specific filtered-empty copy",
 		"Active filters also switch section quick-nav labels to visible/total counts such as `Traffic routing (1 of 3)`.",
