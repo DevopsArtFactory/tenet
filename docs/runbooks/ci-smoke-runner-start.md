@@ -120,13 +120,15 @@ After the GitHub account condition is cleared:
    gh run watch <run-id> --exit-status
    ```
 
+   If `gh run rerun` reports that the workflow is already running, do not start a second ad-hoc run; watch the in-progress attempt to a terminal state, then collect fresh evidence from that same run ID so the issue history does not mix duplicate reruns with the recovery check.
+
    If the old run can no longer be rerun, dispatch a fresh smoke run from the workflow page or the CLI:
 
    ```bash
    gh workflow run "CI Smoke" --ref main
    ```
 
-3. Verify the rerun has non-empty job steps and a real runner assignment.
+3. Verify the rerun or already-running attempt has non-empty job steps and a real runner assignment.
 4. Confirm the fast lane reaches `go test ./...`, smoke script syntax checks, and `make smoke-local`.
 5. On `main` or Docker-scoped PRs, confirm the Docker lane reaches `make smoke-docker` or produces normal actionable logs.
 6. Comment on issue #1661 with the recovered run URL and whether the repository commands passed or exposed a new actionable repo-side failure.

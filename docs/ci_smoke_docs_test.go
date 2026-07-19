@@ -448,6 +448,8 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 		"bash -n scripts/ci-smoke-runner-evidence.sh",
 		"Do not post duplicate evidence for the same run URL, head SHA, attempt, and failure shape",
 		"Treat PR-head recovery and `main` recovery as separate signals",
+		"workflow is already running",
+		"watch the in-progress attempt",
 		"Fast smoke reached repository commands: go test ./..., smoke script syntax checks, and make smoke-local",
 		"Docker smoke reached make smoke-docker or produced normal actionable logs",
 	} {
@@ -491,6 +493,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 		"docs/runbooks/ci-smoke-runner-start.md",
 		"Runner-start closeout requires a real runner assignment, non-empty `steps[]`, the fast lane reaching repository commands, and the Docker lane reaching `make smoke-docker` or actionable logs",
 		"PR-head recovery and `main` recovery are separate signals",
+		"watch the in-progress attempt instead of dispatching a duplicate run",
 		"avoid duplicate evidence for the same run URL, head SHA, attempt, and failure shape",
 	} {
 		if !strings.Contains(readmeText, fragment) {
@@ -513,6 +516,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 			"non-empty `steps[]`, a real runner assignment",
 			"PR-head and `main` recovery",
 			"duplicate comments for the same run/head/attempt/failure shape",
+			"watch that in-progress attempt instead of dispatching a second ad-hoc run",
 		} {
 			if !strings.Contains(doc.text, fragment) {
 				t.Fatalf("expected %s to lock runner-start closeout wording %q", doc.name, fragment)
