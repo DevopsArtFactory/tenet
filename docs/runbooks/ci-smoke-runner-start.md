@@ -34,6 +34,8 @@ scripts/ci-smoke-runner-evidence.sh --summary <run-id>
 
 `--summary` and `--markdown` are aliases. The Markdown summary keeps the run URL, workflow/run name, head branch, and head SHA, the current attempt plus created/updated timestamps, run-specific `Fast smoke` and `Docker smoke scope` runner assignment evidence (`runner_id`, `runner_name`, and `steps` count) when check-run links can be matched to the requested run ID, a Docker smoke skipped note when that check-run is skipped, a missing failed-log note when `gh run view --log-failed` cannot download logs, and any billing/spending-limit annotations found on the CI Smoke check-runs.
 
+The helper exits `0` after collecting evidence even when failed logs are missing, because missing logs are part of the runner-start evidence bundle. Usage errors exit `2`, missing `gh` exits `127`, and GitHub auth/API lookup failures exit non-zero so operators can distinguish local tooling problems from a real pre-runner CI result.
+
 The CI Smoke fast lane syntax-checks this helper with `bash -n` alongside the local and Docker smoke scripts. If an edit breaks the evidence collector itself, expect the hosted fast lane to fail before operators need it during a runner-start incident.
 
 If you need to collect each piece manually or paste individual commands into a PR comment, use the same sequence:

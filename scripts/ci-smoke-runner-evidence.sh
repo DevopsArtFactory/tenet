@@ -18,6 +18,12 @@ The report includes:
   - check-run annotations that often carry billing/spending-limit runner-start reasons
 
 Run from a gh-authenticated checkout of DevopsArtFactory/tenet.
+
+Exit status:
+  0    evidence was collected (missing failed logs are reported, not fatal)
+  1    gh authentication or GitHub API lookup failed
+  2    command-line usage error
+  127  gh CLI is not installed
 USAGE
 }
 
