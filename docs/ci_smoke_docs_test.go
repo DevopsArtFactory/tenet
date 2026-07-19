@@ -931,6 +931,9 @@ func TestResourceUnavailableSmokeMatrixDocsAndScripts(t *testing.T) {
 	for _, fragment := range []string{
 		"representative no-AWS matrix for ECS service/task, ASG and bootstrap-source, traffic-routing, selector-validation, and guarded-auth paths",
 		"The matrix checks machine fields (`available`, `unavailableReason`, `lookupContext`, `resultScope`, `clusterArn`, `instanceId`) together with the embedded UI's friendly Live inspection copy",
+		"panel-local `Refresh live inspection`",
+		"`Copy live inspection route` copies the",
+		"resource-inspection?...`",
 	} {
 		if !strings.Contains(inspectionText, fragment) {
 			t.Fatalf("expected resource-inspection unavailable matrix to include %q", fragment)

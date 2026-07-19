@@ -297,7 +297,11 @@ The resource-detail page at
 `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}` renders a
 `Live inspection` panel and lazy-loads the resource-inspection route for the
 selected resource. The bookmarkable UI route stays unchanged while only the lazy
-panel refreshes.
+panel refreshes. Operators can use the panel-local `Refresh live inspection`
+control to re-run just the resource-inspection read without changing the page URL
+or refetching sibling evidence cards, and `Copy live inspection route` copies the
+exact `GET /v1/overview/deployments/{deploymentName}/resource-inspection?...`
+backend route for the current resource, selector, and sample cap.
 
 The panel labels the provider context as `Provider lookup context` and renders a
 compact `Inspection path · ...` sentence using `lookupContext`. It displays:
