@@ -24,7 +24,7 @@ scripts/ci-smoke-runner-evidence.sh <run-id>
 
 Keep `scripts/ci-smoke-runner-evidence.sh` directly executable because operators copy and run the path from this runbook during runner-start incidents.
 
-The helper also prints a compact `Runner-start verdict` section before the raw evidence. Treat a line as a likely pre-runner blocker when `Fast smoke` or `Docker smoke scope` has `runner_id=0` or an empty `runner_name`, and `steps=[]`; that means the lane did not reach repository commands. If the Actions jobs API returns `jobs: []` for a completed `startup_failure` run, treat that as the newer no-runner-record variant of the same blocker rather than as missing helper evidence. The same verdict section calls out any billing/spending-limit annotation found on the CI Smoke check-runs so reviewers do not have to infer the account-level blocker from raw JSON alone.
+The helper also prints a compact `Runner-start verdict` section before the raw evidence. Treat a line as a likely pre-runner blocker when `Fast smoke` or `Docker smoke scope` has `runner_id=0` or an empty `runner_name`, and `steps=[]`; that means the lane did not reach repository commands. If the Actions jobs API returns `jobs: []` for a completed `startup_failure` run, treat that as the newer no-runner-record variant of the same blocker rather than as missing helper evidence. The same verdict section calls out any billing/spending-limit annotation found on the CI Smoke check-runs, preferring check-run rows whose `details_url` belongs to the requested run ID when GitHub exposes those links, so reviewers do not have to infer the account-level blocker from raw JSON or stale same-SHA attempts alone.
 
 For a pasteable PR or issue comment, use the concise Markdown mode:
 
@@ -32,7 +32,7 @@ For a pasteable PR or issue comment, use the concise Markdown mode:
 scripts/ci-smoke-runner-evidence.sh --summary <run-id>
 ```
 
-`--summary` and `--markdown` are aliases. The Markdown summary keeps the run URL and head SHA, the current attempt plus created/updated timestamps, `Fast smoke` and `Docker smoke scope` runner assignment evidence (`runner_id`, `runner_name`, and `steps` count), a Docker smoke skipped note when that check-run is skipped, a missing failed-log note when `gh run view --log-failed` cannot download logs, and any billing/spending-limit annotations found on the CI Smoke check-runs.
+`--summary` and `--markdown` are aliases. The Markdown summary keeps the run URL and head SHA, the current attempt plus created/updated timestamps, run-specific `Fast smoke` and `Docker smoke scope` runner assignment evidence (`runner_id`, `runner_name`, and `steps` count) when check-run links can be matched to the requested run ID, a Docker smoke skipped note when that check-run is skipped, a missing failed-log note when `gh run view --log-failed` cannot download logs, and any billing/spending-limit annotations found on the CI Smoke check-runs.
 
 The CI Smoke fast lane syntax-checks this helper with `bash -n` alongside the local and Docker smoke scripts. If an edit breaks the evidence collector itself, expect the hosted fast lane to fail before operators need it during a runner-start incident.
 

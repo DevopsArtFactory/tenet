@@ -14,6 +14,7 @@ The report includes:
   - Actions jobs API output with runner_id, runner_name, and steps[]
   - failed workflow logs when GitHub exposes them (missing logs are reported, not fatal)
   - CI Smoke check-runs for Fast smoke, Docker smoke scope, and Docker smoke
+    (filtered to the requested run when check-run details_url links expose the run ID)
   - check-run annotations that often carry billing/spending-limit runner-start reasons
 
 Run from a gh-authenticated checkout of DevopsArtFactory/tenet.
@@ -55,8 +56,22 @@ section() {
 
 ci_smoke_check_runs_tsv() {
   local sha="$1"
-  gh api --paginate "repos/:owner/:repo/commits/${sha}/check-runs" \
-    --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope" or .name == "Docker smoke") | [.id, .name, (.status // ""), (.conclusion // ""), (.details_url // "")] | @tsv'
+  local run_id="${2:-}"
+  local rows
+  local filtered
+
+  rows=$(gh api --paginate "repos/:owner/:repo/commits/${sha}/check-runs" \
+    --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope" or .name == "Docker smoke") | [.id, .name, (.status // ""), (.conclusion // ""), (.details_url // "")] | @tsv')
+
+  if [[ -n "$run_id" ]]; then
+    filtered=$(printf '%s\n' "$rows" | awk -F '\t' -v run_id="$run_id" '$5 ~ "/runs/" run_id "/" {print}')
+    if [[ -n "$filtered" ]]; then
+      printf '%s\n' "$filtered"
+      return
+    fi
+  fi
+
+  printf '%s\n' "$rows"
 }
 
 print_billing_annotations() {
@@ -109,7 +124,7 @@ print_runner_start_verdict() {
     printf '%s\n' "$blocker_lines"
   fi
 
-  check_runs=$(ci_smoke_check_runs_tsv "$sha")
+  check_runs=$(ci_smoke_check_runs_tsv "$sha" "$run_id")
   print_billing_annotations "$check_runs" "-"
 }
 
@@ -133,7 +148,7 @@ print_markdown_summary() {
   attempt=$(gh run view "$run_id" --json attempt --jq .attempt)
   created_at=$(gh run view "$run_id" --json createdAt --jq .createdAt)
   updated_at=$(gh run view "$run_id" --json updatedAt --jq .updatedAt)
-  check_runs=$(ci_smoke_check_runs_tsv "$sha")
+  check_runs=$(ci_smoke_check_runs_tsv "$sha" "$run_id")
 
   printf '### CI Smoke runner-start evidence\n\n'
   printf -- '- Run: %s\n' "$url"
@@ -187,6 +202,7 @@ gh run view "$RUN_ID" --json databaseId,name,status,conclusion,attempt,headSha,u
   --jq '{id:.databaseId,name,status,conclusion,attempt,headSha,url,createdAt,updatedAt}'
 
 SHA=$(gh run view "$RUN_ID" --json headSha --jq .headSha)
+CHECK_RUNS=$(ci_smoke_check_runs_tsv "$SHA" "$RUN_ID")
 
 print_runner_start_verdict "$RUN_ID" "$SHA"
 
@@ -206,15 +222,21 @@ if ! gh run view "$RUN_ID" --log-failed; then
 fi
 
 section "CI Smoke check-runs"
-gh api --paginate "repos/:owner/:repo/commits/${SHA}/check-runs" \
-  --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope" or .name == "Docker smoke") | {id,name,status,conclusion,details_url}'
+if [[ -z "$CHECK_RUNS" ]]; then
+  echo "No CI Smoke check-runs found for ${SHA}."
+else
+  while IFS=$'\t' read -r id name status conclusion details_url; do
+    [[ -n "$id" ]] || continue
+    printf '{"id":%s,"name":"%s","status":"%s","conclusion":"%s","details_url":"%s"}\n' \
+      "$id" "$name" "$status" "$conclusion" "$details_url"
+  done <<< "$CHECK_RUNS"
+fi
 
 section "CI Smoke check-run annotations"
 CHECK_RUN_IDS=()
-while IFS= read -r id; do
+while IFS=$'\t' read -r id name status conclusion details_url; do
   [[ -n "$id" ]] && CHECK_RUN_IDS+=("$id")
-done < <(gh api --paginate "repos/:owner/:repo/commits/${SHA}/check-runs" \
-  --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope" or .name == "Docker smoke") | .id')
+done <<< "$CHECK_RUNS"
 
 if [[ ${#CHECK_RUN_IDS[@]} -eq 0 ]]; then
   echo "No CI Smoke check-runs found for ${SHA}."

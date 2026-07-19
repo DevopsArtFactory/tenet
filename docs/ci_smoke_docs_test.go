@@ -443,6 +443,8 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 		"startup_failure",
 		"log not found",
 		"billing/spending-limit",
+		"whose `details_url` belongs to the requested run ID",
+		"stale same-SHA attempts",
 		"bash -n scripts/ci-smoke-runner-evidence.sh",
 		"Do not post duplicate evidence for the same run URL, head SHA, attempt, and failure shape",
 		"Treat PR-head recovery and `main` recovery as separate signals",
@@ -467,6 +469,11 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 		"startup_failure/no runner records",
 		"log not found",
 		"billing/spending-limit",
+		"local run_id=\"${2:-}\"",
+		"awk -F '\\t' -v run_id=\"$run_id\"",
+		"/runs/\" run_id \"/",
+		"CHECK_RUNS=$(ci_smoke_check_runs_tsv \"$SHA\" \"$RUN_ID\")",
+		"done <<< \"$CHECK_RUNS\"",
 		"### CI Smoke runner-start evidence",
 	} {
 		if !strings.Contains(helperText, fragment) {
@@ -477,6 +484,8 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 	for _, fragment := range []string{
 		"scripts/ci-smoke-runner-evidence.sh --summary <run-id>",
 		"summary includes the current attempt plus created/updated timestamps",
+		"prefers check-run rows whose `details_url` matches the requested run ID",
+		"same-SHA rerun attempts do not bleed into the evidence",
 		"docs/runbooks/ci-smoke-runner-start.md",
 		"Runner-start closeout requires a real runner assignment, non-empty `steps[]`, the fast lane reaching repository commands, and the Docker lane reaching `make smoke-docker` or actionable logs",
 		"PR-head recovery and `main` recovery are separate signals",
