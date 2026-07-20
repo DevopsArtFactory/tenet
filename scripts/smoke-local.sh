@@ -2939,6 +2939,8 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "workspace-callout-factors resource-linked-source-cue" in body, body
     assert "Linked-resource source: ${resource?.linkedResourceSource || applicationLinkedResourceSourceText(detail)}" in body, body
     assert "Current resource read: ${resourceDetailReadRoute(deploymentName)}. Loaded before focused Related runtime events, Recent logs, and Live inspection reads." in body, body
+    assert "const selectedResourceEvidenceReadRoute = (route) => {" in body, body
+    assert "return /^GET\\s+/i.test(text) ? text : `GET ${text}`;" in body, body
     assert "const selectedResourceEvidenceCalloutText = (supportsInspection, supportsLogs, routeBits) => {" in body, body
     assert 'Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection.' in body, body
     assert 'Use the Live inspection handoff below to refresh focused evidence for this exact resource selection.' in body, body

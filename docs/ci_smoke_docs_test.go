@@ -1973,8 +1973,9 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 		"compact Evidence request IDs row",
 		"Current resource read: GET /v1/overview/deployments/{deploymentName}",
 		"keeps `Current resource read: GET /v1/overview/deployments/{deploymentName}` visible before lazy Related runtime events, Recent logs, or Live inspection reads resolve",
+		"prefixes selected-resource focused backing reads with `GET`",
 		"keeps the selected resource's `Linked-resource source` cue visible beside it",
-		"controller-authored-versus-fallback resource provenance remain clear",
+		"controller-authored-versus-fallback resource provenance stay obvious",
 		"unsupported focused-evidence states",
 		"distinguishes provider/auth failures from precise capacity, task, and stale-resource-selection evidence",
 	} {
@@ -1988,6 +1989,7 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 		"compact `Selected resource context` callout",
 		"visible before the lazy Recent logs and Live inspection panels load",
 		"repeats the `Linked-resource source` cue in the selected-resource context",
+		"prefixes the selected-resource Recent logs / Live inspection backing reads with `GET`",
 		"controller-authored `rollout.execution[]` rows or from canonical fallback rollout inventory",
 		"the final resource page also renders a compact `Troubleshooting summary`",
 		"any selected lookup scope (`containerName`, `clusterArn`, or `instanceId`)",
@@ -2003,7 +2005,7 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"top-level `Selected resource context` callout",
-		"the supported live-inspection/recent-log backing reads operators can refresh below",
+		"the supported live-inspection/recent-log backing reads rendered with explicit `GET` prefixes",
 		"compact Evidence request IDs",
 		"GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}",
 		"GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}",
