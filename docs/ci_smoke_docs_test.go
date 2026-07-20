@@ -436,6 +436,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 		"`--summary` and `--markdown` are aliases",
 		"The helper exits `0` after collecting evidence even when failed logs are missing",
 		"Usage errors exit `2`, missing `gh` exits `127`",
+		"event (`push`, `pull_request`, or manual dispatch)",
 		"current status/conclusion plus attempt and created/updated timestamps",
 		"Keep `scripts/ci-smoke-runner-evidence.sh` directly executable",
 		"Runner-start verdict",
@@ -464,15 +465,16 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 
 	for _, fragment := range []string{
 		"Usage: scripts/ci-smoke-runner-evidence.sh [--summary|--markdown] <run-id>",
-		"run summary with workflow name, branch, status/conclusion, head SHA, attempt, timestamps, and URL",
+		"run summary with workflow name, event, branch, status/conclusion, head SHA, attempt, timestamps, and URL",
 		"Exit status:",
 		"evidence was collected (missing failed logs are reported, not fatal)",
 		"gh authentication or GitHub API lookup failed",
 		"command-line usage error",
 		"gh CLI is not installed",
-		"databaseId,name,workflowName,status,conclusion,attempt,headBranch,headSha,url,createdAt,updatedAt",
+		"databaseId,name,workflowName,event,status,conclusion,attempt,headBranch,headSha,url,createdAt,updatedAt",
 		"printf -- '- Status: `%s` / conclusion `%s`",
 		"printf -- '- Workflow: `%s`",
+		"printf -- '- Event: `%s`",
 		"printf -- '- Head branch: `%s`",
 		"printf -- '- Attempt: `%s`",
 		"if [[ \"${1:-}\" == \"--summary\" || \"${1:-}\" == \"--markdown\" ]]",
@@ -497,7 +499,8 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 
 	for _, fragment := range []string{
 		"scripts/ci-smoke-runner-evidence.sh --summary <run-id>",
-		"summary includes the workflow/run name, branch, status/conclusion, current attempt, and created/updated timestamps",
+		"summary includes the workflow/run name, event, branch, status/conclusion, current attempt, and created/updated timestamps",
+		"operators can tell PR-head, `main`, and manual-dispatch reruns apart",
 		"helper exits `0` after collecting evidence even when failed logs are missing",
 		"usage errors, missing `gh`, and GitHub auth/API lookup failures remain non-zero",
 		"records `log not found` as missing-log evidence instead of an in-repo failure",
