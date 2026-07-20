@@ -918,6 +918,8 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"const selectedResourceEvidenceHintText = (resource) => {",
 		"Evidence hints: ${hints.join(' · ')}",
 		"selected-resource-evidence-hints",
+		"const selectedResourceEvidenceReadRoute = (route) => {",
+		"return /^GET\\s+/i.test(text) ? text : `GET ${text}`;",
 		"resourceEvidenceCapabilityRoute(resource, 'liveInspectionRoute') || resourceInspectionReadRoute(deploymentName, resource)",
 		"resourceEvidenceCapabilityRoute(resource, 'recentLogsRoute') || resourceLogsReadRoute(deploymentName, resource)",
 		"const selectedResourceEvidenceCalloutText = (supportsInspection, supportsLogs, routeBits) => {",

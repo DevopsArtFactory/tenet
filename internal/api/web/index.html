@@ -4428,14 +4428,19 @@
         ];
         return `Evidence hints: ${hints.join(' · ')}`;
       };
+      const selectedResourceEvidenceReadRoute = (route) => {
+        const text = String(route || '').trim();
+        if (!text) return '';
+        return /^GET\s+/i.test(text) ? text : `GET ${text}`;
+      };
       const createSelectedResourceContextCallout = (detail, resource) => {
         const deploymentName = detail.name || currentPageState.deployment || '';
         const scopeText = selectedResourceScopeText(resource);
         const supportsInspection = resourceSupportsLiveInspection(resource);
         const supportsLogs = resourceSupportsRecentLogs(resource);
         const routeBits = [
-          supportsInspection ? (resourceEvidenceCapabilityRoute(resource, 'liveInspectionRoute') || resourceInspectionReadRoute(deploymentName, resource)) : '',
-          supportsLogs ? (resourceEvidenceCapabilityRoute(resource, 'recentLogsRoute') || resourceLogsReadRoute(deploymentName, resource)) : '',
+          supportsInspection ? selectedResourceEvidenceReadRoute(resourceEvidenceCapabilityRoute(resource, 'liveInspectionRoute') || resourceInspectionReadRoute(deploymentName, resource)) : '',
+          supportsLogs ? selectedResourceEvidenceReadRoute(resourceEvidenceCapabilityRoute(resource, 'recentLogsRoute') || resourceLogsReadRoute(deploymentName, resource)) : '',
         ].filter(Boolean);
         const callout = createElement('div', 'workspace-callout selected-resource-context');
         const head = createElement('div', 'workspace-callout-head');
