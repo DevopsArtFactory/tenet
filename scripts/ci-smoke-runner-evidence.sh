@@ -11,7 +11,7 @@ Use --summary or --markdown to print a concise Markdown block for PR/issue comme
 The report includes:
   - run summary with workflow name, event, branch, status/conclusion, head SHA, attempt, timestamps, and URL
   - compact Runner-start verdict for likely pre-runner blockers
-  - Actions jobs API output with runner_id, runner_name, and steps[]
+  - Actions jobs API output with job IDs, runner_id, runner_name, and steps[]
   - failed workflow logs when GitHub exposes them (missing logs are reported, not fatal)
   - CI Smoke check-runs for Fast smoke, Docker smoke scope, and Docker smoke
     (filtered to the requested run when check-run details_url links expose the run ID)
@@ -184,12 +184,12 @@ print_markdown_summary() {
   printf '```json\n%s\n```\n\n' "$run_json"
 
   printf 'Runner assignment evidence:\n\n'
-  printf '| Scope | Status | Conclusion | runner_id | runner_name | steps |\n'
-  printf '| --- | --- | --- | --- | --- | --- |\n'
+  printf '| Scope | Job ID | Status | Conclusion | runner_id | runner_name | steps |\n'
+  printf '| --- | --- | --- | --- | --- | --- | --- |\n'
   jobs=$(gh api "repos/:owner/:repo/actions/runs/${run_id}/jobs" \
-    --jq '.jobs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope") | "| \(.name) | \(.status // "") | \(.conclusion // "") | \(.runner_id // 0) | \((.runner_name // "") | if . == "" then "<empty>" else . end) | \((.steps // []) | length) |"')
+    --jq '.jobs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope") | "| \(.name) | \(.id // "") | \(.status // "") | \(.conclusion // "") | \(.runner_id // 0) | \((.runner_name // "") | if . == "" then "<empty>" else . end) | \((.steps // []) | length) |"')
   if [[ -z "$jobs" ]]; then
-    echo '| Fast smoke / Docker smoke scope | unavailable | unavailable | unavailable | unavailable | unavailable |'
+    echo '| Fast smoke / Docker smoke scope | unavailable | unavailable | unavailable | unavailable | unavailable | unavailable |'
     printf '\n'
     printf -- '- Actions jobs API returned `jobs: []` (`startup_failure`/no runner records), so no repository commands ran.\n'
   else
@@ -230,7 +230,7 @@ print_runner_start_verdict "$RUN_ID" "$SHA"
 
 section "Actions jobs API runner assignment evidence"
 ACTIONS_JOBS_OUTPUT=$(gh api "repos/:owner/:repo/actions/runs/${RUN_ID}/jobs" \
-  --jq '.jobs[] | {name,status,conclusion,runner_id,runner_name,steps}')
+  --jq '.jobs[] | {id,name,status,conclusion,runner_id,runner_name,steps}')
 if [[ -z "$ACTIONS_JOBS_OUTPUT" ]]; then
   echo "Actions jobs API returned jobs: [] (startup_failure/no runner records), so no repository commands ran."
 else

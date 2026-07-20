@@ -438,6 +438,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 		"Usage errors exit `2`, missing `gh` exits `127`",
 		"event (`push`, `pull_request`, or manual dispatch)",
 		"current status/conclusion plus attempt and created/updated timestamps",
+		"job ID, `runner_id`, `runner_name`, and `steps` count",
 		"Keep `scripts/ci-smoke-runner-evidence.sh` directly executable",
 		"Runner-start verdict",
 		"runner_id=0",
@@ -466,6 +467,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 	for _, fragment := range []string{
 		"Usage: scripts/ci-smoke-runner-evidence.sh [--summary|--markdown] <run-id>",
 		"run summary with workflow name, event, branch, status/conclusion, head SHA, attempt, timestamps, and URL",
+		"Actions jobs API output with job IDs, runner_id, runner_name, and steps[]",
 		"Exit status:",
 		"evidence was collected (missing failed logs are reported, not fatal)",
 		"gh authentication or GitHub API lookup failed",
@@ -477,6 +479,9 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 		"printf -- '- Event: `%s`",
 		"printf -- '- Head branch: `%s`",
 		"printf -- '- Attempt: `%s`",
+		"| Scope | Job ID | Status | Conclusion | runner_id | runner_name | steps |",
+		".id // \"\"",
+		"{id,name,status,conclusion,runner_id,runner_name,steps}",
 		"if [[ \"${1:-}\" == \"--summary\" || \"${1:-}\" == \"--markdown\" ]]",
 		"section \"Runner-start verdict\"",
 		"runner_id=",
@@ -499,7 +504,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 
 	for _, fragment := range []string{
 		"scripts/ci-smoke-runner-evidence.sh --summary <run-id>",
-		"summary includes the workflow/run name, event, branch, status/conclusion, current attempt, and created/updated timestamps",
+		"summary includes the workflow/run name, event, branch, status/conclusion, current attempt, created/updated timestamps, and Fast smoke / Docker smoke scope job IDs",
 		"operators can tell PR-head, `main`, and manual-dispatch reruns apart",
 		"helper exits `0` after collecting evidence even when failed logs are missing",
 		"usage errors, missing `gh`, and GitHub auth/API lookup failures remain non-zero",
@@ -532,6 +537,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 			"non-empty `steps[]`, a real runner assignment",
 			"Treat `log not found` from `gh run view --log-failed` as missing-log evidence",
 			"Missing failed logs are non-fatal evidence in",
+			"job ID",
 			"usage, missing `gh`, and GitHub auth/API",
 			"PR-head and `main` recovery",
 			"duplicate comments for the same run/head/attempt/failure shape",
