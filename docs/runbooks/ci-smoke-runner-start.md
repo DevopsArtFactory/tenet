@@ -32,7 +32,7 @@ For a pasteable PR or issue comment, use the concise Markdown mode:
 scripts/ci-smoke-runner-evidence.sh --summary <run-id>
 ```
 
-`--summary` and `--markdown` are aliases. The Markdown summary keeps the run URL, workflow/run name, head branch, head SHA, and current status/conclusion plus attempt and created/updated timestamps, run-specific `Fast smoke` and `Docker smoke scope` runner assignment evidence (`runner_id`, `runner_name`, and `steps` count) when check-run links can be matched to the requested run ID, a Docker smoke skipped note when that check-run is skipped, a missing failed-log note when `gh run view --log-failed` cannot download logs, and any billing/spending-limit annotations found on the CI Smoke check-runs.
+`--summary` and `--markdown` are aliases. The Markdown summary keeps the run URL, workflow/run name, event (`push`, `pull_request`, or manual dispatch), head branch, head SHA, and current status/conclusion plus attempt and created/updated timestamps, run-specific `Fast smoke` and `Docker smoke scope` runner assignment evidence (`runner_id`, `runner_name`, and `steps` count) when check-run links can be matched to the requested run ID, a Docker smoke skipped note when that check-run is skipped, a missing failed-log note when `gh run view --log-failed` cannot download logs, and any billing/spending-limit annotations found on the CI Smoke check-runs.
 
 The helper exits `0` after collecting evidence even when failed logs are missing, because missing logs are part of the runner-start evidence bundle. Usage errors exit `2`, missing `gh` exits `127`, and GitHub auth/API lookup failures exit non-zero so operators can distinguish local tooling problems from a real pre-runner CI result.
 
@@ -41,8 +41,8 @@ The CI Smoke fast lane syntax-checks this helper with `bash -n` alongside the lo
 If you need to collect each piece manually or paste individual commands into a PR comment, use the same sequence:
 
 ```bash
-gh run view <run-id> --json databaseId,name,workflowName,status,conclusion,attempt,headBranch,headSha,url,createdAt,updatedAt \
-  --jq '{id:.databaseId,name,workflowName,status,conclusion,attempt,headBranch,headSha,url,createdAt,updatedAt}'
+gh run view <run-id> --json databaseId,name,workflowName,event,status,conclusion,attempt,headBranch,headSha,url,createdAt,updatedAt \
+  --jq '{id:.databaseId,name,workflowName,event,status,conclusion,attempt,headBranch,headSha,url,createdAt,updatedAt}'
 
 gh api "repos/:owner/:repo/actions/runs/<run-id>/jobs" \
   --jq '.jobs[] | {name,status,conclusion,runner_id,runner_name,steps}'
