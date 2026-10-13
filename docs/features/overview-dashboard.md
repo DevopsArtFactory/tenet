@@ -1,5 +1,22 @@
 # Tenet Overview Dashboard
 
+The default UI prioritizes status and resource navigation: application cards use
+sync/health badges, and application detail shows a compact status strip above
+resource cards grouped by Workloads, Traffic routing, and Config and access.
+The visual system uses a dark deployment summary, bright layered surfaces,
+role-tinted resource groups, decorative inline SVG icons, and shared shadow and
+spacing tokens. Hover elevation is disabled when reduced motion is requested;
+fonts use local/system fallbacks and need no third-party font requests.
+
+These groups describe linked-resource inventory, not inferred AWS dependency
+edges or resource-level health. Controller versus fallback inventory remains
+explicit. Long descriptions, API handoffs, access diagnostics, and runtime
+metadata live in native expandable sections. Resource evidence panels can be
+opened individually; bookmarked section links open their containing disclosures
+before scrolling and focusing the target. Disclosure state survives in-page
+filter and refresh rerenders.
+
+
 ## Purpose
 
 The embedded Tenet dashboard is the current operator-facing entry point for the control-plane prototype.
@@ -543,3 +560,16 @@ Already-shipped dashboard surfaces should not be reopened as generic roadmap ite
 - eventual extraction into a dedicated frontend only if the current read-model/UI surface becomes too large for embedded HTML
 
 `GET /v1/applies?status=active` follows the same collection contract for executor-facing active immutable apply records and returns `200 OK` with `[]` when no queued or running records are visible. `GET /v1/applies?status=active&claim=stale` returns only stale running claims and also returns `200 OK` with `[]` when none are visible. `GET /v1/applies?status=queued` remains the exact queued subset; `GET /v1/applies?status=running` is the exact running subset; `/?page=applies` defaults to queued work, `/?page=applies&appliesView=active` is the bookmarkable embedded active-handoff monitor view, and `/?page=applies&appliesView=stale` is the bookmarkable stale active-claim view.
+
+
+### Application list pagination
+
+The applications overview renders 20 cards per page by default. Operators can
+choose 20, 50, or 100 applications per page and use Previous / Next controls.
+Search and account/sync/health filters apply to the full fetched collection
+before pagination; changing filters or page size returns to page 1. Status counts
+summarize all matches, while the list reports the current visible range. Refresh
+clamps an out-of-range page after the collection shrinks. `appPage` and
+`appPageSize` are bookmarkable query parameters and survive detail/back links.
+This is UI pagination: the API still returns the full overview collection, so it
+limits rendered cards rather than network transfer or backend catalog work.

@@ -136,8 +136,8 @@ func stripInlineHTML(value string) string {
 	return tagRE.ReplaceAllString(value, "")
 }
 
-func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
-	readmeText := readTextFile(t, "../README.md")
+func TestOperatorReferenceValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	workflowText := readTextFile(t, "../.github/workflows/ci-smoke.yml")
 	localRuntimeText := readTextFile(t, "architecture/tenet-v1-local-runtime.md")
 	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
@@ -148,8 +148,8 @@ func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
 		"bash -n scripts/ci-smoke-runner-evidence.sh",
 		"make smoke-local",
 	} {
-		if !strings.Contains(readmeText, command) {
-			t.Fatalf("expected README validation docs to include %q", command)
+		if !strings.Contains(referenceText, command) {
+			t.Fatalf("expected operator reference validation docs to include %q", command)
 		}
 		if !strings.Contains(workflowText, "run: "+command) {
 			t.Fatalf("expected CI Smoke workflow to include %q", command)
@@ -167,8 +167,8 @@ func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
 		"changes under Docker/Compose, front-door auth, API/controller, local fixtures, runtime read models, RBAC policy diagnostics, resource evidence, webhook, plan/apply, or audit smoke surfaces run the full Docker stack before merge",
 		"make smoke-docker",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README validation docs to include %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference validation docs to include %q", fragment)
 		}
 	}
 
@@ -206,20 +206,20 @@ func TestComposeLocalRuntimeUsesExplicitFilesystemCatalogSource(t *testing.T) {
 	}
 }
 
-func TestReadmeDocumentsRawDeploymentStatusProbes(t *testing.T) {
-	readmeText := readTextFile(t, "../README.md")
+func TestOperatorReferenceDocumentsRawDeploymentStatusProbes(t *testing.T) {
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	for _, fragment := range []string{
 		"curl -fsS http://localhost:18083/v1/status/deployments",
 		"`GET /v1/status/deployments` and `GET /v1/status/deployments/{deploymentName}` for raw persisted runtime snapshots",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README raw deployment-status docs to include %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference raw deployment-status docs to include %q", fragment)
 		}
 	}
 }
 
-func TestReadmeDocumentsRecentLogResultScopeFields(t *testing.T) {
-	readmeText := readTextFile(t, "../README.md")
+func TestOperatorReferenceDocumentsRecentLogResultScopeFields(t *testing.T) {
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	for _, fragment := range []string{
 		"`GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}][&containerName={container}][&instanceId={ec2InstanceId}][&clusterArn={ecsClusterArn}]`",
 		"`resultScope.requestedLimit`",
@@ -230,8 +230,8 @@ func TestReadmeDocumentsRecentLogResultScopeFields(t *testing.T) {
 		"`truncated`",
 		"compact aliases such as `limit`/`returned` keep bounded reads terse",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README recent-log resultScope docs to include %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference recent-log resultScope docs to include %q", fragment)
 		}
 	}
 }
@@ -264,26 +264,26 @@ func TestOverviewUIDocumentsApplicationFilterResetTooltips(t *testing.T) {
 		}
 	}
 
-	readmeText := readTextFile(t, "../README.md")
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	for _, fragment := range []string{
 		"active-filter tooltip",
 		"names the exact search, sync, health, and account state before reset",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README to include application filter reset tooltip summary %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference to include application filter reset tooltip summary %q", fragment)
 		}
 	}
 }
 
 func TestSmokeHelperScriptsRemainDirectlyRunnable(t *testing.T) {
-	readmeText := readTextFile(t, "../README.md")
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	for _, fragment := range []string{
 		"Smoke helper scripts must keep their executable bits",
 		"Makefile targets and runner-start docs invoke them directly by path",
 		"remove every mktemp-backed helper file or directory during cleanup",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README validation docs to include executable helper contract %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference validation docs to include executable helper contract %q", fragment)
 		}
 	}
 
@@ -425,7 +425,7 @@ func TestOperatorTroubleshootingRunbookDocumentsDailyTriageFlow(t *testing.T) {
 func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 	runbookText := readTextFile(t, "runbooks/ci-smoke-runner-start.md")
 	helperText := readTextFile(t, "../scripts/ci-smoke-runner-evidence.sh")
-	readmeText := readTextFile(t, "../README.md")
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	workflowText := readTextFile(t, "../.github/workflows/ci-smoke.yml")
 	localRuntimeText := readTextFile(t, "architecture/tenet-v1-local-runtime.md")
 	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
@@ -517,8 +517,8 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 		"watch the in-progress attempt instead of dispatching a duplicate run",
 		"avoid duplicate evidence for the same run URL, head SHA, attempt, and failure shape",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README to point operators at runner-start evidence helper/runbook via %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference to point operators at runner-start evidence helper/runbook via %q", fragment)
 		}
 	}
 
@@ -551,7 +551,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 }
 
 func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T) {
-	readmeText := readTextFile(t, "../README.md")
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
 	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
 	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
@@ -598,8 +598,8 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 		"`returnedCount` as a compact alias for `returnedEventCount`",
 		"`GET /v1/overview/deployments/payments-api-prod/events?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate`",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README deployment-events docs to include %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference deployment-events docs to include %q", fragment)
 		}
 	}
 
@@ -689,7 +689,7 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 func TestOperatorTroubleshootingCallsOutRelatedRuntimeEvents(t *testing.T) {
 	runbookText := readTextFile(t, "runbooks/operator-troubleshooting.md")
 	contractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
-	readmeText := readTextFile(t, "../README.md")
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	overviewGuideText := readTextFile(t, "features/overview-dashboard.md")
 	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
 	for _, fragment := range []string{
@@ -744,14 +744,14 @@ func TestOperatorTroubleshootingCallsOutRelatedRuntimeEvents(t *testing.T) {
 		"distinguishes empty retained history from source-filtered no-match states and route failures",
 		"provides a one-click `Show all related event sources` recovery action for source-filtered empty states",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README to include resource-events journey fragment %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference to include resource-events journey fragment %q", fragment)
 		}
 	}
 }
 
 func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
-	readmeText := readTextFile(t, "../README.md")
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	overviewText := readTextFile(t, "architecture/tenet-v1-overview.md")
 	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
 	contractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
@@ -766,8 +766,8 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 		"card when escalating a failed or unavailable Recent logs or Live inspection",
 		"end-to-end application detail -> resource detail -> Related runtime events -> Recent logs / Live inspection -> request-correlation handoff workflow",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README documentation map to include %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference documentation map to include %q", fragment)
 		}
 	}
 
@@ -780,8 +780,8 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 		"`resultScope.returnedItemCount`",
 		"`Traffic-routing status`",
 	} {
-		if strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README to link detailed resource-inspection field contracts instead of duplicating %q", fragment)
+		if strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference to link detailed resource-inspection field contracts instead of duplicating %q", fragment)
 		}
 	}
 
@@ -942,7 +942,7 @@ func TestResourceEvidenceDocsLockOperatorFieldFamilies(t *testing.T) {
 }
 
 func TestResourceUnavailableSmokeMatrixDocsAndScripts(t *testing.T) {
-	readmeText := readTextFile(t, "../README.md")
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	inspectionText := readTextFile(t, "features/resource-inspection.md")
 	recentLogsText := readTextFile(t, "features/resource-recent-logs.md")
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
@@ -956,7 +956,7 @@ func TestResourceUnavailableSmokeMatrixDocsAndScripts(t *testing.T) {
 		"Local/no-AWS release-guard matrix",
 		"the resource-inspection guide maps each unavailable reason to a",
 	} {
-		if !strings.Contains(readmeText+inspectionText+recentLogsText, fragment) {
+		if !strings.Contains(referenceText+inspectionText+recentLogsText, fragment) {
 			t.Fatalf("expected resource unavailable docs matrix to include %q", fragment)
 		}
 	}
@@ -1152,7 +1152,7 @@ func TestLocalRuntimeDocsSeparateShippedWriteRoutesFromDeferredAWSMutation(t *te
 
 func TestPlanWorkspaceDocsMentionCopyableWorkspaceReadRoute(t *testing.T) {
 	docs := map[string]string{
-		"README":             readTextFile(t, "../README.md"),
+		"operator reference": readTextFile(t, "architecture/tenet-v1-operator-reference.md"),
 		"overview dashboard": readTextFile(t, "features/overview-dashboard.md"),
 		"overview UI":        readTextFile(t, "architecture/tenet-v1-overview-ui.md"),
 		"operator runbook":   readTextFile(t, "runbooks/operator-troubleshooting.md"),
@@ -1192,7 +1192,7 @@ func TestPlanWorkspaceDocsMentionCopyableWorkspaceReadRoute(t *testing.T) {
 }
 
 func TestClaimedApplyTransitionGuardDocsAndSmoke(t *testing.T) {
-	readmeText := readTextFile(t, "../README.md")
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	overviewDashboardText := readTextFile(t, "features/overview-dashboard.md")
 	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
 	smokeLocalText := readTextFile(t, "../scripts/smoke-local.sh")
@@ -1204,13 +1204,13 @@ func TestClaimedApplyTransitionGuardDocsAndSmoke(t *testing.T) {
 		"the transition response keeps `claim.workerId`, `claim.claimedAt`, `claim.lastHeartbeatAt`, `claim.expiresAt`, and additive lifecycle metadata",
 		"local-safe only: claim/heartbeat/transition records update Tenet's persisted apply lifecycle without live AWS mutation",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README to document claimed apply transition guard %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference to document claimed apply transition guard %q", fragment)
 		}
 	}
 
 	for name, text := range map[string]string{
-		"README":             readmeText,
+		"operator reference": referenceText,
 		"overview dashboard": overviewDashboardText,
 		"overview UI":        overviewUIText,
 	} {
@@ -1243,7 +1243,7 @@ func TestClaimedApplyTransitionGuardDocsAndSmoke(t *testing.T) {
 }
 
 func TestExpiredApplyClaimRecoveryDocsAndSmoke(t *testing.T) {
-	readmeText := readTextFile(t, "../README.md")
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	localRuntimeText := readTextFile(t, "architecture/tenet-v1-local-runtime.md")
 	smokeLocalText := readTextFile(t, "../scripts/smoke-local.sh")
 
@@ -1253,8 +1253,8 @@ func TestExpiredApplyClaimRecoveryDocsAndSmoke(t *testing.T) {
 		"fresh competing claims still return `409 Conflict`",
 		"legacy stale claims without persisted `claim.expiresAt` remain manual-recovery conflicts",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README to document explicit expired claim recovery %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference to document explicit expired claim recovery %q", fragment)
 		}
 		if !strings.Contains(localRuntimeText, fragment) {
 			t.Fatalf("expected local runtime docs to document explicit expired claim recovery %q", fragment)
@@ -1276,7 +1276,7 @@ func TestExpiredApplyClaimRecoveryDocsAndSmoke(t *testing.T) {
 
 func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 	docs := map[string]string{
-		"README":             readTextFile(t, "../README.md"),
+		"operator reference": readTextFile(t, "architecture/tenet-v1-operator-reference.md"),
 		"local runtime":      readTextFile(t, "architecture/tenet-v1-local-runtime.md"),
 		"overview dashboard": readTextFile(t, "features/overview-dashboard.md"),
 		"operator contract":  readTextFile(t, "architecture/tenet-v1-operator-contracts.md"),
@@ -1324,8 +1324,8 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 	}
 
 	for name, text := range map[string]string{
-		"README":        docs["README"],
-		"local runtime": docs["local runtime"],
+		"operator reference": docs["operator reference"],
+		"local runtime":      docs["local runtime"],
 	} {
 		for _, fragment := range []string{
 			"Local and Docker smoke cover the active-vs-queued/running apply collection split, stale-claim refinement, and terminal exact subsets",
@@ -1413,7 +1413,7 @@ func TestLocalSafeApplyExecutorReleaseGuardDocs(t *testing.T) {
 
 func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.T) {
 	docs := map[string]string{
-		"README":             readTextFile(t, "../README.md"),
+		"operator reference": readTextFile(t, "architecture/tenet-v1-operator-reference.md"),
 		"overview dashboard": readTextFile(t, "features/overview-dashboard.md"),
 		"local runtime":      readTextFile(t, "architecture/tenet-v1-local-runtime.md"),
 		"operator contract":  readTextFile(t, "architecture/tenet-v1-operator-contracts.md"),
@@ -1434,7 +1434,7 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 	}
 
 	for name, text := range map[string]string{
-		"README":             docs["README"],
+		"operator reference": docs["operator reference"],
 		"local runtime":      docs["local runtime"],
 		"overview dashboard": docs["overview dashboard"],
 		"operator contract":  docs["operator contract"],
@@ -1453,8 +1453,8 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 	}
 
 	for name, text := range map[string]string{
-		"README":        docs["README"],
-		"local runtime": docs["local runtime"],
+		"operator reference": docs["operator reference"],
+		"local runtime":      docs["local runtime"],
 	} {
 		for _, fragment := range []string{
 			"local-safe record lifecycle does not",
@@ -1543,7 +1543,7 @@ func TestLocalSafeApplyEnableApplyStaysMetadataOnlyAndCredentialFree(t *testing.
 }
 
 func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
-	readmeText := readTextFile(t, "../README.md")
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	for _, fragment := range []string{
 		"`Application JSON`, `Copy read route`, and render the server-authored `Recommended next check` hint when `troubleshootingRecommendation` is present",
 		"The page also includes a lightweight `resourceFilter=` search",
@@ -1554,8 +1554,8 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 		"Application resource rows seed those related-event cues from the already-loaded `resourceRelatedEvents[]` detail summary first",
 		"using operator-readable source labels such as `Controller history` while preserving custom source values",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README to include application-detail resource-filter summary %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference to include application-detail resource-filter summary %q", fragment)
 		}
 	}
 
@@ -1563,8 +1563,8 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 		"log and inspection caps stay bookmarkable as `resourceLogLimit=` and `resourceInspectionLimit=` UI state",
 		"positive caps are sent only to the matching lazy `resource-logs` or `resource-inspection` read as backend `limit=` query parameters",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README to include resource-page cap state summary %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference to include resource-page cap state summary %q", fragment)
 		}
 	}
 
@@ -1615,7 +1615,7 @@ func TestOverviewDashboardRuntimeEventCueDocumentsDeterministicTieBreak(t *testi
 }
 
 func TestApplicationTroubleshootingRecommendationDocsStayReadOnly(t *testing.T) {
-	readmeText := readTextFile(t, "../README.md")
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	statusAPIText := readTextFile(t, "architecture/tenet-v1-deployment-status-api.md")
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
 	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
@@ -1627,8 +1627,8 @@ func TestApplicationTroubleshootingRecommendationDocsStayReadOnly(t *testing.T) 
 		"preserves safe backend-provided query/hash targets such as drift filters, audit actions, plan/apply IDs, and row/section anchors",
 		"conservative priority is managed drift first, then unhealthy/error status, then unavailable live-observation evidence, then retained runtime-event context",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README to preserve application troubleshooting recommendation guidance %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference to preserve application troubleshooting recommendation guidance %q", fragment)
 		}
 	}
 
@@ -1692,7 +1692,7 @@ func TestRuntimeStateDocsDescribeConfigurableControllerHistoryRetention(t *testi
 }
 
 func TestOverviewDashboardDocumentsRuntimeRetentionAndLatestRuntimeCueGuard(t *testing.T) {
-	readmeText := readTextFile(t, "../README.md")
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
 	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
 	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
@@ -1701,8 +1701,8 @@ func TestOverviewDashboardDocumentsRuntimeRetentionAndLatestRuntimeCueGuard(t *t
 		"Each row keeps compact `Project`, `Linked resources`, and `Last update` fields",
 		"falling back to `Latest runtime status` when no timestamp is present",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README to include compact project/latest-runtime row cue %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference to include compact project/latest-runtime row cue %q", fragment)
 		}
 	}
 
@@ -1797,7 +1797,7 @@ func TestOverviewDashboardDocumentsDriftSourceCoveragePanel(t *testing.T) {
 
 func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditChips(t *testing.T) {
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
-	readmeText := readTextFile(t, "../README.md")
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
 	section := markdownSection(t, overviewText, "### Deployment-scoped audit workspace")
 	for _, fragment := range []string{
@@ -1825,8 +1825,8 @@ func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditC
 		"`q`/`sync`/`account`, and stripping stale `#audit-*` anchors",
 		"`Share audit entry` and `Copy audit entry link` handoffs preserve the current audit filters and stable row anchor",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README audit workspace docs to include unsplit refresh/control contract %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference audit workspace docs to include unsplit refresh/control contract %q", fragment)
 		}
 	}
 	for _, fragment := range []string{
@@ -1852,13 +1852,13 @@ func TestAccountDetailReadRouteCopyDocsContract(t *testing.T) {
 		}
 	}
 
-	readmeText := readTextFile(t, "../README.md")
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	for _, fragment := range []string{
 		"deployment rows with meaningful runtime/event evidence add a `_self` `Open runtime events` link",
 		"while preserving `q` / `sync` / `account`",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README docs to include account runtime-events handoff contract %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference docs to include account runtime-events handoff contract %q", fragment)
 		}
 	}
 
@@ -1931,7 +1931,7 @@ func TestManagedLoginDocsKeepNonSecretProviderExamplesConcrete(t *testing.T) {
 		path     string
 		examples []string
 	}{
-		{path: "../README.md", examples: []string{"TENET_AUTH_PROVIDER=github", "TENET_AUTH_PROVIDER=google_oidc", "TENET_AUTH_PROVIDER=okta_oidc", "TENET_AUTH_PROVIDER=okta_saml", "TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true"}},
+		{path: "architecture/tenet-v1-operator-reference.md", examples: []string{"TENET_AUTH_PROVIDER=github", "TENET_AUTH_PROVIDER=google_oidc", "TENET_AUTH_PROVIDER=okta_oidc", "TENET_AUTH_PROVIDER=okta_saml", "TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true"}},
 		{path: "architecture/tenet-v1-enterprise-sso.md", examples: []string{"TENET_AUTH_PROVIDER=github", "TENET_AUTH_PROVIDER=google_oidc", "TENET_AUTH_PROVIDER=okta_oidc", "TENET_AUTH_PROVIDER=okta_saml", "TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true"}},
 		{path: "architecture/tenet-v1-operator-contracts.md", examples: []string{"TENET_AUTH_PROVIDER=github", "TENET_AUTH_PROVIDER=google_oidc", "TENET_AUTH_PROVIDER=okta_oidc", "TENET_AUTH_PROVIDER=okta_saml", "TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY=true"}},
 		{path: "features/managed-login.md", examples: []string{"TENET_AUTH_PROVIDER=github", "TENET_AUTH_PROVIDER=google_oidc", "TENET_AUTH_PROVIDER=okta_oidc", "TENET_AUTH_PROVIDER=okta_saml"}},
@@ -1954,7 +1954,7 @@ func TestManagedLoginDocsKeepNonSecretProviderExamplesConcrete(t *testing.T) {
 }
 
 func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
-	readmeText := readTextFile(t, "../README.md")
+	referenceText := readTextFile(t, "architecture/tenet-v1-operator-reference.md")
 	for _, fragment := range []string{
 		"The bookmarkable resource page (`/?page=resource...`)",
 		"compact `Troubleshooting summary`",
@@ -1966,8 +1966,8 @@ func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
 		"Unsupported for this resource type",
 		"points operators back to the current resource read",
 	} {
-		if !strings.Contains(readmeText, fragment) {
-			t.Fatalf("expected README to include resource-detail troubleshooting summary contract %q", fragment)
+		if !strings.Contains(referenceText, fragment) {
+			t.Fatalf("expected operator reference to include resource-detail troubleshooting summary contract %q", fragment)
 		}
 	}
 
