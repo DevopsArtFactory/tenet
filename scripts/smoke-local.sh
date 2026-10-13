@@ -2585,7 +2585,7 @@ assert "anchorID: operationAnchorID('operation-apply', operation)," in ui, ui
 assert "createNavLink(shareURLForOperation(operation), 'Share operation', '_self')" in ui, ui
 assert "const quickNav = createWorkspaceQuickNav(detail, mode, planSectionLinks);" in ui, ui
 assert "activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;" in ui, ui
-assert "header.append(head, quickNav, ...sections);" in ui, ui
+assert "header.append(head, createDisclosure('Page navigation', quickNav), ...sections.map((section) => {" in ui, ui
 assert "const createResourceQuickNav = (detail, resource, sectionLinks = []) => {" in ui, ui
 assert "createElement('div', 'quick-nav-title', 'Quick navigation')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Current resource')" in ui, ui
@@ -2878,7 +2878,7 @@ assert 'Application rollout context:' in application_ui, application_ui
 assert "['Runtime events', applicationRuntimeEventSummary(detail)]," in application_ui, application_ui
 assert "const applicationStatusSectionID = 'application-current-status';" in application_ui, application_ui
 assert "applicationStatusSection.id = applicationStatusSectionID;" in application_ui, application_ui
-assert "page.append(applicationStatusSection, createApplicationTroubleshootingRecommendation(detail));" in application_ui, application_ui
+assert "applicationDiagnostics.append(applicationStatusSection);" in application_ui, application_ui
 assert "pushApplicationSectionLink(applicationStatusSectionID, 'Current application status');" in application_ui, application_ui
 assert "createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')" in application_ui, application_ui
 assert "const resourceSupportsLiveInspectionByType = (resource) => {" in application_ui, application_ui
@@ -2908,7 +2908,7 @@ assert "buildPageSectionURL('resource', 'resource-related-runtime-events', route
 assert "`Related events · ${count}`" in application_ui, application_ui
 assert "row.dataset.applicationResourceRow = 'true';" in application_ui, application_ui
 assert 'Application resources' in application_ui, application_ui
-assert 'Grouped linked resources for the selected application. Open a resource for focused rollout, log, and inspection evidence.' in application_ui, application_ui
+assert 'rows resource-map' in application_ui, application_ui
 assert 'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.' in application_ui, application_ui
 assert 'Jump to runtime events' in application_ui, application_ui
 assert "emptyStateActions.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deploymentName }), 'Jump to runtime events', '_self'));" in application_ui, application_ui
@@ -3098,7 +3098,7 @@ assert "const timelineSectionID = 'audit-timeline';" in audit_ui, audit_ui
 assert "timelineSection.setAttribute('id', timelineSectionID);" in audit_ui, audit_ui
 assert "buildPageSectionURL('audit', sectionID, {" in audit_ui, audit_ui
 assert "createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`)" in audit_ui, audit_ui
-assert 'Immutable plan preview and apply-request activity for deployment ${deploymentName} rendered from GET /v1/audit-logs.' in audit_ui, audit_ui
+assert 'All deployments · newest activity first' in audit_ui, audit_ui
 assert 'Current audit read: ${buildEmbeddedPageReadRoute(currentPageState)}' in audit_ui, audit_ui
 assert 'toolbar-chip' in audit_ui, audit_ui
 assert "chips.setAttribute('aria-label', 'Active audit controls');" in audit_ui, audit_ui
@@ -3125,7 +3125,7 @@ assert "createNavLink(auditEntryAnchorURL(oldest.entry, oldest.anchorID), 'Jump 
 assert "const auditEntryURL = auditEntryAnchorURL(entry, rowAnchorID);" in audit_ui, audit_ui
 assert "createNavLink(auditEntryURL, 'Share audit entry', '_self')" in audit_ui, audit_ui
 assert "createCopyLinkButton(auditEntryURL, 'Copy audit entry link', 'Copy audit entry share link')" in audit_ui, audit_ui
-assert 'Share or continue in app' in audit_ui, audit_ui
+assert 'Share & continue' in audit_ui, audit_ui
 assert 'No audit activity has been persisted yet.' in audit_ui, audit_ui
 assert 'No audit activity has been persisted yet for deployment ${currentPageState.deployment}. Create a plan preview or apply request from the plan/apply workspace to add immutable audit rows for this deployment.' in audit_ui, audit_ui
 assert "const auditFilterLabels = () => {" in audit_ui, audit_ui

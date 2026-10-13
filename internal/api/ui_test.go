@@ -847,7 +847,7 @@ func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 		"createNavLink(`/v1/overview/deployments/${encodeURIComponent(deployment.name)}`, 'Overview JSON')",
 		"createNavLink(`/v1/status/deployments/${encodeURIComponent(deployment.name)}`, 'Status JSON')",
 		"detailLinks.append(",
-		"row.append(toggle, detailLinks, detailPanel);",
+		"row.append(toggle, compactToolbar(detailLinks), createDisclosure('Rollout & runtime metadata', metrics), detailPanel);",
 		"Overview JSON",
 		"Status JSON",
 		"const workspaceLinks = createElement('div', 'row-links row-links-shell');",
@@ -1018,7 +1018,7 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"'account-topology resource-detail-freshness'",
 		"createResourceDetailFreshnessMeta(resourceState, detail)",
 		"const quickNav = createResourceQuickNav(detail, resource, resourceSectionLinks);",
-		"page.append(...[quickNav, troubleshootingSection, shell, historySection, executionSection, conditionsSection, relatedEventsSection, inspectionSection, logsSection].filter(Boolean));",
+		"page.append(createDisclosure('Page navigation', quickNav), createDisclosure('Troubleshooting summary', troubleshootingSection), createDisclosure('Resource metadata', shell));",
 		"activeResourceQuickNavSync = typeof quickNav.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;",
 		"syncActiveResourceQuickNav();",
 		"scrollToCurrentHashTarget();",
@@ -1145,9 +1145,9 @@ func TestEmbeddedUIIncludesAccountQuickNavigation(t *testing.T) {
 		"const overviewArticle = createAccountOverviewArticle(account, accountSectionLinks);",
 		"const quickNav = createAccountQuickNav(account, accountSectionLinks);",
 		"const accountDetailSection = createElement('section', 'detail-section');",
-		"createDetailSectionHeader('Account detail', createAccountDetailActions(accountState))",
+		"createDetailSectionHeader('Deployment inventory')",
 		"activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;",
-		"root.replaceChildren(...[quickNav, accountDetailSection, overviewArticle].filter(Boolean));",
+		"root.replaceChildren(...[refreshState?.heading || refreshState?.message ? accountDetailSection : null, quickNav ? createDisclosure('Jump to project & environment', quickNav) : null, overviewArticle].filter(Boolean));",
 		"scrollToCurrentHashTarget();",
 		"currentPageState.page !== 'account'",
 	} {
@@ -1195,7 +1195,7 @@ func TestEmbeddedUIIncludesPlanSectionNavigation(t *testing.T) {
 		"(mode === 'drift' || mode === 'plan') ? 'No section is currently targeted.' : '',",
 		"const quickNav = createWorkspaceQuickNav(detail, mode, planSectionLinks);",
 		"activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;",
-		"header.append(head, quickNav, ...sections);",
+		"header.append(head, createDisclosure('Page navigation', quickNav), ...sections.map((section) => {",
 		"scrollToCurrentHashTarget();",
 	} {
 		if !strings.Contains(body, fragment) {
@@ -1514,7 +1514,7 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"['Runtime events', applicationRuntimeEventSummary(detail)],",
 		"const applicationStatusSection = createApplicationStatusSummary(detail, allResourceGroups);",
 		"applicationStatusSection.id = applicationStatusSectionID;",
-		"page.append(applicationStatusSection, createApplicationTroubleshootingRecommendation(detail));",
+		"applicationDiagnostics.append(applicationStatusSection);",
 		"pushApplicationSectionLink(applicationStatusSectionID, 'Current application status');",
 		"const createApplicationDetailActions = (applicationState = null) => [",
 		"createNavLink(`/v1/overview/applications/${encodeURIComponent(applicationState?.detail?.name || currentPageState.deployment)}`, 'Application JSON')",
@@ -1613,7 +1613,7 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"const auditEntryURL = auditEntryAnchorURL(entry, rowAnchorID);",
 		"createNavLink(auditEntryURL, 'Share audit entry', '_self')",
 		"createCopyLinkButton(auditEntryURL, 'Copy audit entry link', 'Copy audit entry share link')",
-		"Share or continue in app",
+		"Share & continue",
 		"const syncAuditQueryParams = (params, pageState) => {",
 		"const renderAuditPageChrome = () => {",
 		"const deploymentName = auditDeploymentName();",
@@ -2132,7 +2132,7 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"'No linked resources are available in this workspace yet.'",
 		"const quickNav = createWorkspaceQuickNav(detail, mode, planSectionLinks);",
 		"activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;",
-		"header.append(head, quickNav, ...sections);",
+		"header.append(head, createDisclosure('Page navigation', quickNav), ...sections.map((section) => {",
 		"const emptyTitle = mode === 'drift' ? 'Field-level drift' : 'Plan operations';",
 		"const driftSeverityRank = (severity) => {",
 		"const driftSeverityCounts = (rows) => rows.reduce((counts, row) => {",
@@ -4283,8 +4283,8 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createCopyReadRouteButton(applicationDetailReadRoute(applicationState?.detail?.name || currentPageState.deployment))\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application detail copy route contract")
 	}
-	if !strings.Contains(text, "assert 'Grouped linked resources for the selected application. Open a resource for focused rollout, log, and inspection evidence.' in application_ui, application_ui") {
-		t.Fatalf("expected smoke-local.sh to assert embedded html contains focused application resource handoff copy")
+	if !strings.Contains(text, "assert 'rows resource-map' in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains the application resource map")
 	}
 	if !strings.Contains(text, "assert 'Refresh resource detail' in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh resource detail")
@@ -4685,7 +4685,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert \"timelineSection.setAttribute('id', timelineSectionID);\" in audit_ui, audit_ui",
 		"assert \"buildPageSectionURL('audit', sectionID, {\" in audit_ui, audit_ui",
 		"assert \"createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`)\" in audit_ui, audit_ui",
-		"assert 'Immutable plan preview and apply-request activity for deployment ${deploymentName} rendered from GET /v1/audit-logs.' in audit_ui, audit_ui",
+		"assert 'All deployments · newest activity first' in audit_ui, audit_ui",
 		"assert \"const auditEntryAnchorID = (entry) => {\" in audit_ui, audit_ui",
 		"assert \"const uniqueAuditEntryAnchorID = (entry, seenAnchors) => {\" in audit_ui, audit_ui",
 		"assert \"const auditEntryQuickNavLabel = (entry) => {\" in audit_ui, audit_ui",
@@ -4700,7 +4700,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert \"const auditEntryURL = auditEntryAnchorURL(entry, rowAnchorID);\" in audit_ui, audit_ui",
 		"assert \"createNavLink(auditEntryURL, 'Share audit entry', '_self')\" in audit_ui, audit_ui",
 		"assert \"createCopyLinkButton(auditEntryURL, 'Copy audit entry link', 'Copy audit entry share link')\" in audit_ui, audit_ui",
-		"assert 'Share or continue in app' in audit_ui, audit_ui",
+		"assert 'Share & continue' in audit_ui, audit_ui",
 		"assert 'No audit activity has been persisted yet.' in audit_ui, audit_ui",
 		"assert 'No audit activity has been persisted yet for deployment ${currentPageState.deployment}. Create a plan preview or apply request from the plan/apply workspace to add immutable audit rows for this deployment.' in audit_ui, audit_ui",
 		"assert \"const auditFilterLabels = () => {\" in audit_ui, audit_ui",
@@ -5187,7 +5187,7 @@ func TestResourceInspectionFeatureGuideDocumentsSelectorsAndScope(t *testing.T) 
 	}
 
 	files := map[string][]string{
-		"../../README.md": {
+		"../../docs/architecture/tenet-v1-operator-reference.md": {
 			"`docs/features/resource-inspection.md` documents the focused live resource inspection route, selectors, lookup context, unavailable states, and detailed field contracts.",
 			"Resource drill-down Related runtime events, Recent logs, and Live inspection panels summarize controller history, lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract.",
 			"Use `Share ECS service event` or the adjacent `Copy ECS service event link` from a Live inspection event row to hand off one ECS service event without changing the resource-page selector state.",
@@ -5695,7 +5695,7 @@ func TestDocsDescribeCISmokeRunnerStartRunbook(t *testing.T) {
 			"remaining red checks are normal actionable CI failures",
 			"Do not count a rerun as recovered while it still reports `runner_id=0`, `steps=[]`, or lacks downloadable/actionable repository logs.",
 		},
-		"../../README.md": {
+		"../../docs/architecture/tenet-v1-operator-reference.md": {
 			"scripts/ci-smoke-runner-evidence.sh --summary <run-id>",
 			"The detailed runner-start evidence bundle remains available by omitting",
 			"`docs/runbooks/ci-smoke-runner-start.md`",
@@ -6017,7 +6017,7 @@ func TestDockerSmokeDocsDescribeResourceRefreshCoverage(t *testing.T) {
 			"the bookmarkable resource page's lazy-panel refresh hooks (`Refresh recent logs`, `Refresh live inspection`, their route-builder helpers, and the loading/error/auth-guidance copy)",
 			"direct and compose smoke both guard the embedded lazy-read route builders behind `Copy recent logs route` and `Copy live inspection route`",
 		},
-		"../../README.md": {
+		"../../docs/architecture/tenet-v1-operator-reference.md": {
 			"Direct and Docker smoke both lock the route builders behind `Copy recent logs route` and `Copy live inspection route`",
 		},
 	}

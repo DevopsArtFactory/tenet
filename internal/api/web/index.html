@@ -4,77 +4,90 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Tenet Control Plane</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2248%22%20height%3D%2248%22%20viewBox%3D%220%200%2048%2048%22%3E%0A%20%20%3Cdefs%3E%3ClinearGradient%20id%3D%22tile%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20stop-color%3D%22%23355bd4%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23182b48%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%0A%20%20%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%2244%22%20height%3D%2244%22%20rx%3D%2213%22%20fill%3D%22url%28%23tile%29%22%2F%3E%0A%20%20%3Crect%20x%3D%222.5%22%20y%3D%222.5%22%20width%3D%2243%22%20height%3D%2243%22%20rx%3D%2212.5%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-opacity%3D%22.2%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M11%2010h26v5H26.5v6h-5v-6H11z%22%20fill%3D%22%23fff%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M11%2010h26v5H26.5v6h-5v-6H11z%22%20transform%3D%22rotate%28180%2024%2024%29%22%20fill%3D%22%23fff%22%2F%3E%0A%20%20%3Cpath%20d%3D%22m24%2019%205%205-5%205-5-5z%22%20fill%3D%22%23a7c4ff%22%2F%3E%0A%3C%2Fsvg%3E%0A" />
     <style>
       :root {
-        color-scheme: dark;
-        --bg: #07111f;
-        --panel: rgba(11, 24, 43, 0.9);
-        --panel-2: rgba(21, 37, 63, 0.88);
-        --line: rgba(120, 160, 255, 0.16);
-        --text: #ebf2ff;
-        --muted: #94a8c7;
-        --green: #45d483;
-        --yellow: #f4c95d;
-        --blue: #67b7ff;
-        --red: #ff7b7b;
-        --purple: #a78bfa;
+        color-scheme: light;
+        --bg: #eef3f8;
+        --panel: #ffffff;
+        --panel-2: #ffffff;
+        --line: #dce5ef;
+        --text: #1d2c43;
+        --muted: #52657c;
+        --green: #168766;
+        --yellow: #a96d13;
+        --blue: #345bd4;
+        --red: #c84646;
+        --purple: #7862ac;
+        --surface-soft: #f5f8fc;
+        --ink: #182b48;
+        --shadow-sm: 0 2px 5px rgba(24,43,72,.04), 0 8px 18px rgba(24,43,72,.04);
+        --shadow-md: 0 2px 4px rgba(24,43,72,.03), 0 14px 36px -14px rgba(24,43,72,.22);
+        --shadow-raised: 0 5px 10px rgba(24,43,72,.05), 0 18px 32px -12px rgba(24,43,72,.22);
+        --transition: 180ms ease;
+        --workload-tint: #eff4ff;
+        --traffic-tint: #edf7f4;
+        --config-tint: #f3f0fb;
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-        background: radial-gradient(circle at top, #12305f 0%, var(--bg) 45%, #030814 100%);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        background: radial-gradient(ellipse at 90% 0%, rgba(174,200,255,.3), transparent 48%), radial-gradient(ellipse at 0% 35%, rgba(178,218,217,.22), transparent 48%), var(--bg);
         color: var(--text);
       }
-      .shell { max-width: 1280px; margin: 0 auto; padding: 32px 20px 56px; }
-      .hero { display: flex; justify-content: space-between; gap: 16px; align-items: end; margin-bottom: 24px; }
-      .title { font-size: 36px; font-weight: 800; letter-spacing: -0.04em; margin: 0 0 8px; }
+      h1, h2, h3, h4, strong { font-weight: 600; }
+      .shell { max-width: 1560px; margin: 0 auto; padding: 24px 32px 56px; }
+      .hero { display: flex; justify-content: space-between; gap: 20px; align-items: center; margin-bottom: 12px; padding: 4px 0 12px; }
+      .title { display: flex; align-items: center; gap: 12px; font-size: 27px; font-weight: 600; letter-spacing: -.025em; margin: 0; color: var(--ink); }
       .subtitle { margin: 0; color: var(--muted); max-width: 720px; line-height: 1.5; }
-      .operator-context { display:grid; gap: 6px; margin: -10px 0 16px; padding: 10px 12px; background: rgba(11, 24, 43, 0.62); border: 1px solid rgba(255,255,255,.07); border-radius: 14px; box-shadow: 0 10px 24px rgba(0,0,0,0.14); }
+      .operator-context { display:grid; gap: 6px; margin: -10px 0 16px; padding: 10px 12px; background: var(--panel); border: 1px solid rgba(255,255,255,.07); border-radius: 8px; box-shadow: none; }
       .operator-context-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap: 8px; }
       .operator-context-title-row { display:flex; flex-wrap:wrap; align-items:center; gap: 8px; }
-      .operator-context-title { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
-      .operator-context-summary { color: var(--text); font-size: 13px; font-weight: 700; }
+      .operator-context-title { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+      .operator-context-summary { color: var(--text); font-size: 13px; font-weight: 600; }
       .operator-context-meta { display:flex; flex-wrap:wrap; gap: 6px; color: var(--muted); font-size: 12px; line-height: 1.4; }
       .operator-context > .operator-context-meta span { padding: 0; border: 0; background: transparent; }
       .operator-context-details .operator-context-meta span { padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); }
-      .operator-context-meta span.operator-context-warning { color: #fde68a; background: rgba(244,201,93,.12); border-color: rgba(244,201,93,.35); }
-      .operator-context-meta span.operator-context-denied { color: #ffd0d0; background: rgba(255,123,123,.12); border-color: rgba(255,123,123,.32); }
+      .operator-context-meta span.operator-context-warning { color: var(--yellow); background: rgba(244,201,93,.12); border-color: rgba(244,201,93,.35); }
+      .operator-context-meta span.operator-context-denied { color: var(--red); background: rgba(255,123,123,.12); border-color: rgba(255,123,123,.32); }
       .operator-context-details { display:grid; gap: 8px; }
-      .operator-context-details summary { width: fit-content; color: var(--muted); font-size: 11px; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: .08em; }
+      .operator-context-details summary { width: fit-content; color: var(--muted); font-size: 11px; font-weight: 600; cursor: pointer; text-transform: uppercase; letter-spacing: .04em; }
       .operator-context-details summary:hover, .operator-context-details summary:focus-visible { color: var(--text); }
       .operator-context-details .operator-context-meta { padding-top: 2px; }
-      .operator-context-action { appearance:none; border: 1px solid rgba(134,239,172,.24); background: rgba(34,197,94,.10); color: var(--text); border-radius: 999px; padding: 6px 11px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+      .operator-context-action { appearance:none; border: 1px solid rgba(134,239,172,.24); background: rgba(34,197,94,.10); color: var(--text); border-radius: 999px; padding: 6px 11px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
       .operator-context-action:hover:not(:disabled), .operator-context-action:focus-visible:not(:disabled) { border-color: rgba(134,239,172,.45); background: rgba(34,197,94,.18); }
       .operator-context-action:disabled { cursor: progress; opacity: .62; }
       .operator-context-live { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
       .operator-context.unavailable { border-color: rgba(244,201,93,.24); }
       .operator-context.error { border-color: rgba(255,123,123,.24); }
-      .toolbar { display:grid; gap: 16px; margin-bottom: 24px; padding: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 18px 40px rgba(0,0,0,0.24); }
+      .toolbar { display:grid; gap: 16px; margin-bottom: 24px; padding: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: none; }
       .toolbar-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
       .toolbar-field { display:grid; gap: 8px; }
-      .toolbar-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+      .toolbar-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
       .toolbar-input, .toolbar-select { width: 100%; border-radius: 12px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.04); color: var(--text); padding: 12px 14px; font: inherit; }
       .toolbar-input::placeholder { color: rgba(148,168,199,.72); }
       .toolbar-input:focus, .toolbar-select:focus, .toolbar-button:focus-visible { outline: 2px solid rgba(103,183,255,.45); outline-offset: 2px; }
       .toolbar-actions { display:flex; flex-wrap:wrap; gap: 10px; align-items:center; justify-content:space-between; }
       .toolbar-active { color: var(--muted); font-size: 14px; }
-      .toolbar-button { border: 1px solid rgba(103,183,255,.24); background: rgba(103,183,255,.12); color: var(--blue); border-radius: 999px; padding: 10px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+      .toolbar-button { border: 1px solid rgba(103,183,255,.24); background: rgba(103,183,255,.12); color: var(--blue); border-radius: 999px; padding: 10px 14px; font: inherit; font-weight: 600; cursor: pointer; }
       .toolbar-button:hover:not(:disabled) { background: rgba(103,183,255,.18); }
       .toolbar-button:disabled { cursor: not-allowed; opacity: .58; }
       .toolbar-chips { display:flex; flex-wrap:wrap; gap: 8px; align-items:center; }
-      .toolbar-chip { display:inline-flex; align-items:center; gap: 8px; max-width: 100%; padding: 6px 8px 6px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.10); background: rgba(255,255,255,.055); color: var(--text); font-size: 13px; font-weight: 700; }
+      .toolbar-chip { display:inline-flex; align-items:center; gap: 8px; max-width: 100%; padding: 6px 8px 6px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.10); background: rgba(255,255,255,.055); color: var(--text); font-size: 13px; font-weight: 600; }
       .toolbar-chip-label { overflow-wrap:anywhere; }
-      .toolbar-chip-clear { appearance:none; border: 1px solid rgba(103,183,255,.24); background: rgba(103,183,255,.12); color: var(--blue); border-radius: 999px; padding: 3px 7px; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+      .toolbar-chip-clear { appearance:none; border: 1px solid rgba(103,183,255,.24); background: rgba(103,183,255,.12); color: var(--blue); border-radius: 999px; padding: 3px 7px; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
       .toolbar-chip-clear:hover, .toolbar-chip-clear:focus-visible { background: rgba(103,183,255,.20); }
       .toolbar-chip-clear:focus-visible { outline: 2px solid rgba(103,183,255,.45); outline-offset: 2px; }
       .copy-read-route { color: var(--text); border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.06); }
       .copy-read-route:hover:not(:disabled) { background: rgba(255,255,255,.1); }
       .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
-      .card, .account { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 18px 40px rgba(0,0,0,0.24); }
+      .card, .account { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: none; }
       .card { padding: 18px; }
-      .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
-      .value { font-size: 28px; font-weight: 800; margin-top: 8px; }
+      .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+      .value { font-size: 28px; font-weight: 600; margin-top: 8px; }
       .accounts { display: grid; gap: 20px; }
       .account { padding: 20px; }
       .account-head { display:flex; justify-content:space-between; gap:16px; align-items:start; margin-bottom: 16px; }
@@ -85,9 +98,9 @@
       .deployment-group-head { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; padding: 0 4px; }
       .deployment-group-title { margin:0; font-size: 16px; }
       .deployment-group-meta, .account-topology { color: var(--muted); font-size: 13px; margin-top: 6px; }
-      .runtime-event-cue { display:grid; gap: 2px; color: #c7d7f3; }
+      .runtime-event-cue { display:grid; gap: 2px; color: var(--text); }
       .runtime-event-latest { color: var(--muted); }
-      .runtime-trend-cue { display:flex; flex-wrap:wrap; align-items:center; gap: 8px; margin-top: 6px; color: #c7d7f3; font-size: 13px; }
+      .runtime-trend-cue { display:flex; flex-wrap:wrap; align-items:center; gap: 8px; margin-top: 6px; color: var(--text); font-size: 13px; }
       .runtime-trend-strip { display:inline-flex; gap: 3px; align-items:center; }
       .runtime-trend-dot { width: 8px; height: 8px; border-radius: 999px; background: rgba(148,168,199,.55); box-shadow: 0 0 0 1px rgba(255,255,255,.08); }
       .runtime-trend-dot.synced { background: var(--green); }
@@ -95,12 +108,12 @@
       .runtime-trend-dot.paused { background: var(--muted); }
       .runtime-trend-dot.error { background: var(--red); }
       .runtime-trend-dot.quiet { background: rgba(148,168,199,.38); }
-      .runtime-trend-label { color: var(--text); font-weight: 700; }
+      .runtime-trend-label { color: var(--text); font-weight: 600; }
       .runtime-trend-summary { color: var(--muted); }
       .resource-filter-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-      .group-pill { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid rgba(103,183,255,.24); color: var(--blue); background: rgba(103,183,255,.08); }
+      .group-pill { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid rgba(103,183,255,.24); color: var(--blue); background: rgba(103,183,255,.08); }
       .group-rows { display:grid; gap: 12px; }
-      .row { background: var(--panel-2); border: 1px solid rgba(255,255,255,.06); border-radius: 14px; display:grid; gap: 10px; overflow: clip; }
+      .row { background: var(--panel-2); border: 1px solid rgba(255,255,255,.06); border-radius: 8px; display:grid; gap: 10px; overflow: clip; }
       .row.expanded { border-color: rgba(103,183,255,.28); box-shadow: inset 0 0 0 1px rgba(103,183,255,.12); }
       .row-toggle { width: 100%; border: 0; background: transparent; color: inherit; padding: 14px; display:grid; gap: 10px; text-align: left; cursor: pointer; }
       .row-toggle:hover, .row-toggle:focus-visible { background: rgba(255,255,255,.03); }
@@ -115,7 +128,7 @@
       .operation-anchor-row:target { outline: 2px solid rgba(103,183,255,.62); outline-offset: -2px; background: rgba(103,183,255,.10); }
       .row-primary-action .row-link { display:inline-flex; align-items:center; border: 1px solid rgba(103,183,255,.32); background: rgba(103,183,255,.12); border-radius: 999px; padding: 7px 11px; color: var(--text); }
       .row-secondary-actions { margin: 0 14px 14px; color: var(--muted); }
-      .row-secondary-actions summary { width: fit-content; cursor:pointer; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+      .row-secondary-actions summary { width: fit-content; cursor:pointer; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
       .row-secondary-actions summary:hover, .row-secondary-actions summary:focus-visible { color: var(--text); }
       .row-secondary-actions .row-links { margin-top: 8px; }
       .application-row-core { padding: 0 14px; display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
@@ -123,10 +136,10 @@
       .application-core-item strong { display:block; margin-bottom: 2px; color: var(--text); font-size: 13px; }
       .row-link { color: var(--blue); font-size: 13px; font-weight: 600; text-decoration: none; }
       .row-link:hover, .row-link:focus-visible { text-decoration: underline; }
-      .row-link-label { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
-      .row-hint { margin-top: 10px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+      .row-link-label { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+      .row-hint { margin-top: 10px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
       .pills { display:flex; flex-wrap:wrap; gap:8px; }
-      .pill { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid transparent; }
+      .pill { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid transparent; }
       .pill.target { background: rgba(103,183,255,.12); color: var(--blue); border-color: rgba(103,183,255,.24); }
       .pill.strategy { background: rgba(167,139,250,.12); color: var(--purple); border-color: rgba(167,139,250,.28); }
       .pill.mode { background: rgba(244,201,93,.12); color: var(--yellow); border-color: rgba(244,201,93,.28); }
@@ -135,29 +148,29 @@
       .pill.paused { background: rgba(148,168,199,.12); color: var(--muted); border-color: rgba(148,168,199,.24); }
       .pill.error { background: rgba(255,123,123,.12); color: var(--red); border-color: rgba(255,123,123,.24); }
       .metrics { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-      .metric { padding: 12px; border-radius: 14px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.05); }
-      .metric .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
-      .metric .v { margin-top: 8px; font-size: 14px; font-weight: 650; word-break: break-word; }
+      .metric { padding: 12px; border-radius: 8px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.05); }
+      .metric .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+      .metric .v { margin-top: 8px; font-size: 14px; font-weight: 600; word-break: break-word; }
       .metric.summary { grid-column: 1 / -1; }
       .row-match-context, .row-runtime-signal { margin: 0 14px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(103,183,255,.14); background: rgba(103,183,255,.06); color: var(--muted); font-size: 12px; line-height: 1.4; }
       .row-match-context strong, .row-runtime-signal strong { color: var(--blue); }
       .row-runtime-signal { background: transparent; border-color: rgba(255,255,255,.045); }
       .detail-panel { padding: 0 16px 16px; display:grid; gap: 12px; }
-      .detail-state { padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); color: var(--muted); }
-      .detail-state.error { border-color: rgba(255,123,123,.28); color: #ffd0d0; }
+      .detail-state { padding: 14px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); color: var(--muted); }
+      .detail-state.error { border-color: rgba(255,123,123,.28); color: var(--red); }
       .detail-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-      .breadcrumb-strip, .quick-nav-strip { display:grid; gap: 12px; padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); }
+      .breadcrumb-strip, .quick-nav-strip { display:grid; gap: 12px; padding: 14px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); }
       .breadcrumb-head, .quick-nav-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap: 10px; }
-      .breadcrumb-title, .quick-nav-title, .quick-nav-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+      .breadcrumb-title, .quick-nav-title, .quick-nav-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
       .breadcrumb-trail { display:flex; flex-wrap:wrap; align-items:center; gap: 10px; }
       .breadcrumb-separator { color: var(--muted); font-size: 13px; }
       .breadcrumb-current { border-color: rgba(255,255,255,.1); background: rgba(255,255,255,.06); }
       .quick-nav-current, .quick-nav-empty { color: var(--muted); font-size: 13px; }
       .quick-nav-groups, .quick-nav-group { display:grid; gap: 10px; }
       .quick-nav-links { display:flex; flex-wrap:wrap; gap: 10px; }
-      .quick-nav-chip { display:inline-flex; align-items:center; padding: 6px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; border: 1px solid rgba(103,183,255,.24); background: rgba(103,183,255,.08); color: var(--text); }
-      .detail-section { padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.05); background: rgba(255,255,255,.03); }
-      .detail-section h4 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+      .quick-nav-chip { display:inline-flex; align-items:center; padding: 6px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; border: 1px solid rgba(103,183,255,.24); background: rgba(103,183,255,.08); color: var(--text); }
+      .detail-section { padding: 14px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,.05); background: rgba(255,255,255,.03); }
+      .detail-section h4 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
       .detail-section-head { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap: 10px; margin-bottom: 10px; }
       .detail-section-head h4 { margin: 0; }
       .detail-section-actions { display:flex; flex-wrap:wrap; gap: 10px; }
@@ -173,7 +186,7 @@
       .detail-execution-meta, .detail-history-meta { display:grid; gap: 4px; margin-top: 6px; }
       .detail-section-copy { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.5; }
       .provider-lookup-context-card, .recent-log-lookup-context-card { display:grid; gap: 8px; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(103,183,255,.16); background: rgba(103,183,255,.06); }
-      .provider-lookup-context-label, .recent-log-lookup-context-label { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+      .provider-lookup-context-label, .recent-log-lookup-context-label { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
       .provider-lookup-context-summary, .recent-log-lookup-context-summary { color: var(--text); font-size: 13px; line-height: 1.45; }
       .provider-lookup-context-chips, .recent-log-lookup-context-chips { display:flex; flex-wrap:wrap; gap: 6px; }
       .provider-lookup-context-chip, .recent-log-lookup-context-chip { display:inline-flex; align-items:center; padding: 5px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.045); color: var(--muted); font-size: 12px; line-height: 1.3; }
@@ -182,14 +195,14 @@
       .drift-table-wrap { overflow-x: auto; }
       .drift-table { width: 100%; border-collapse: collapse; }
       .drift-table th, .drift-table td { text-align: left; padding: 12px 10px; border-top: 1px solid rgba(255,255,255,.06); vertical-align: top; font-size: 14px; }
-      .drift-table th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; border-top: 0; }
-      .drift-field { font-weight: 700; }
-      .workspace-callout { display:grid; gap: 10px; padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); }
+      .drift-table th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; border-top: 0; }
+      .drift-field { font-weight: 600; }
+      .workspace-callout { display:grid; gap: 10px; padding: 14px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); }
       .workspace-callout-head { display:flex; flex-wrap:wrap; align-items:center; gap: 10px; }
-      .workspace-callout-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+      .workspace-callout-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
       .workspace-callout-copy { color: var(--text); line-height: 1.5; }
       .workspace-callout-factors { color: var(--muted); font-size: 13px; line-height: 1.5; }
-      .severity-indicator { display: inline-flex; align-items: center; justify-content: center; min-width: 64px; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; border: 1px solid transparent; }
+      .severity-indicator { display: inline-flex; align-items: center; justify-content: center; min-width: 64px; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; border: 1px solid transparent; }
       .severity-indicator-high { background: rgba(255,123,123,.12); color: var(--red); border-color: rgba(255,123,123,.24); }
       .severity-indicator-medium { background: rgba(244,201,93,.12); color: var(--yellow); border-color: rgba(244,201,93,.28); }
       .severity-indicator-low { background: rgba(103,183,255,.12); color: var(--blue); border-color: rgba(103,183,255,.24); }
@@ -197,15 +210,191 @@
       @media (max-width: 720px) {
         .hero, .row-top, .account-head, .deployment-group-head { flex-direction: column; align-items: stretch; }
       }
+
+      .subtitle { font-size: 12px; margin: 3px 0 0 48px; letter-spacing: .02em; }
+      .global-nav { display: flex; gap: 6px; padding: 5px; border: 1px solid rgba(255,255,255,.85); border-radius: 14px; background: rgba(255,255,255,.72); box-shadow: var(--shadow-sm); }
+      .global-nav a { color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 10px; transition: background var(--transition), color var(--transition); }
+      .global-nav a:hover { color: var(--blue); }
+      .toolbar { padding: 16px 18px; gap: 12px; margin-bottom: 20px; background: rgba(255,255,255,.88); border-radius: 16px; border: 1px solid rgba(255,255,255,.9); box-shadow: var(--shadow-md); }
+      .toolbar-label, .label { font-size: 10px; font-weight: 600; }
+      .toolbar-input, .toolbar-select { padding: 10px 12px; border-radius: 9px; border-color: var(--line); background: var(--surface-soft); box-shadow: inset 0 1px 2px rgba(24,43,72,.025); }
+      .toolbar-button { padding: 8px 13px; font-size: 12px; border-radius: 9px; color: var(--text); border: 1px solid var(--line); background: linear-gradient(#fff, #f6f9fc); box-shadow: 0 1px 2px rgba(24,43,72,.04); transition: box-shadow var(--transition), border-color var(--transition), background var(--transition); }
+      .toolbar-actions { justify-content: flex-start; }
+      .toolbar-actions > .toolbar-field { margin-left: auto; min-width: 220px; }
+      .account { padding: 22px; background: rgba(255,255,255,.88); border: 1px solid rgba(255,255,255,.95); border-radius: 20px; box-shadow: var(--shadow-md); }
+      .account-name { font-size: 22px; font-weight: 600; letter-spacing: -.02em; overflow-wrap: anywhere; }
+      .account-meta, .account-topology { font-size: 13px; }
+      .summary { margin-bottom: 20px; }
+      .pill { padding: 4px 8px; font-size: 11px; }
+      .pill.synced::before, .pill.progress::before, .pill.error::before, .pill.paused::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; }
+      .metric { border-color: var(--line); background: #f8fafc; border-radius: 6px; }
+      .detail-state { border-color: var(--line); background: #f8fafc; }
+      .detail-section { background: #fff; border-color: var(--line); }
+      .row, .breadcrumb-strip, .quick-nav-strip { border-color: var(--line); }
+      .breadcrumb-strip { padding: 8px 0; border: 0; background: transparent; margin-bottom: 12px; }
+      .breadcrumb-head { display: none; }
+      .operator-context { margin: 0 0 12px; padding: 0; border: 0; background: transparent; }
+      .operator-context .disclosure { border: 0; background: transparent; }
+      .operator-context .disclosure > summary { padding: 4px 0; font-size: 11px; color: var(--muted); }
+      .operator-context-details .operator-context-meta span { border-color: var(--line); background: #f8fafc; }
+      .disclosure { border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+      .disclosure > summary { padding: 10px 14px; cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 600; border-radius: inherit; transition: background var(--transition), color var(--transition); }
+      .disclosure > summary:hover { color: var(--blue); background: #f8fafc; }
+      .disclosure > summary:focus-visible, .resource-open:focus-visible, .global-nav a:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+      .disclosure-body { padding: 12px 14px; display: grid; gap: 12px; border-top: 1px solid var(--line); min-width: 0; }
+      .disclosure .quick-nav-strip { border: 0; padding: 0; background: transparent; }
+      .disclosure .detail-section { border: 0; padding: 0; }
+      .disclosure .metrics, .disclosure .detail-grid { min-width: 0; }
+      .toolbar-diagnostics { margin-left: auto; }
+      .toolbar-diagnostics .disclosure-body { display: flex; flex-wrap: wrap; align-items: center; }
+      .compact-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 22px; }
+      .compact-heading .account-meta { margin-top: 4px; }
+      .compact-status { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+      .status-cell { padding: 0 16px; border-left: 1px solid var(--line); min-width: 0; }
+      .status-cell:first-child { border-left: 0; padding-left: 0; }
+      .status-cell .status-value { font-size: 17px; font-weight: 600; margin-top: 6px; overflow-wrap: anywhere; }
+      .compact-status .pill { padding: 5px 10px; font-size: 12px; line-height: 1.25; }
+      .application-header .disclosure { border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.8); }
+      .resource-map { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin: 20px 0; align-items: start; }
+      .resource-map .deployment-group { min-width: 0; gap: 14px; padding: 16px; background: var(--workload-tint); border: 1px solid rgba(52,91,212,.07); border-radius: 16px; }
+      .resource-map .deployment-group-head { padding: 0 0 12px; border-bottom: 1px solid rgba(24,43,72,.1); align-items: center; }
+      .resource-map .deployment-group-meta { display: none; }
+      .resource-map .group-pill { background: rgba(255,255,255,.86); border: 1px solid rgba(24,43,72,.08); color: var(--muted); font-size: 12px; padding: 4px 10px; box-shadow: 0 1px 2px rgba(24,43,72,.03); }
+      .resource-map .row { gap: 0; border: 1px solid rgba(255,255,255,.95); border-radius: 12px; background: var(--panel); box-shadow: var(--shadow-sm); transition: box-shadow var(--transition), transform var(--transition); }
+      .resource-map .row-top { padding: 14px; align-items: center; justify-content: flex-start; gap: 12px; }
+      .resource-icon { display: flex; align-items: center; justify-content: center; flex: 0 0 42px; height: 42px; border: 1px solid rgba(52,91,212,.15); border-radius: 12px; background: linear-gradient(145deg, #fff, #dfe8ff); color: var(--blue); box-shadow: 0 3px 6px rgba(52,91,212,.08); }
+      .resource-kind { color: var(--muted); font-size: 11px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
+      .resource-open { display: inline-block; color: var(--text); font-size: 14px; line-height: 1.4; font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+      .resource-open:hover { color: var(--blue); }
+      .resource-map .resource-details { border: 0; border-top: 1px solid #edf1f6; border-radius: 0 0 12px 12px; background: #fafcfe; }
+      .resource-details > summary { font-size: 11px; padding: 8px 14px; }
+      .resource-map .row-links-shell { padding: 0; margin: 0; gap: 8px; }
+      .resource-map .row-link { font-size: 11px; }
+      .resource-map .related-events-cue { font-size: 11px; }
+      .resource-map .application-resource-related-events-slot:empty { display: none; }
+      .inventory-label { display: inline-flex; gap: 8px; align-items: center; color: var(--muted); font-size: 11px; margin-top: 8px; }
+      .application-workspaces { display: flex; gap: 8px; margin: 0; }
+      .application-workspaces .row-link { padding: 8px 12px; border: 1px solid var(--line); border-radius: 9px; font-size: 12px; }
+      .applications-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 18px; margin-top: 20px; }
+      .applications-grid .row { padding: 20px; gap: 14px; border: 1px solid var(--line); border-top: 3px solid #96a6b9; border-radius: 14px; box-shadow: var(--shadow-sm); transition: box-shadow var(--transition), transform var(--transition); }
+      .applications-grid .row:has(.pill.synced) { border-top-color: var(--green); }
+      .applications-grid .row:has(.pill.progress) { border-top-color: var(--yellow); }
+      .applications-grid .row:has(.pill.error) { border-top-color: var(--red); }
+      .applications-grid .row-top { flex-wrap: wrap; align-items: start; }
+      .applications-grid .row-top > div:first-child { width: 100%; }
+      .applications-grid .row-primary-action { margin-left: auto; }
+      .applications-grid .application-row-core { padding: 0; grid-template-columns: 1fr 1fr; }
+      .applications-grid .row-secondary-actions { margin: 0; }
+      .applications-grid .row-secondary-actions .application-row-core { margin-top: 12px; }
+      .summary:has(> .overview-counts), .summary:has(> .compact-status) { grid-template-columns: 1fr; }
+      .summary > .compact-status { padding: 16px 18px; background: #fff; border: 1px solid var(--line); border-radius: 8px; }
+      .overview-counts { display: flex; gap: 30px; flex-wrap: wrap; align-items: center; padding: 20px 24px; background: linear-gradient(115deg, #192d4a, #294967); color: #dbe7f6; border: 1px solid #294967; border-radius: 16px; box-shadow: 0 10px 24px -12px rgba(24,43,72,.48); width: 100%; }
+      .overview-count { display: flex; gap: 10px; align-items: baseline; font-size: 13px; color: #c2d2e5; }
+      .overview-count strong { font-size: 28px; color: #fff; font-variant-numeric: tabular-nums; letter-spacing: -.04em; }
+      .resource-page { display: grid; gap: 12px; }
+      .resource-page .breadcrumb-strip { margin: 0; }
+      .resource-page .detail-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+      .detail-grid .v, .metrics .v { overflow-wrap: anywhere; }
+      @media (max-width: 1000px) { .resource-map { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      @media (max-width: 720px) {
+        .shell { padding: 14px 12px 32px; }
+        .hero { flex-direction: row; align-items: center; }
+        .global-nav { gap: 12px; }
+        .resource-map { grid-template-columns: 1fr; }
+        .compact-status { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 16px; }
+        .status-cell:nth-child(3) { border-left: 0; padding-left: 0; }
+        .compact-heading { align-items: start; flex-direction: column; }
+        .toolbar-actions > .toolbar-field { width: 100%; margin-left: 0; }
+        .toolbar-diagnostics { margin-left: 0; }
+        .resource-map .row-top { flex-direction: row; padding: 14px; align-items: center; justify-content: flex-start; gap: 12px; }
+      }
+      .application-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
+      .pagination-range, .pagination-page { color: var(--muted); font-size: 12px; }
+      .pagination-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+      .pagination-controls .toolbar-field { display: flex; align-items: center; gap: 8px; }
+      .pagination-controls .toolbar-select { width: 76px; }
+      .brand-mark { width: 40px; height: 40px; flex-shrink: 0; filter: drop-shadow(0 4px 6px rgba(24,43,72,.2)); }
+      .global-nav a[aria-current="page"] { color: #fff; background: var(--ink); box-shadow: 0 3px 7px rgba(24,43,72,.18); }
+      .toolbar-actions > .toolbar-button:first-of-type:not(:disabled) { background: var(--blue); border-color: var(--blue); color: #fff; box-shadow: 0 4px 8px rgba(52,91,212,.18); }
+      .toolbar-button:hover:not(:disabled) { box-shadow: var(--shadow-sm); border-color: var(--blue); }
+      .application-header { position: relative; overflow: hidden; background: linear-gradient(115deg, #192d4a, #294967); border-color: #294967; color: #fff; box-shadow: 0 14px 28px -12px rgba(24,43,72,.46); }
+      .application-header > .compact-heading .account-meta { color: #c2d2e5; }
+      .application-header > .compact-status .label { color: #c2d2e5; }
+      .application-header > .compact-status .status-cell { border-color: rgba(255,255,255,.17); }
+      .application-header .application-workspaces .row-link { padding: 8px 12px; border-radius: 9px; font-size: 12px; color: #f0f6ff; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.23); }
+      .application-header > .compact-status .pill.synced { color: #a3ebcf; background: rgba(37,174,130,.16); border-color: rgba(163,235,207,.25); }
+      .application-header > .compact-status .pill.progress { color: #ffe1a2; background: rgba(244,201,93,.12); border-color: rgba(255,225,162,.24); }
+      .application-header > .compact-status .pill.error { color: #ffbdbd; background: rgba(255,123,123,.12); border-color: rgba(255,189,189,.25); }
+      .application-header > .compact-status .pill.paused { color: #d5dfed; }
+      .application-header > .disclosure { margin-top: 16px; background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.15); border-radius: 10px; }
+      .application-header > .disclosure > summary { padding: 10px 14px; color: #dbe7f6; cursor: pointer; font-size: 12px; font-weight: 600; }
+      .application-header > .disclosure > summary:hover { background: rgba(255,255,255,.09); }
+      .application-header > .disclosure > .disclosure-body { background: var(--panel); color: var(--text); border-radius: 0 0 10px 10px; }
+      .compact-status .status-value { font-variant-numeric: tabular-nums; }
+      .resource-icon svg { width: 24px; height: 24px; }
+      .resource-map #application-traffic-routing { background: var(--traffic-tint); border-color: rgba(22,135,102,.09); }
+      .resource-map #application-config-access { background: var(--config-tint); border-color: rgba(120,98,172,.09); }
+      #application-traffic-routing .resource-icon { color: #167b64; background: linear-gradient(145deg, #fff, #d9f0e7); border-color: #c8e6db; box-shadow: 0 3px 6px rgba(22,135,102,.08); }
+      #application-config-access .resource-icon { display: flex; align-items: center; justify-content: center; flex: 0 0 42px; height: 42px; border: 1px solid rgba(52,91,212,.15); border-radius: 12px; background: linear-gradient(145deg, #fff, #dfe8ff); color: var(--blue); box-shadow: 0 3px 6px rgba(52,91,212,.08); }
+      .resource-map .row:hover, .applications-grid .row:hover { box-shadow: var(--shadow-raised); transform: translateY(-2px); }
+      .resource-details[open] > summary { color: var(--blue); background: #edf2ff; }
+      .metric .k, .label, .toolbar-label { letter-spacing: .04em; }
+      a, button, summary, select { -webkit-tap-highlight-color: transparent; }
+      @media (max-width: 720px) {
+        .shell { padding: 16px 14px 36px; }
+        .hero { gap: 10px; flex-wrap: wrap; }
+        .global-nav { gap: 2px; }
+        .global-nav a { padding: 10px; min-height: 44px; }
+        .toolbar-button, .toolbar-input, .toolbar-select, .disclosure > summary { min-height: 44px; }
+        .resource-open { min-height: 44px; display: flex; align-items: center; }
+        .account { padding: 18px; }
+        .resource-map .deployment-group { padding: 14px; }
+        .overview-counts { gap: 20px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
+        .resource-map .row:hover, .applications-grid .row:hover { transform: none; }
+      }
+      .workspace-header .label, .workspace-header .account-meta, .workspace-header .account-topology { color: #c2d2e5; }
+      .workspace-header .overview-counts { padding: 20px 0 0; border: 0; border-top: 1px solid rgba(255,255,255,.17); border-radius: 0; box-shadow: none; background: transparent; margin-top: 18px; }
+      .workspace-header .account-name { margin-top: 6px; }
+      .operator-list { display: grid; gap: 16px; }
+      .operator-list .row { border-radius: 16px; border: 1px solid var(--line); box-shadow: var(--shadow-sm); background: var(--panel); overflow: hidden; }
+      .operator-list .row > .disclosure { margin: 0 18px 16px; }
+      .operator-list .row > .row-links { padding: 12px 18px; margin: 0; border-top: 1px solid var(--line); }
+      .operator-list .row > .detail-state { margin: 0 18px 16px; }
+      .audit-event { position: relative; padding: 18px 18px 18px 28px; border-left: 3px solid var(--blue) !important; }
+      .audit-event > .disclosure { margin: 14px 0 0 !important; }
+      .audit-event > .row-links { padding: 12px 0 0 !important; margin-top: 12px !important; }
+      .audit-event .application-row-core { margin-top: 12px; }
+      .account-inventory .deployment-group { padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface-soft); }
+      .account-inventory { display: grid; gap: 16px; }
+      .account-inventory .account-head { align-items: center; }
+      .account-inventory .group-rows { display: grid; gap: 12px; }
+      .operator-list .application-row-core .metric { display: block; grid-column: auto; margin-bottom: 0; }
+      .apply-row-heading { cursor: default; }
+      .operator-list .application-row-core { grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); }
+      @media (max-width: 720px) {
+        .workspace-header .overview-counts { gap: 16px 24px; }
+        .account-inventory .deployment-group { padding: 12px; }
+        .audit-event { padding: 16px; }
+      }
+      #audit-timeline { border: 0; padding: 0; display: grid; gap: 14px; }
+      .audit-context { display: grid; gap: 16px; }
     </style>
   </head>
   <body>
     <div class="shell">
       <div class="hero">
         <div>
-          <h1 class="title">Tenet Control Plane</h1>
-          <p class="subtitle">Account-oriented rollout visibility for EC2 binaries and ECS images, with strategy-aware step labels such as ShiftTrafficCanary and CreateCodeDeployDeployment for weighted-target-group and ECS CodeDeploy rollouts.</p>
+          <h1 class="title"><img class="brand-mark" src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2248%22%20height%3D%2248%22%20viewBox%3D%220%200%2048%2048%22%3E%0A%20%20%3Cdefs%3E%3ClinearGradient%20id%3D%22tile%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20stop-color%3D%22%23355bd4%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23182b48%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%0A%20%20%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%2244%22%20height%3D%2244%22%20rx%3D%2213%22%20fill%3D%22url%28%23tile%29%22%2F%3E%0A%20%20%3Crect%20x%3D%222.5%22%20y%3D%222.5%22%20width%3D%2243%22%20height%3D%2243%22%20rx%3D%2212.5%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-opacity%3D%22.2%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M11%2010h26v5H26.5v6h-5v-6H11z%22%20fill%3D%22%23fff%22%2F%3E%0A%20%20%3Cpath%20d%3D%22M11%2010h26v5H26.5v6h-5v-6H11z%22%20transform%3D%22rotate%28180%2024%2024%29%22%20fill%3D%22%23fff%22%2F%3E%0A%20%20%3Cpath%20d%3D%22m24%2019%205%205-5%205-5-5z%22%20fill%3D%22%23a7c4ff%22%2F%3E%0A%3C%2Fsvg%3E%0A" alt="" aria-hidden="true" />Tenet</h1>
+          <p class="subtitle">Deployment control plane</p>
         </div>
+        <nav class="global-nav" aria-label="Main navigation">
+          <a href="?page=applications" id="main-nav-applications">Applications</a>
+          <a href="?page=applies" id="main-nav-applies">Applies</a>
+          <a href="?page=audit" id="main-nav-audit">Audit</a>
+        </nav>
       </div>
       <section class="operator-context" id="operator-context">
         <div class="operator-context-head">
@@ -244,6 +433,7 @@
       let allAccounts = [];
       let allApplications = [];
       let applicationsOverviewState = null;
+      let currentApplicationsPagination = { appPage: 1, appPageSize: 20 };
       let currentViewState = { query: '', syncState: 'all', healthState: 'all', account: 'all' };
       const defaultDriftFilters = { query: '', severity: 'all', sort: 'field' };
       const normalizeDriftFilters = (filters = {}) => {
@@ -2343,7 +2533,9 @@
         }
         liveStatus.textContent = statusAnnouncement;
         head.append(summary);
-        root.replaceChildren(head, liveStatus, meta, ...detailNodes);
+        const connection = createDisclosure('Access & connection', head, meta, ...detailNodes);
+        if (root.className.includes('error') || root.className.includes('unavailable')) connection.open = true;
+        root.replaceChildren(connection, liveStatus);
         if (operatorContextAccessDetailsHashTarget()) {
           focusOperatorContextAccessDetailsDeepLink();
         }
@@ -2381,6 +2573,83 @@
             renderOperatorContextBanner();
             return null;
           });
+      };
+      const disclosureState = new Map();
+      const createDisclosure = (label, ...nodes) => {
+        const key = [currentPageState.page, currentPageState.deployment, currentPageState.resourceId, label, nodes[0]?.dataset?.disclosureScope || ''].join(':');
+        const panel = createElement('details', 'disclosure');
+        panel.dataset.disclosureKey = key;
+        panel.open = disclosureState.get(key) || false;
+        panel.append(createElement('summary', '', label));
+        const body = createElement('div', 'disclosure-body');
+        body.append(...nodes.filter(Boolean));
+        panel.append(body);
+        panel.addEventListener('toggle', () => disclosureState.set(key, panel.open));
+        return panel;
+      };
+      const compactToolbar = (actions) => {
+        const secondary = [];
+        const primary = [];
+        Array.from(actions.children).forEach((action) => {
+          const label = action.textContent || '';
+          (label.includes('JSON') || action.className.includes('copy-read-route') ? secondary : primary).push(action);
+        });
+        if (secondary.length) {
+          secondary[0].dataset.disclosureScope = secondary[0].href || secondary[0].getAttribute('aria-label') || '';
+          const diagnostics = createDisclosure('API & diagnostics', ...secondary);
+          diagnostics.classList.add('toolbar-diagnostics');
+          primary.push(diagnostics);
+        }
+        actions.replaceChildren(...primary);
+        return actions;
+      };
+      const resourcePresentation = (type = '') => {
+        const kind = type.toLowerCase();
+        if (kind.includes('autoscaling')) return { icon: 'ASG', label: 'Auto Scaling Group' };
+        if (kind.includes('targetgroup')) return { icon: 'TG', label: 'Target Group' };
+        if (kind.includes('listener')) return { icon: 'ALB', label: 'Listener rule' };
+        if (kind.includes('userdata')) return { icon: 'CFG', label: 'Bootstrap config' };
+        if (kind.includes('codedeploy')) return { icon: 'CD', label: kind.includes('group') ? 'Deployment group' : 'CodeDeploy application' };
+        if (kind.includes('task')) return { icon: 'ECS', label: 'ECS task' };
+        if (kind.includes('instance')) return { icon: 'EC2', label: 'EC2 instance' };
+        if (kind.includes('ecs') || kind.includes('service')) return { icon: 'ECS', label: 'ECS service' };
+        if (kind.includes('traffic')) return { icon: 'PLAN', label: 'Traffic plan' };
+        return { icon: 'RES', label: type || 'Resource' };
+      };
+      const createResourceIcon = (presentation) => {
+        const paths = {
+          ASG: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="8.5" y="14" width="7" height="7" rx="1.5"/><path d="M6.5 10v2h11v-2M12 12v2"/>',
+          TG: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+          ALB: '<path d="M5 6h14M5 18h14M8 6v6h8v6"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="18" r="2"/>',
+          CFG: '<path d="M8 5H5v14h14v-3M13 3h6v6M11 13l8-8M9 9H8M9 13H8M13 17H8"/>',
+          ECS: '<path d="M12 3l9 5v8l-9 5-9-5V8zM3 8l9 5 9-5M12 13v8M7 5.8l10 5.5"/>',
+          EC2: '<rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',
+          CD: '<path d="M4 7h11l-3-3M20 17H9l3 3M20 7v6M4 17v-6"/>',
+          PLAN: '<path d="M4 12h16M15 7l5 5-5 5M9 5v14"/>',
+          RES: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 8h8M8 12h8M8 16h4"/>',
+        };
+        const icon = createElement('span', 'resource-icon');
+        icon.setAttribute('aria-hidden', 'true');
+        icon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${paths[presentation.icon] || paths.RES}</svg>`;
+        return icon;
+      };
+      const createCompactStatus = (detail, count) => {
+        const status = createElement('div', 'compact-status');
+        const sync = detail.sync?.state || detail.runtimeSummary?.sync?.state || 'Unknown';
+        const health = detail.health?.overall ? detail.health : detail.runtimeSummary?.health;
+        [
+          ['Sync', createElement('span', `pill ${statusClass(sync)}`, sync)],
+          ['Health', createElement('span', `pill ${healthClass(health?.overall)}`, healthLabel(health))],
+          ['Resources', createElement('span', '', String(count))],
+          ['Strategy', createElement('span', '', detail.strategy || 'Unknown')],
+        ].forEach(([label, value]) => {
+          const cell = createElement('div', 'status-cell');
+          const valueWrap = createElement('div', 'status-value');
+          valueWrap.append(value);
+          cell.append(createElement('div', 'label', label), valueWrap);
+          status.append(cell);
+        });
+        return status;
       };
       const createMetric = (label, value, className = '') => {
         const metric = createElement('div', 'metric');
@@ -3087,6 +3356,51 @@
         const nextPreset = auditLimitPresets.find((preset) => preset > currentLimit);
         return nextPreset || 0;
       };
+      const normalizeApplicationsPagination = (state = {}, total = 0) => {
+        const pageSize = [20, 50, 100].includes(Number(state.appPageSize)) ? Number(state.appPageSize) : 20;
+        const pageCount = Math.max(1, Math.ceil(total / pageSize));
+        const requestedPage = Number(state.appPage);
+        const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, pageCount) : 1;
+        const start = (page - 1) * pageSize;
+        return { appPage: page, appPageSize: pageSize, pageCount, start, end: Math.min(start + pageSize, total) };
+      };
+      const syncApplicationsPaginationParams = (params) => {
+        if (currentApplicationsPagination.appPage > 1) params.set('appPage', String(currentApplicationsPagination.appPage));
+        else params.delete('appPage');
+        if (currentApplicationsPagination.appPageSize !== 20) params.set('appPageSize', String(currentApplicationsPagination.appPageSize));
+        else params.delete('appPageSize');
+      };
+      const updateApplicationsPagination = (patch) => {
+        const focusState = captureToolbarFocus();
+        currentApplicationsPagination = { ...currentApplicationsPagination, ...patch };
+        renderApplicationsOverview(allApplications, focusState);
+      };
+      const createApplicationsPagination = (pagination, total) => {
+        const bar = createElement('div', 'application-pagination');
+        const range = createElement('div', 'pagination-range', `${total ? pagination.start + 1 : 0}–${pagination.end} of ${total} applications`);
+        range.setAttribute('role', 'status');
+        range.setAttribute('aria-live', 'polite');
+        range.setAttribute('aria-atomic', 'true');
+        const controls = createElement('div', 'pagination-controls');
+        controls.append(createSelect('Applications per page', String(pagination.appPageSize), [20, 50, 100].map((size) => ({ value: String(size), label: String(size) })), (event) => {
+          updateApplicationsPagination({ appPage: 1, appPageSize: Number(event.target.value) });
+        }));
+        const previous = createElement('button', 'toolbar-button', 'Previous');
+        previous.type = 'button';
+        previous.disabled = pagination.appPage === 1;
+        previous.dataset.toolbarField = 'application-previous-page';
+        previous.setAttribute('aria-label', 'Previous applications page');
+        previous.addEventListener('click', () => updateApplicationsPagination({ appPage: pagination.appPage - 1 }));
+        const next = createElement('button', 'toolbar-button', 'Next');
+        next.type = 'button';
+        next.disabled = pagination.appPage === pagination.pageCount;
+        next.dataset.toolbarField = 'application-next-page';
+        next.setAttribute('aria-label', 'Next applications page');
+        next.addEventListener('click', () => updateApplicationsPagination({ appPage: pagination.appPage + 1 }));
+        controls.append(previous, createElement('span', 'pagination-page', `${pagination.appPage} / ${pagination.pageCount}`), next);
+        bar.append(range, controls);
+        return bar;
+      };
       const parseViewState = () => {
         const params = new URLSearchParams(window.location.search);
         return {
@@ -3297,6 +3611,7 @@
         } else {
           params.delete('account');
         }
+        syncApplicationsPaginationParams(params);
         const query = params.toString();
         const hash = window.location.hash || '';
         const nextURL = query ? `${window.location.pathname}?${query}${hash}` : `${window.location.pathname}${hash}`;
@@ -3305,6 +3620,7 @@
       const buildPageURL = (page, extras = {}) => {
         const params = new URLSearchParams();
         params.set('page', page);
+        syncApplicationsPaginationParams(params);
         if (currentViewState.query) params.set('q', currentViewState.query);
         if (currentViewState.syncState && currentViewState.syncState !== 'all') params.set('sync', currentViewState.syncState);
         if (currentViewState.healthState && currentViewState.healthState !== 'all') params.set('health', currentViewState.healthState);
@@ -3419,11 +3735,18 @@
         }
         target.focus({ preventScroll: true });
       };
+      let forceHashDisclosureOpen = false;
       const scrollToCurrentHashTarget = () => {
         const targetID = currentHashTargetID();
         if (!targetID) return;
         const target = document.getElementById(targetID);
         if (!(target instanceof HTMLElement)) return;
+        const ancestors = [];
+        for (let parent = target; parent; parent = parent.parentNode) {
+          if (parent.tagName === 'DETAILS') ancestors.push(parent);
+        }
+        if (!forceHashDisclosureOpen && ancestors.some((panel) => (panel.dataset.disclosureKey && disclosureState.get(panel.dataset.disclosureKey) === false) || (panel.className === 'operator-context-details' && !operatorContextDetailsOpen))) return;
+        ancestors.forEach((panel) => { panel.open = true; });
         if (typeof target.scrollIntoView === 'function') {
           target.scrollIntoView({ block: 'start', behavior: 'auto' });
         }
@@ -3438,7 +3761,8 @@
           }
           if (currentPageState.page !== 'application' && currentPageState.page !== 'account' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan' && currentPageState.page !== 'audit' && currentPageState.page !== 'applies') return;
           syncActiveResourceQuickNav();
-          scrollToCurrentHashTarget();
+          forceHashDisclosureOpen = true;
+          try { scrollToCurrentHashTarget(); } finally { forceHashDisclosureOpen = false; }
         });
       }
       const createDeploymentBreadcrumb = ({ deploymentName = '', awsAccountId = '', accountName = '', currentLabel = '' } = {}) => {
@@ -3458,6 +3782,7 @@
         return params.toString() ? `/v1/audit-logs?${params.toString()}` : '/v1/audit-logs';
       };
       const updateViewState = (patch) => {
+        currentApplicationsPagination.appPage = 1;
         const focusState = captureToolbarFocus();
         currentViewState = normalizeViewState(allApplications, { ...currentViewState, ...patch });
         syncViewState(currentViewState);
@@ -3627,6 +3952,7 @@
         return `Clear active application filters: ${filters.join(', ')}`;
       };
       const resetApplicationsFilters = (focusState = null) => {
+        currentApplicationsPagination.appPage = 1;
         currentViewState = { query: '', syncState: 'all', healthState: 'all', account: 'all' };
         syncViewState(currentViewState);
         renderApplicationsOverview(allApplications, focusState);
@@ -3685,6 +4011,7 @@
           resetApplicationsFilters(captureToolbarFocus());
         });
         actions.append(clearButton);
+        compactToolbar(actions);
         root.replaceChildren(controls, actions);
       };
       const renderApplicationsSummary = (applications, sourceApplications = applications) => {
@@ -3725,7 +4052,13 @@
         } else if (refreshState?.message) {
           refreshNodes.push(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.message));
         }
-        summary.replaceChildren(...refreshNodes, header, statusCard);
+        const counts = createElement('div', 'overview-counts');
+        [[applicationCount, 'Applications'], [synced, 'Synced'], [progressing, 'In progress'], [paused, 'Paused'], [errored, 'Errors']].forEach(([value, label]) => {
+          const item = createElement('div', 'overview-count');
+          item.append(createElement('strong', '', String(value)), createElement('span', '', label));
+          counts.append(item);
+        });
+        summary.replaceChildren(...refreshNodes, counts, createDisclosure('Status details', header, statusCard));
       };
       const renderApplicationsEmptyState = (visibleApplications, sourceApplications) => {
         const root = document.getElementById('accounts');
@@ -3768,7 +4101,7 @@
         }
         root.replaceChildren(empty);
       };
-      const renderApplicationsTable = (applications, sourceApplications = applications) => {
+      const renderApplicationsTable = (applications, sourceApplications = applications, pagination = null) => {
         const root = document.getElementById('accounts');
         if (!applications.length) {
           renderApplicationsEmptyState(applications, sourceApplications);
@@ -3779,14 +4112,15 @@
           createElement('h2', 'account-name', 'Application status overview'),
           createElement('div', 'account-meta', 'Select an application to open the next drill-down page.'),
         );
-        const rows = createElement('div', 'rows');
+        if (pagination) table.append(createApplicationsPagination(pagination, pagination.total));
+        const rows = createElement('div', 'rows applications-grid');
         applications.forEach((deployment) => {
           const row = createElement('div', 'row');
           const top = createElement('div', 'row-top');
           const titleWrap = createElement('div');
           titleWrap.append(
             createElement('h3', 'row-title', deployment.name || 'Unknown deployment'),
-            createElement('div', 'row-subtitle', [deployment.environmentRef, deployment.targetType, deployment.executionMode].filter(Boolean).join(' · ') || '—'),
+            createElement('div', 'row-subtitle', [deployment.environmentRef, (deployment.targetType || '').toUpperCase(), deployment.strategy].filter(Boolean).join(' · ') || '—'),
           );
           const rowPills = createElement('div', 'pills');
           rowPills.append(
@@ -3831,10 +4165,10 @@
           const secondaryActions = createElement('details', 'row-secondary-actions');
           secondaryActions.setAttribute('role', 'group');
           secondaryActions.setAttribute('aria-label', `Secondary actions for ${deployment.name || 'deployment'}`);
-          secondaryActions.append(createElement('summary', '', `More actions for ${deployment.name || 'deployment'}`), secondaryLinks);
+          secondaryActions.append(core, createElement('summary', '', `More actions for ${deployment.name || 'deployment'}`), secondaryLinks);
           const matchContext = createApplicationMatchContext(deployment, currentViewState.query);
           const latestChangeCue = createLatestRuntimeChangeCue(deployment);
-          row.append(top, core);
+          row.append(top);
           if (latestChangeCue) row.append(latestChangeCue);
           if (matchContext) row.append(matchContext);
           if (secondaryLinks.children.length) row.append(secondaryActions);
@@ -3848,7 +4182,11 @@
         renderToolbar(allApplications, currentViewState);
         const visibleApplications = applyViewState(applications, currentViewState);
         renderApplicationsSummary(visibleApplications, applications);
-        renderApplicationsTable(visibleApplications, applications);
+        // shortcut: paginate the fetched overview in memory; add API pagination if catalog transfer becomes the bottleneck.
+        const pagination = normalizeApplicationsPagination(currentApplicationsPagination, visibleApplications.length);
+        currentApplicationsPagination = { appPage: pagination.appPage, appPageSize: pagination.appPageSize };
+        syncViewState(currentViewState);
+        renderApplicationsTable(visibleApplications.slice(pagination.start, pagination.end), applications, { ...pagination, total: visibleApplications.length });
         restoreToolbarFocus(focusState);
       };
       const groupResourceSections = (detail) => {
@@ -4905,9 +5243,17 @@
           syncApplicationResourceFilterQueryParam(nextFilter);
           renderApplicationDetailPage(detail, applicationState, nextFocus);
         }));
+        compactToolbar(toolbarActions);
         toolbar.replaceChildren(toolbarActions);
-        const detailSummary = createElement('article', 'account');
-        detailSummary.append(
+        const detailSummary = createElement('article', 'account application-header');
+        const heading = createElement('div', 'compact-heading');
+        const headingText = createElement('div');
+        headingText.append(createElement('h2', 'account-name', deploymentName), createElement('div', 'account-meta', [detail.accountName, detail.environmentRef, detail.region].filter(Boolean).join(' · ')));
+        const workspaceActions = createElement('div', 'application-workspaces');
+        workspaceActions.append(createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self'), createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self'), createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self'));
+        heading.append(headingText, workspaceActions);
+        const originalSummary = createElement('div');
+        originalSummary.append(
           createElement('h2', 'account-name', detail.name || currentPageState.deployment || 'Application'),
           createElement('div', 'account-meta', [detail.accountName, detail.awsAccountId, detail.region].filter(Boolean).join(' · ') || '—'),
           createElement('div', 'account-topology', 'Current application status summarizes the selected deployment before resource drill-downs.'),
@@ -4915,8 +5261,10 @@
           createElement('div', 'account-topology application-detail-read-route', `Current application read: ${applicationDetailReadRoute(deploymentName)}`),
           createApplicationDetailFreshnessMeta(applicationState, detail),
         );
+        detailSummary.append(heading, createCompactStatus(detail, totalResourceCount), createDisclosure('Deployment details', originalSummary));
         summary.replaceChildren(detailSummary);
         const page = createElement('article', 'account');
+        const applicationDiagnostics = createElement('div');
         const breadcrumb = createDeploymentBreadcrumb({
           deploymentName: detail.name || currentPageState.deployment || '',
           awsAccountId: detail.awsAccountId || '',
@@ -4928,15 +5276,15 @@
         }
         page.append(
           createElement('h2', 'account-name', 'Application resources'),
-          createElement('div', 'account-meta', 'Grouped linked resources for the selected application. Open a resource for focused rollout, log, and inspection evidence.'),
+          createElement('div', 'inventory-label', `${totalResourceCount} linked resources · ${Array.isArray(detail.rollout?.execution) && detail.rollout.execution.length ? 'Controller inventory' : 'Fallback inventory'}`),
         );
         const inventorySummary = createApplicationResourceInventorySummary(resourceGroups, totalResourceCount, visibleResourceCount, resourceFilter);
         if (inventorySummary) {
-          page.append(inventorySummary);
+          applicationDiagnostics.append(inventorySummary);
         }
         const resourceCoverageNote = createApplicationResourceCoverageNote(detail, totalResourceCount, resourceFilter);
         if (resourceCoverageNote) {
-          page.append(resourceCoverageNote);
+          applicationDiagnostics.append(resourceCoverageNote);
         }
         if (resourceFilter && totalResourceCount > 0) {
           const filterSummary = createElement('div', 'account-topology resource-filter-summary');
@@ -4956,7 +5304,10 @@
         }
         const applicationStatusSection = createApplicationStatusSummary(detail, allResourceGroups);
         applicationStatusSection.id = applicationStatusSectionID;
-        page.append(applicationStatusSection, createApplicationTroubleshootingRecommendation(detail));
+        const recommendation = createApplicationTroubleshootingRecommendation(detail);
+        applicationDiagnostics.append(applicationStatusSection);
+        if (detail.troubleshootingRecommendation) page.append(recommendation);
+        else applicationDiagnostics.append(recommendation);
         pushApplicationSectionLink(applicationStatusSectionID, 'Current application status');
         const workspaceLinks = createElement('div', 'row-links row-links-shell');
         if (deploymentName) {
@@ -4966,8 +5317,8 @@
             createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self'),
           );
         }
-        page.append(workspaceLinks);
-        const rows = createElement('div', 'rows');
+        applicationDiagnostics.append(workspaceLinks);
+        const rows = createElement('div', 'rows resource-map');
         resourceGroups.forEach((group) => {
           const groupSection = createElement('section', 'deployment-group');
           groupSection.id = applicationSectionIDs[group.title] || '';
@@ -4987,11 +5338,12 @@
             row.dataset.resourceId = resource.id || '';
             const top = createElement('div', 'row-top');
             const titleWrap = createElement('div');
-            titleWrap.append(
-              createElement('h3', 'row-title', resource.name),
-              createElement('div', 'row-subtitle', `${resource.type} · ${resource.description}`),
-            );
-            top.append(titleWrap, createElement('span', 'pill target', resource.type));
+            const presentation = resourcePresentation(resource.type);
+            const nameLink = createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), resource.name, '_self');
+            nameLink.className = 'resource-open';
+            nameLink.setAttribute('aria-label', `Open resource ${resource.name}`);
+            titleWrap.append(createElement('div', 'resource-kind', presentation.label), nameLink);
+            top.append(createResourceIcon(presentation), titleWrap);
             const detailLinks = createElement('div', 'row-links row-links-shell');
             const relatedEventsCueSlot = createElement('div', 'application-resource-related-events-slot');
             relatedEventsCueSlot.dataset.relatedEventsCueSlot = 'true';
@@ -5007,7 +5359,11 @@
                 if (summaryCue) relatedEventsCueSlot.append(summaryCue);
               }
             }
-            row.append(top, detailLinks, relatedEventsCueSlot);
+            const description = createElement('div', 'row-subtitle', `${resource.type} · ${resource.description}`);
+            description.dataset.disclosureScope = resource.id;
+            const resourceDetails = createDisclosure('Details & evidence', description, detailLinks, relatedEventsCueSlot);
+            resourceDetails.classList.add('resource-details');
+            row.append(top, resourceDetails);
             groupRows.append(row);
           });
           if (resourceFilter && !group.resources.length) {
@@ -5028,7 +5384,7 @@
         pushApplicationSectionLink(eventsSection.id, 'Controller runtime events');
         const quickNav = createApplicationQuickNav(detail, applicationSectionLinks);
         if (quickNav) {
-          page.append(quickNav);
+          applicationDiagnostics.append(quickNav);
         }
         const refreshState = applicationDetailRefreshState(applicationState);
         if (refreshState?.heading) {
@@ -5040,7 +5396,7 @@
           page.append(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.message));
         }
         renderDeploymentEventsSection(eventsSection, eventsDeploymentName).catch(() => {});
-        page.append(rows, eventsSection);
+        page.append(rows, createDisclosure('Runtime & navigation', applicationDiagnostics), createDisclosure('Controller runtime events', eventsSection));
         root.replaceChildren(page);
         activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
         syncActiveResourceQuickNav();
@@ -5575,18 +5931,20 @@
         createResourceDetailActions(resourceState, detail, resource).forEach((action) => {
           if (action) toolbarActions.append(action);
         });
+        compactToolbar(toolbarActions);
         toolbar.replaceChildren(toolbarActions);
         const detailSummary = createElement('article', 'account');
         detailSummary.append(
           createElement('div', 'label', 'Resource detail'),
           createElement('h2', 'account-name', resource.name),
-          createElement('div', 'account-meta', `${resource.type} · ${textOrDash(resource.description)}`),
+          createElement('div', 'account-meta', resourcePresentation(resource.type).label),
+          createDisclosure('Resource details', createElement('div', 'account-meta', `${resource.type} · ${textOrDash(resource.description)}`)),
           createElement('div', 'account-topology', [detail.name || currentPageState.deployment || 'Application', detail.accountName, detail.region, selectedResourceScopeText(resource)].filter(Boolean).join(' · ')),
           createResourceDetailFreshnessMeta(resourceState, detail),
         );
         summary.replaceChildren(detailSummary);
 
-        const page = createElement('article', 'account');
+        const page = createElement('article', 'account resource-page');
         const breadcrumb = createDeploymentBreadcrumb({
           deploymentName: detail.name || currentPageState.deployment || '',
           awsAccountId: detail.awsAccountId || '',
@@ -5599,7 +5957,7 @@
         page.append(
           createElement('h2', 'account-name', 'Resource detail'),
           createElement('div', 'account-meta', `Focused rollout/runtime context for ${resource.name}.`),
-          createSelectedResourceContextCallout(detail, resource),
+          createDisclosure('Selected resource context', createSelectedResourceContextCallout(detail, resource)),
         );
         if (resourceRouteState.openedViaAlias) {
           page.append(createElement('div', 'detail-state', `Opened via bookmarked resource alias. Requested resource id ${resourceRouteState.routeResourceId}; resolved canonical resource id ${resource.id}.`));
@@ -5751,7 +6109,10 @@
         } else if (refreshState?.message) {
           page.append(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.message));
         }
-        page.append(...[quickNav, troubleshootingSection, shell, historySection, executionSection, conditionsSection, relatedEventsSection, inspectionSection, logsSection].filter(Boolean));
+        page.append(createDisclosure('Page navigation', quickNav), createDisclosure('Troubleshooting summary', troubleshootingSection), createDisclosure('Resource metadata', shell));
+        [[historySection, 'Runtime history'], [executionSection, 'Rollout execution'], [conditionsSection, 'Conditions'], [relatedEventsSection, 'Related runtime events'], [inspectionSection, 'Live inspection'], [logsSection, 'Recent logs']].forEach(([section, label]) => {
+          if (section) page.append(createDisclosure(label, section));
+        });
         root.replaceChildren(page);
         activeResourceQuickNavSync = typeof quickNav.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
         syncActiveResourceQuickNav();
@@ -6016,7 +6377,7 @@
         if (actions.length) {
           const actionBar = createElement('div', 'detail-section-actions');
           actionBar.append(...actions);
-          head.append(actionBar);
+          head.append(compactToolbar(actionBar));
         }
         return head;
       };
@@ -9111,6 +9472,24 @@
         actions.append(clearCapButton);
         return actions;
       };
+      const createWorkspaceHeader = (eyebrow, title, subtitle, counts = []) => {
+        const header = createElement('article', 'account application-header workspace-header');
+        const heading = createElement('div', 'compact-heading');
+        const text = createElement('div');
+        text.append(createElement('div', 'label', eyebrow), createElement('h2', 'account-name', title), createElement('div', 'account-meta', subtitle));
+        heading.append(text);
+        header.append(heading);
+        if (counts.length) {
+          const strip = createElement('div', 'overview-counts');
+          counts.forEach(([value, label]) => {
+            const item = createElement('div', 'overview-count');
+            item.append(createElement('strong', '', String(value)), createElement('span', '', label));
+            strip.append(item);
+          });
+          header.append(strip);
+        }
+        return header;
+      };
       const renderAuditPageChrome = () => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
@@ -9169,15 +9548,7 @@
         }
         toolbar.replaceChildren(controls, toolbarActions);
 
-        const detailSummary = createElement('article', 'account');
-        detailSummary.append(
-          createElement('div', 'label', deploymentName ? 'Deployment audit timeline' : 'Audit timeline'),
-          createElement('h2', 'account-name', 'Operator audit log'),
-          createElement('div', 'account-meta', deploymentName
-            ? `Immutable plan preview and apply-request activity for deployment ${deploymentName} rendered from GET /v1/audit-logs.`
-            : 'Immutable plan preview and apply-request activity rendered from GET /v1/audit-logs.'),
-          createElement('div', 'account-topology', activeControls.length ? `Newest entries first. Actor identity remains explicit when unavailable or unknown. ${activeControls.join(' · ')}.` : 'Newest entries first. Actor identity remains explicit when unavailable or unknown.'),
-        );
+        const detailSummary = createWorkspaceHeader(deploymentName ? 'Deployment audit timeline' : 'Audit timeline', 'Operator audit log', deploymentName || 'All deployments · newest activity first');
         summary.replaceChildren(detailSummary);
       };
       const renderAuditLogsState = (text, className = '', detailText = '', afterNodes = []) => {
@@ -9205,14 +9576,14 @@
         }
         page.append(
           createDetailSectionHeader('Audit timeline', createAuditLogsActions(auditLogsPageState.status === 'loading')),
-          createAuditLogsIntro(),
+          createDisclosure('About this audit log', createAuditLogsIntro()),
         );
         const deploymentCallout = createAuditDeploymentContextCallout();
         if (deploymentCallout) {
           const deploymentContextSectionID = 'audit-deployment-context';
           deploymentCallout.setAttribute('id', deploymentContextSectionID);
           pushAuditSectionLink(deploymentContextSectionID, 'Deployment context');
-          page.append(deploymentCallout);
+          page.append(createDisclosure('Deployment context', deploymentCallout));
         }
         const timelineSection = createElement('section', 'detail-section');
         const timelineSectionID = 'audit-timeline';
@@ -9220,7 +9591,7 @@
         pushAuditSectionLink(timelineSectionID, 'Audit timeline');
         const quickNav = createAuditQuickNav(auditSectionLinks);
         if (quickNav) {
-          page.append(quickNav);
+          page.append(createDisclosure('Jump to audit entry', quickNav));
         }
         const stateNode = createElement('div', 'detail-state', text);
         if (className) stateNode.classList.add(className);
@@ -9242,12 +9613,15 @@
         const root = document.getElementById('accounts');
         const page = createElement('article', 'account');
         const entries = sortAuditEntries(result?.entries || []);
+        document.getElementById('summary').replaceChildren(createWorkspaceHeader(auditDeploymentName() ? 'Deployment audit timeline' : 'Audit timeline', 'Operator audit log', auditDeploymentName() || 'All deployments · newest activity first', [[entries.length, 'Visible events'], [entries.filter((entry) => entry.action === 'plan.created').length, 'Plan previews'], [entries.filter((entry) => entry.action === 'apply.requested').length, 'Apply requests']]));
         const seenAuditEntryAnchors = new Map();
         const auditEntryAnchors = entries.map((entry) => ({
           entry,
           anchorID: uniqueAuditEntryAnchorID(entry, seenAuditEntryAnchors),
           label: auditEntryQuickNavLabel(entry),
         }));
+        const timelineContext = createElement('div', 'audit-context');
+        timelineContext.append(createAuditLogsIntro());
         const refreshStateText = auditLogsRefreshStateText(auditState);
         const auditSectionLinks = [];
         const pushAuditSectionLink = (sectionID, label) => {
@@ -9270,14 +9644,13 @@
         }
         page.append(
           createDetailSectionHeader('Audit timeline', createAuditLogsActions(auditState?.status === 'loading')),
-          createAuditLogsIntro(),
         );
         const deploymentCallout = createAuditDeploymentContextCallout();
         if (deploymentCallout) {
           const deploymentContextSectionID = 'audit-deployment-context';
           deploymentCallout.setAttribute('id', deploymentContextSectionID);
           pushAuditSectionLink(deploymentContextSectionID, 'Deployment context');
-          page.append(deploymentCallout);
+          timelineContext.append(deploymentCallout);
         }
         const timelineSection = createElement('section', 'detail-section');
         const timelineSectionID = 'audit-timeline';
@@ -9288,14 +9661,14 @@
         });
         const quickNav = createAuditQuickNav(auditSectionLinks);
         if (quickNav) {
-          page.append(quickNav);
+          timelineContext.append(quickNav);
         }
         if (refreshStateText) {
           timelineSection.append(createElement('div', auditState?.status === 'error' ? 'detail-state error' : 'detail-state', refreshStateText));
         }
         const resultScopeSummary = createAuditResultScopeSummary(result, entries);
         if (resultScopeSummary) {
-          timelineSection.append(resultScopeSummary);
+          timelineContext.append(resultScopeSummary);
         }
         const freshnessMeta = createAuditLogsFreshnessMeta(result);
         if (freshnessMeta) {
@@ -9307,7 +9680,7 @@
             createElement('div', 'detail-state', auditEmptyStateText()),
             ...(emptyStateActions ? [emptyStateActions] : []),
           );
-          page.append(timelineSection);
+          page.append(createDisclosure('Timeline context & diagnostics', timelineContext), timelineSection);
           root.replaceChildren(page);
           activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
           syncActiveResourceQuickNav();
@@ -9322,10 +9695,9 @@
           auditLimitLabel(),
         ];
         const timelineNavigation = createAuditTimelineNavigation(auditEntryAnchors);
+        timelineContext.append(createAuditTimelineSummary(entries), ...(timelineNavigation ? [timelineNavigation] : []));
         timelineSection.append(
-          createAuditTimelineSummary(entries),
           createElement('div', 'detail-condition-meta', timelineMeta.join(' · ')),
-          ...(timelineNavigation ? [timelineNavigation] : []),
         );
         const limitCapHint = auditLimitCapHintText(entries, result);
         if (limitCapHint) {
@@ -9335,9 +9707,11 @@
             timelineSection.append(limitCapActions);
           }
         }
-        const rows = createElement('div', 'rows');
+        const rows = createElement('div', 'rows operator-list');
         entries.forEach((entry, index) => {
-          const row = createElement('div', 'row');
+          const row = createElement('div', 'row audit-event');
+          const evidence = createElement('div', 'audit-evidence');
+          evidence.dataset.disclosureScope = auditEntryAnchors[index]?.anchorID || auditEntryAnchorID(entry);
           const rowAnchorID = auditEntryAnchors[index]?.anchorID || auditEntryAnchorID(entry);
           row.setAttribute('id', rowAnchorID);
           const top = createElement('div', 'row-top');
@@ -9360,22 +9734,20 @@
           }
           top.append(titleWrap, rowPills);
 
+          const core = createElement('div', 'application-row-core');
+          [['Timestamp', textOrDash(entry.timestamp)], ['Actor', auditActorStateLabel(entry.actor)]].forEach(([label, value]) => core.append(createMetric(label, value)));
           const metrics = createElement('div', 'metrics');
           [
             ['Action', auditActionDisplayLabel(entry.action)],
-            ['Timestamp', textOrDash(entry.timestamp)],
             ['Deployment', textOrDash(entry.deploymentName)],
             ['Application', textOrDash(entry.appRef)],
             ['Environment', textOrDash(entry.environmentRef)],
-            ['Actor', auditActorStateLabel(entry.actor)],
             ['Plan ID', textOrDash(entry.planId)],
             ['Apply ID', textOrDash(entry.applyId)],
-          ].forEach(([label, value]) => {
-            metrics.append(createMetric(label, value));
-          });
-          row.append(top, metrics);
-
-          row.append(createElement('div', 'detail-condition-meta', `Actor detail · ${auditActorReasonText(entry.actor)}`));
+          ].forEach(([label, value]) => metrics.append(createMetric(label, value)));
+          row.append(top, core);
+          evidence.append(metrics, createElement('div', 'detail-condition-meta', `Actor detail · ${auditActorReasonText(entry.actor)}`));
+          if (entry.metadata?.error) row.append(createElement('div', 'detail-state error', entry.metadata.error));
 
           const metadataLabels = [];
           if (entry.metadata?.previousStatus || entry.metadata?.newStatus) metadataLabels.push(`Transition · ${textOrDash(entry.metadata.previousStatus)} → ${textOrDash(entry.metadata.newStatus)}`);
@@ -9386,19 +9758,19 @@
           if (entry.metadata?.sourceFingerprint) metadataLabels.push(`Source fingerprint · ${entry.metadata.sourceFingerprint}`);
           if (entry.metadata?.error) metadataLabels.push(`Error · ${entry.metadata.error}`);
           if (metadataLabels.length) {
-            row.append(createElement('div', 'detail-condition-meta', metadataLabels.join(' · ')));
+            evidence.append(createElement('div', 'detail-condition-meta', metadataLabels.join(' · ')));
           }
           if (entry.metadata?.details?.length) {
-            row.append(createElement('div', 'detail-condition-meta', `Details · ${entry.metadata.details.join('; ')}`));
+            evidence.append(createElement('div', 'detail-condition-meta', `Details · ${entry.metadata.details.join('; ')}`));
           }
           if (entry.metadata?.errors?.length) {
-            row.append(createElement('div', 'detail-condition-meta', `Errors · ${entry.metadata.errors.join('; ')}`));
+            evidence.append(createElement('div', 'detail-condition-meta', `Errors · ${entry.metadata.errors.join('; ')}`));
           }
           const sourceLabels = [];
           if (entry.source?.recordRoute) sourceLabels.push(`Source record · ${entry.source.recordRoute}`);
           if (entry.source?.sourceRoute) sourceLabels.push(`Source detail · ${entry.source.sourceRoute}`);
           if (sourceLabels.length) {
-            row.append(createElement('div', 'detail-condition-meta', sourceLabels.join(' · ')));
+            evidence.append(createElement('div', 'detail-condition-meta', sourceLabels.join(' · ')));
             const sourceLinks = createElement('div', 'row-links row-links-shell');
             if (entry.source?.recordRoute) {
               sourceLinks.append(createNavLink(entry.source.recordRoute, 'Open source record'));
@@ -9406,8 +9778,8 @@
             if (entry.source?.sourceRoute) {
               sourceLinks.append(createNavLink(entry.source.sourceRoute, 'Open source detail'));
             }
-            row.append(createElement('div', 'row-hint', 'Inspect audit sources'));
-            row.append(sourceLinks);
+            evidence.append(createElement('div', 'row-hint', 'Inspect audit sources'));
+            evidence.append(sourceLinks);
           }
 
           const links = createElement('div', 'row-links row-links-shell');
@@ -9427,13 +9799,14 @@
             }), 'Open plan/apply workspace', '_self'));
           }
           if (links.children.length) {
-            row.append(createElement('div', 'row-hint', 'Share or continue in app'));
-            row.append(links);
+            links.dataset.disclosureScope = rowAnchorID;
+            row.append(createDisclosure('Share & continue', links));
           }
+          row.append(createDisclosure('Event details & sources', evidence));
           rows.append(row);
         });
         timelineSection.append(rows);
-        page.append(timelineSection);
+        page.append(createDisclosure('Timeline context & diagnostics', timelineContext), timelineSection);
         root.replaceChildren(page);
         activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
         syncActiveResourceQuickNav();
@@ -10170,14 +10543,14 @@
         const controls = createElement('div', 'toolbar-actions');
         controls.append(createElement('div', 'toolbar-active', `Monitor view: ${appliesMonitorViewLabel(state.view || currentPageState.appliesView || 'queued')}`), createAppliesMonitorViewControl(state));
         toolbar.append(controls);
-        document.getElementById('summary').replaceChildren();
+        document.getElementById('summary').replaceChildren(createWorkspaceHeader('Execution workspace', 'Applies monitor', appliesMonitorViewLabel(state.view || currentPageState.appliesView || 'queued')));
         const stateNode = createElement('div', 'empty', text);
         markPoliteStatusNode(stateNode);
         if (className) stateNode.classList.add(className);
         if (actions.length) {
           const actionBar = createElement('div', 'row-links');
           actionBar.append(...actions);
-          stateNode.append(actionBar);
+          stateNode.append(compactToolbar(actionBar));
         }
         document.getElementById('accounts').replaceChildren(stateNode);
       };
@@ -10414,7 +10787,7 @@
       };
       const createQueuedApplyRow = (record, state = {}) => {
         const row = createElement('article', 'row');
-        const top = createElement('div', 'row-toggle');
+        const top = createElement('div', 'row-toggle apply-row-heading');
         const rowTop = createElement('div', 'row-top');
         const title = createElement('div');
         title.append(
@@ -10425,6 +10798,8 @@
         top.append(rowTop);
 
         const metrics = createElement('div', 'application-row-core');
+        const evidence = createElement('div', 'detail-grid');
+        evidence.dataset.disclosureScope = record.id || record.deploymentName || '';
         [
           ['Deployment', metricValue(record?.deploymentName)],
           ['Apply id', metricValue(record?.id)],
@@ -10434,8 +10809,12 @@
           ...applyNextSafeActionRows(record),
           ...queuedApplyClaimRows(record),
           ...applyExecutionReadinessRows(record),
-        ].forEach(([label, value, className]) => metrics.append(createMetric(label, value, className || '')));
+        ].forEach(([label, value, className]) => {
+          const target = ['Created at', 'Operation progress', 'Next safe action', 'Execution readiness'].includes(label) ? metrics : evidence;
+          target.append(createMetric(label, value, className || ''));
+        });
         top.append(metrics);
+        if (record.error) top.append(createElement('div', 'detail-state error', record.error));
 
         const links = createElement('div', 'row-links row-links-shell');
         if (record?.deploymentName && record?.id) {
@@ -10448,11 +10827,14 @@
             previewState.status === 'loading',
             () => state?.onPreviewExecution?.(record.id).catch(() => {}),
           );
-          links.append(previewButton, createNavLink(buildApplyRequestRoute(record.id), 'Apply JSON'));
+          links.append(previewButton);
+          evidence.append(createNavLink(buildApplyRequestRoute(record.id), 'Apply JSON'));
         }
         const previewPanel = createAppliesMonitorExecutionPreviewPanel(record, state);
-        row.append(top, links);
-        if (previewPanel) row.append(previewPanel);
+        const previewIdle = appliesMonitorExecutionPreviewState(state, record.id).status === 'idle';
+        if (previewPanel && previewIdle) evidence.append(previewPanel);
+        row.append(top, links, createDisclosure('Execution evidence & claim', evidence));
+        if (previewPanel && !previewIdle) row.append(previewPanel);
         return row;
       };
       const renderQueuedAppliesPage = (state) => {
@@ -10495,9 +10877,10 @@
         const summary = document.getElementById('summary');
         const summaryMetrics = appliesMonitorSummaryMetrics(records).map(([label, value]) => createMetric(label, value, 'summary'));
         summary.replaceChildren(
-          createMetric(appliesMonitorViewLabel(view), String(records.length)),
-          createMetric('Read route', readRoute, 'summary'),
-          ...summaryMetrics,
+          createWorkspaceHeader('Execution workspace', 'Applies monitor', appliesMonitorViewLabel(view), [[records.length, 'Applies'], [records.filter((record) => normalizeApplyRecordStatus(record.status) === 'running').length, 'Running'], [records.filter((record) => appliesMonitorClaimSignal(record) === 'attention').length, 'Claim attention']]),
+        );
+        summary.children[0].append(
+          createDisclosure('Monitor signals & read route', createMetric(appliesMonitorViewLabel(view), String(records.length)), createMetric('Read route', readRoute, 'summary'), ...summaryMetrics),
         );
 
         const header = createElement('article', 'account');
@@ -10505,18 +10888,18 @@
         const intro = createElement('div');
         intro.append(
           createElement('div', 'label', 'Applies monitor'),
-          createElement('h2', 'account-name', 'Applies monitor'),
-          createElement('div', 'account-meta', `Current applies monitor read: ${readRoute}.`),
+          createElement('h2', 'account-name', 'Apply requests'),
         );
         const actions = createElement('div', 'row-links account-links');
+        const diagnostics = createElement('div');
+        diagnostics.append(createElement('div', 'account-meta', `Current applies monitor read: ${readRoute}.`), createNavLink(route, `${appliesMonitorViewLabel(view)} JSON`), createCopyReadRouteButton(readRoute));
         actions.append(
-          createNavLink(route, `${appliesMonitorViewLabel(view)} JSON`),
-          createCopyReadRouteButton(readRoute),
+          diagnostics,
           createAppliesMonitorRefreshButton(state),
           createNavLink(buildPageURL('applications'), 'Applications overview', '_self'),
         );
-        head.append(intro, actions);
-        const rows = createElement('div', 'rows');
+        head.append(intro, compactToolbar(actions));
+        const rows = createElement('div', 'rows operator-list');
         records.forEach((record) => rows.append(createQueuedApplyRow(record, state)));
         header.append(head, rows);
         document.getElementById('accounts').replaceChildren(header);
@@ -11413,6 +11796,7 @@
           ));
         }
         toolbarActions.append(createElement('div', 'toolbar-active', `${workspaceTitle} · ${deploymentName || 'deployment'}`));
+        compactToolbar(toolbarActions);
         toolbar.replaceChildren(toolbarActions);
 
         const workspaceSummary = createElement('div', 'detail-grid');
@@ -11428,7 +11812,7 @@
         ].forEach(([label, value]) => {
           workspaceSummary.append(createMetric(label, value, label === 'Latest runtime' ? 'summary' : ''));
         });
-        summary.replaceChildren(workspaceSummary);
+        summary.replaceChildren(createCompactStatus(detail, applicationResourceCount(nonEmptyResourceSections(detail))), createDisclosure('Deployment details', workspaceSummary));
 
         const sections = [];
         const planSectionLinks = [];
@@ -12160,7 +12544,11 @@
         if (breadcrumb) {
           header.append(breadcrumb);
         }
-        header.append(head, quickNav, ...sections);
+        header.append(head, createDisclosure('Page navigation', quickNav), ...sections.map((section) => {
+          if (section.id === 'plan-runtime-signals') return createDisclosure('Runtime signals', section);
+          if (section.id === 'plan-rollout-execution') return createDisclosure('Rollout execution', section);
+          return section;
+        }));
         root.replaceChildren(header);
         scrollToCurrentHashTarget();
       };
@@ -12191,7 +12579,7 @@
       };
 
       const createAccountOverviewArticle = (account, sectionLinks = []) => {
-          const article = createElement('article', 'account');
+          const article = createElement('article', 'account account-inventory');
           const pushAccountSectionLink = (sectionID, label) => {
             if (!Array.isArray(sectionLinks) || !sectionID) return;
             sectionLinks.push({
@@ -12233,7 +12621,8 @@
           accountCountPills.forEach(([value, label, className]) => {
             pills.append(createElement('span', className, `${value} ${label}`));
           });
-          head.append(titleWrap, accountLinks, pills);
+          head.append(createElement('h2', 'account-name', 'Projects & environments'), pills);
+          const accountMetadata = createDisclosure('Account metadata & API', titleWrap, accountLinks);
 
           const rows = createElement('div', 'rows');
           if (!topology.groups.length) {
@@ -12257,8 +12646,9 @@
               createElement('div', 'deployment-group-meta', `Project ${metricValue(group.appRef)} · Environment ${metricValue(group.environmentRef)} · Region ${metricValue(group.region)}`),
             );
             const groupRuntimeEventCue = createRuntimeEventCue(group.deployments || [], 'Group');
-            groupTitleWrap.append(createRuntimeTrendCue(group.deployments || [], 'Group'));
-            if (groupRuntimeEventCue) groupTitleWrap.append(groupRuntimeEventCue);
+            const groupTrend = createRuntimeTrendCue(group.deployments || [], 'Group');
+            groupTrend.dataset.disclosureScope = groupSection.id;
+            groupTitleWrap.append(createDisclosure('Group runtime evidence', groupTrend, ...(groupRuntimeEventCue ? [groupRuntimeEventCue] : [])));
             const groupLinks = createElement('div', 'row-links');
             groupLinks.classList.add('group-links');
             if (account.awsAccountId && group.appRef && group.environmentRef) {
@@ -12279,9 +12669,9 @@
                 groupPills.append(createElement('span', className, `${value} ${label}`));
               }
             });
-            groupHead.append(groupTitleWrap, groupLinks, groupPills);
+            groupHead.append(groupTitleWrap, compactToolbar(groupLinks), groupPills);
 
-            const groupRows = createElement('div', 'group-rows');
+            const groupRows = createElement('div', 'group-rows operator-list');
             group.deployments.forEach((deployment) => {
               const row = createElement('div', 'row');
               const toggle = createElement('div', 'row-toggle');
@@ -12310,6 +12700,8 @@
               rowTop.append(rowTitleWrap, rowPills);
 
               const metrics = createElement('div', 'metrics');
+              metrics.dataset.disclosureScope = deployment.name || '';
+              const core = createElement('div', 'application-row-core');
               [
                 ['Desired artifact', artifact(deployment.desiredArtifact)],
                 ['Deployed artifact', artifact(deployment.deployedArtifact)],
@@ -12324,10 +12716,11 @@
                 ['Health', `${healthLabel(deployment.health)}${deployment.health?.summary ? ` · ${deployment.health.summary}` : ''}`],
                 ['Observed generation', generationValue(deployment.observedGeneration)],
               ].forEach(([label, value, className]) => {
-                metrics.append(createMetric(label, value, className));
+                const target = ['Desired artifact', 'Deployed artifact', 'Rollout phase', 'Health'].includes(label) ? core : metrics;
+                target.append(createMetric(label, value, className));
               });
 
-              toggle.append(rowTop, metrics);
+              toggle.append(rowTop, core);
 
               const detailLinks = createElement('div', 'row-links row-links-shell');
               if (deployment.name) {
@@ -12373,7 +12766,7 @@
                 toggleExpandedState();
               });
 
-              row.append(toggle, detailLinks, detailPanel);
+              row.append(toggle, compactToolbar(detailLinks), createDisclosure('Rollout & runtime metadata', metrics), detailPanel);
               groupRows.append(row);
             });
 
@@ -12381,7 +12774,7 @@
             rows.append(groupSection);
           });
 
-          article.append(head, rows);
+          article.append(head, accountMetadata, rows);
           return article;
       };
 
@@ -12399,20 +12792,18 @@
         createAccountDetailActions(accountState).forEach((action) => {
           if (action) toolbarActions.append(action);
         });
-        toolbar.replaceChildren(toolbarActions);
+        toolbar.replaceChildren(compactToolbar(toolbarActions));
 
-        const detailSummary = createElement('article', 'account');
+        const counts = deriveAccountCounts(account);
+        const detailSummary = createWorkspaceHeader('Account deployment overview', account.name || currentPageState.accountId || 'Account', `${metricValue(account.awsAccountId)} · ${(account.allowedRegions || []).join(', ') || 'No regions reported'}`, [[account.deploymentCount ?? counts.deploymentCount, 'Deployments'], [account.syncedCount ?? counts.syncedCount, 'Synced'], [account.progressingCount ?? counts.progressingCount, 'In progress'], [account.errorCount ?? counts.errorCount, 'Errors']]);
         detailSummary.id = 'account-summary';
         const accountRuntimeEventCue = createRuntimeEventCue(account.deployments || [], 'Account');
-        detailSummary.append(
-          createElement('div', 'label', 'Account deployment overview'),
-          createElement('h2', 'account-name', account.name || currentPageState.accountId || 'Account'),
-          createElement('div', 'account-meta', `AWS account ${metricValue(account.awsAccountId)} · Regions: ${(account.allowedRegions || []).join(', ') || '—'}`),
+        detailSummary.append(createDisclosure('Account topology & runtime evidence',
           createElement('div', 'account-topology', `${account.projectCount ?? deriveProjectEnvironmentGroups(account).projectCount} projects · ${account.environmentCount ?? deriveProjectEnvironmentGroups(account).environmentCount} environments`),
           createRuntimeTrendCue(account.deployments || [], 'Account'),
           ...(accountRuntimeEventCue ? [accountRuntimeEventCue] : []),
-          createAccountDetailFreshnessMeta(accountState, account),
-        );
+        ));
+        detailSummary.append(createAccountDetailFreshnessMeta(accountState, account));
         summary.replaceChildren(detailSummary);
         const accountID = currentPageState.accountId || account.awsAccountId || '';
         const accountSectionLinks = [];
@@ -12428,7 +12819,7 @@
         const overviewArticle = createAccountOverviewArticle(account, accountSectionLinks);
         const quickNav = createAccountQuickNav(account, accountSectionLinks);
         const accountDetailSection = createElement('section', 'detail-section');
-        accountDetailSection.append(createDetailSectionHeader('Account detail', createAccountDetailActions(accountState)));
+        accountDetailSection.append(createDetailSectionHeader('Deployment inventory'));
         const refreshState = accountDetailRefreshState(accountState);
         if (refreshState?.heading) {
           accountDetailSection.append(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.heading));
@@ -12438,7 +12829,7 @@
         } else if (refreshState?.message) {
           accountDetailSection.append(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.message));
         }
-        root.replaceChildren(...[quickNav, accountDetailSection, overviewArticle].filter(Boolean));
+        root.replaceChildren(...[refreshState?.heading || refreshState?.message ? accountDetailSection : null, quickNav ? createDisclosure('Jump to project & environment', quickNav) : null, overviewArticle].filter(Boolean));
         activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
         syncActiveResourceQuickNav();
         scrollToCurrentHashTarget();
@@ -12476,8 +12867,12 @@
 
       currentPageState = parsePageState();
       currentViewState = parseViewState();
+      const paginationParams = new URLSearchParams(window.location.search);
+      currentApplicationsPagination = { appPage: paginationParams.get('appPage') || 1, appPageSize: paginationParams.get('appPageSize') || 20 };
       activeEmbeddedReadModelRefresh = null;
       setBrowserTitleFromPageState(currentPageState);
+      const mainNavPage = ['applies', 'audit'].includes(currentPageState.page) ? currentPageState.page : 'applications';
+      document.getElementById(`main-nav-${mainNavPage}`)?.setAttribute('aria-current', 'page');
       loadOperatorContextBanner().catch(() => {});
       if (currentPageState.page === 'applications') {
         fetchApplicationsOverview()

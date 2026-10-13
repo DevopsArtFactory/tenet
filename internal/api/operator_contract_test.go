@@ -83,18 +83,15 @@ func TestReadmeStaysProductOverview(t *testing.T) {
 
 	for _, fragment := range []string{
 		"Tenet is a repository-driven deployment control plane",
-		"## Product Overview",
-		"## Run Locally",
-		"## Operator UI Entry Points",
-		"## Documentation Map",
+		"## What it does",
+		"## Run locally",
+		"## Development",
+		"## Documentation",
+		"docs/architecture/tenet-v1-operator-reference.md",
 		"docs/architecture/tenet-v1-operator-contracts.md",
-		"endpoint, read-model, auth, resource, and smoke-verification contracts formerly\n  kept in this README",
-		"`internal/statusstore`, `internal/planpreview`, `internal/applyrequest`, and\n  `internal/auditlog` - runtime status, plan/apply, and audit stores",
-		"`docs/features/resource-inspection.md` documents the focused live resource inspection route, selectors, lookup context, unavailable states, and detailed field contracts.",
-		"Resource drill-down Related runtime events, Recent logs, and Live inspection panels summarize controller history, lookup context, bounded reads, request correlation, and unavailable states without duplicating the detailed resource field contract.",
-		"live ASG reads may add optional\n  `ec2InstanceStatus` status-check evidence",
+		"Live AWS deployment mutation\nis not implemented",
 	} {
-		if !strings.Contains(readme, fragment) {
+		if !strings.Contains(strings.Join(strings.Fields(readme), " "), strings.Join(strings.Fields(fragment), " ")) {
 			t.Fatalf("expected README product overview to include %q", fragment)
 		}
 	}
@@ -106,7 +103,7 @@ func TestReadmeStaysProductOverview(t *testing.T) {
 
 func TestECSEventRowHandoffOperatorContract(t *testing.T) {
 	files := map[string][]string{
-		"README.md": {
+		"docs/architecture/tenet-v1-operator-reference.md": {
 			"Use `Share ECS service event` or the adjacent `Copy ECS service event link` from a Live inspection event row to hand off one ECS service event without changing the resource-page selector state.",
 		},
 		"docs/features/resource-inspection.md": {
@@ -144,7 +141,7 @@ func TestECSEventRowHandoffOperatorContract(t *testing.T) {
 
 func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 	docPaths := []string{
-		"README.md",
+		"docs/architecture/tenet-v1-operator-reference.md",
 		"docs/architecture/tenet-v1-local-runtime.md",
 		"docs/architecture/tenet-v1-operator-contracts.md",
 		"docs/architecture/tenet-v1-audit-log-api.md",
@@ -271,7 +268,7 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		body     string
 		examples []string
 	}{
-		{name: "README.md", body: readRepoFile(t, "README.md"), examples: concreteAuthProviderModeExamples()},
+		{name: "docs/architecture/tenet-v1-operator-reference.md", body: readRepoFile(t, "docs/architecture/tenet-v1-operator-reference.md"), examples: concreteAuthProviderModeExamples()},
 		{name: "docs/architecture/tenet-v1-operator-contracts.md", body: operatorContractsDoc, examples: concreteAuthProviderModeExamples()},
 		{name: "docs/architecture/tenet-v1-enterprise-sso.md", body: readRepoFile(t, "docs/architecture/tenet-v1-enterprise-sso.md"), examples: concreteAuthProviderModeExamples()},
 		{name: "docs/features/managed-login.md", body: readRepoFile(t, "docs/features/managed-login.md"), examples: concreteAuthProviderModeExamples()},
@@ -407,7 +404,7 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		{name: "docs/architecture/tenet-v1-operator-contracts.md", body: operatorContractsDoc},
 		{name: "docs/architecture/tenet-v1-enterprise-sso.md", body: doc},
 		{name: "docs/features/managed-login.md", body: readRepoFile(t, "docs/features/managed-login.md")},
-		{name: "README.md", body: readRepoFile(t, "README.md")},
+		{name: "docs/architecture/tenet-v1-operator-reference.md", body: readRepoFile(t, "docs/architecture/tenet-v1-operator-reference.md")},
 		{name: "scripts/smoke-local.sh", body: readRepoFile(t, "scripts/smoke-local.sh")},
 		{name: "scripts/smoke-docker.sh", body: readRepoFile(t, "scripts/smoke-docker.sh")},
 	} {
@@ -416,7 +413,7 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 }
 
 func TestManagedLoginFeatureGuideDocs(t *testing.T) {
-	readme := readRepoFile(t, "README.md")
+	readme := readRepoFile(t, "docs/architecture/tenet-v1-operator-reference.md")
 	if !strings.Contains(readme, "`docs/features/managed-login.md` documents managed-login activation, provider routes, cookie-security diagnostics, logout boundaries, and trusted-front-door/policy relationships.") {
 		t.Fatal("expected README documentation map to point operators at the managed-login troubleshooting guide")
 	}
@@ -471,7 +468,7 @@ func TestManagedLoginFeatureGuideDocs(t *testing.T) {
 }
 
 func TestOperatorTroubleshootingRunbookDocsContract(t *testing.T) {
-	readme := readRepoFile(t, "README.md")
+	readme := readRepoFile(t, "docs/architecture/tenet-v1-operator-reference.md")
 	if !strings.Contains(readme, "`docs/runbooks/operator-troubleshooting.md` documents the auth, route, evidence, state, and verification troubleshooting quick-reference.") {
 		t.Fatal("expected README documentation map to point operators at the operator troubleshooting runbook")
 	}
@@ -1013,7 +1010,7 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 
 func TestLocalSafeApplyEnableApplyMetadataOnlyCredentialFreeContract(t *testing.T) {
 	for path, fragments := range map[string][]string{
-		"README.md": {
+		"docs/architecture/tenet-v1-operator-reference.md": {
 			"`TENET_AWS_ENABLE_APPLY=true` queues local-safe apply handoff metadata only",
 			"requires no live AWS credentials",
 			"does not perform live AWS mutation",
@@ -1144,7 +1141,7 @@ func TestDriftRowShareLinkDocsContract(t *testing.T) {
 }
 
 func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
-	readme := readRepoFile(t, "README.md")
+	readme := readRepoFile(t, "docs/architecture/tenet-v1-operator-reference.md")
 	for _, fragment := range []string{
 		"`docs/architecture/tenet-v1-aws-central-control-plane.md` documents the AWS",
 		"Terraform bootstrap, public repo-sync, and `repo_sync_token_secret_arn`.",
@@ -2486,7 +2483,7 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		}
 	}
 
-	readme := readRepoFile(t, "README.md")
+	readme := readRepoFile(t, "docs/architecture/tenet-v1-operator-reference.md")
 	for _, fragment := range []string{
 		"`GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}][&containerName={container}][&instanceId={ec2InstanceId}][&clusterArn={ecsClusterArn}]`",
 		"`resultScope.requestedLimit`",
@@ -2670,7 +2667,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		}
 	}
 
-	readme := readRepoFile(t, "README.md")
+	readme := readRepoFile(t, "docs/architecture/tenet-v1-operator-reference.md")
 	for _, fragment := range []string{
 		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}[&clusterArn={ecsClusterArn}][&limit={positiveInteger}][&instanceId={ec2InstanceId}]`",
 		"the route requires a concrete resource type/name",

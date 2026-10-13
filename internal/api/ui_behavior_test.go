@@ -704,8 +704,8 @@ async function render(operatorResponses, initialHash = '', controllerRefreshResp
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
   await settle();
   const text = () => collectText(document.getElementById('operator-context')).join(' | ');
-  const compactText = () => collectText({ children: (document.getElementById('operator-context')?.children || []).filter((node) => node.tagName !== 'DETAILS') }).join(' | ');
-  const details = () => findFirst(document.getElementById('operator-context'), (node) => node.tagName === 'DETAILS');
+  const compactText = () => collectText({ children: (findFirst(document.getElementById('operator-context'), (node) => node.className === 'disclosure-body')?.children || []).filter((node) => node.tagName !== 'DETAILS') }).join(' | ');
+  const details = () => findFirst(document.getElementById('operator-context'), (node) => node.tagName === 'DETAILS' && node.className === 'operator-context-details');
   const detailsText = () => collectText(details()).join(' | ');
   const liveStatus = () => findFirst(document.getElementById('operator-context'), (node) => node.getAttribute && node.getAttribute('id') === 'operator-context-status');
   const liveStatusText = () => collectText(liveStatus()).join(' | ');
@@ -2599,7 +2599,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('Account detail read refreshed ·')) throw new Error('expected account page to show account-detail read freshness');
   if (summaryText.includes('Account detail read not refreshed yet')) throw new Error('expected account page initial successful read to include freshness timestamp');
   if (!accountsText.includes('Quick navigation')) throw new Error('expected account page quick navigation');
-  if (!accountsText.includes('Refresh account detail')) throw new Error('expected account page refresh control');
+  if (!toolbarText.includes('Refresh account detail')) throw new Error('expected account page refresh control');
+  const inventoryDisclosures = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'DETAILS');
+  if (!inventoryDisclosures.length || inventoryDisclosures.some((node) => node.open)) throw new Error('expected account metadata initially folded');
   if (!accountsText.includes('Hierarchy')) throw new Error('expected account page hierarchy quick-nav group');
   if (!accountsText.includes('Applications overview')) throw new Error('expected account page overview quick-nav entry');
   if (!accountsText.includes('Current destination')) throw new Error('expected account page current-destination quick-nav group');
@@ -2625,10 +2627,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (accountsText.includes('Drift view')) throw new Error('expected account page to stop exposing drift workspace shortcut');
   if (accountsText.includes('Plan/apply')) throw new Error('expected account page to stop exposing plan workspace shortcut');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
-  const refreshButton = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Refresh account detail');
+  const refreshButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Refresh account detail');
   const rowToggles = collectNodes(document.getElementById('accounts'), (node) => node.getAttribute && node.getAttribute('role') === 'button' && node.className === 'row-toggle');
   const detailPanels = collectNodes(document.getElementById('accounts'), (node) => node.className === 'detail-panel');
-  const accountHeads = collectNodes(document.getElementById('accounts'), (node) => node.className === 'account-head');
+  const accountHeads = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'DETAILS' && collectText(node).join(' | ').includes('Account metadata & API'));
   const groupHeads = collectNodes(document.getElementById('accounts'), (node) => node.className === 'deployment-group-head');
   const activeGroupHead = groupHeads.find((node) => collectText(node).join(' | ').includes('ap-northeast-2'));
   const quietGroupHead = groupHeads.find((node) => collectText(node).join(' | ').includes('us-west-2'));
@@ -11967,6 +11969,8 @@ const queuedRecords = [{
   let text = collectText(root).join(' | ');
   if (!text.includes('Preview next execution action')) throw new Error('expected row preview action before fetch: ' + text);
   if (!text.includes('Use Preview next execution action to read GET /v1/applies/apply_queued_123/execution-preview without leaving this monitor or changing the bookmarkable applies view.')) throw new Error('expected idle row-local preview guidance: ' + text);
+  const idleDisclosure = collectNodes(root, (node) => node.tagName === 'DETAILS').find((node) => collectText(node).join(' | ').includes('Use Preview next execution action to read GET /v1/applies/apply_queued_123/execution-preview'));
+  if (!idleDisclosure || idleDisclosure.open) throw new Error('expected idle preview guidance folded into execution evidence');
   const previewButton = collectNodes(root, (node) => node.tagName === 'BUTTON' && node.textContent === 'Preview next execution action')[0];
   if (!previewButton) throw new Error('expected Preview next execution action button');
   previewButton.dispatch('click');
@@ -14284,7 +14288,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!toolbarText.includes('Audit filters: deployment payments-api-prod · Limit cap: latest 2')) throw new Error('expected audit toolbar filters');
   if (!summaryText.includes('Operator audit log')) throw new Error('expected audit page summary title');
   if (!summaryText.includes('Deployment audit timeline')) throw new Error('expected deployment-scoped audit summary label');
-  if (!summaryText.includes('Immutable plan preview and apply-request activity for deployment payments-api-prod rendered from GET /v1/audit-logs.')) throw new Error('expected deployment-scoped audit summary copy');
+  if (!summaryText.includes('payments-api-prod') || !summaryText.includes('2 | Visible events')) throw new Error('expected deployment-scoped audit summary count and context');
   if (!accountsText.includes('Audit timeline')) throw new Error('expected audit page body title');
   if (!accountsText.includes('Current audit read: GET /v1/audit-logs?deployment=payments-api-prod&limit=2')) throw new Error('expected scoped audit read route copy, got ' + accountsText);
   if (!accountsText.includes('Active deployment context')) throw new Error('expected deployment context callout');
@@ -14349,13 +14353,13 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!backLink || backLink.rel) throw new Error('expected deployment-scoped audit toolbar back link to return to application while preserving filters');
   const clearAuditControlsButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit controls');
   if (!clearAuditControlsButton || clearAuditControlsButton.disabled) throw new Error('expected one-click clear audit controls action while deployment or limit controls are active');
-  const rows = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'DIV' && node.className === 'row');
+  const rows = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'DIV' && node.className === 'row audit-event');
   if (rows.length < 2) throw new Error('expected audit page rows');
   const rowTexts = rows.map((node) => collectText(node).join(' | '));
   if (!rowTexts[0].includes('Apply requested')) throw new Error('expected newest audit entry first, got ' + rowTexts.join(' || '));
   if (rows[0].getAttribute('id') !== 'audit-entry-apply-apply-failed-123') throw new Error('expected apply row to expose stable apply anchor, got ' + rows[0].getAttribute('id'));
   if (rows[1].getAttribute('id') !== 'audit-entry-plan-plan-ready-123') throw new Error('expected plan row to expose stable plan anchor, got ' + rows[1].getAttribute('id'));
-  if (!accountsText.includes('Share or continue in app')) throw new Error('expected audit row share grouping');
+  if (!accountsText.includes('Share & continue')) throw new Error('expected audit row share grouping');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
   const breadcrumbChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className.includes('breadcrumb-current'));
   const applicationsBreadcrumb = links.find((node) => node.href === '/console?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.textContent === 'Applications' && node.target === '_self');
@@ -15686,4 +15690,103 @@ async function render(search, hash = '') {
 `
 
 	runNodeHarness(t, nodeProgram)
+}
+
+func TestDisclosurePreservesUserChoiceAndRevealsBookmarkedEvidence(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+	script := embeddedUIScriptForTest(t)
+	disclosureStart := strings.Index(script, "const disclosureState =")
+	disclosureEnd := strings.Index(script, "const compactToolbar =")
+	hashStart := strings.Index(script, "let forceHashDisclosureOpen =")
+	if hashStart < 0 {
+		t.Fatal("expected hash navigation helper")
+	}
+	hashEnd := strings.Index(script[hashStart:], "if (typeof window !== 'undefined'") + hashStart
+	if disclosureStart < 0 || disclosureEnd <= disclosureStart || hashStart < 0 || hashEnd <= hashStart {
+		t.Fatal("expected disclosure and hash navigation helpers")
+	}
+	helpers := script[disclosureStart:disclosureEnd] + script[hashStart:hashEnd]
+	runNodeHarness(t, `
+class Element {
+  constructor(tag, className = '', text = '') { this.tagName = tag.toUpperCase(); this.className = className; this.textContent = text; this.children = []; this.dataset = {}; this.listeners = {}; this.open = false; }
+  append(...nodes) { nodes.forEach(node => { node.parentNode = this; this.children.push(node); }); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  scrollIntoView() { this.scrolled = true; }
+}
+const HTMLElement = Element;
+const createElement = (tag, cls, text) => new Element(tag, cls, text);
+const currentPageState = { page: 'resource', deployment: 'api', resourceId: 'asg' };
+let operatorContextDetailsOpen = false;
+let target;
+const document = { getElementById: () => target };
+const currentHashTargetID = () => 'evidence';
+const focusCurrentHashTarget = node => { node.focused = true; };
+`+helpers+`
+const evidence = new Element('section', '', 'AWS lookup unavailable');
+const inner = createDisclosure('Inspection', evidence);
+const outer = createDisclosure('Diagnostics', inner);
+if (outer.open || inner.open) throw new Error('diagnostics should start collapsed');
+if (inner.children[1].children[0] !== evidence) throw new Error('collapsed evidence must remain available');
+target = evidence;
+scrollToCurrentHashTarget();
+if (!outer.open || !inner.open || !evidence.scrolled || !evidence.focused) throw new Error('bookmark must reveal, scroll and focus nested evidence');
+inner.open = false;
+inner.listeners.toggle();
+const refreshed = createDisclosure('Inspection', evidence);
+if (refreshed.open) throw new Error('refresh must preserve a manually collapsed panel');
+evidence.scrolled = false;
+scrollToCurrentHashTarget();
+if (refreshed.open || evidence.scrolled) throw new Error('render must not override a manual collapse for the same bookmark');
+forceHashDisclosureOpen = true;
+scrollToCurrentHashTarget();
+if (!refreshed.open || !evidence.scrolled) throw new Error('explicit bookmark navigation must reveal evidence again');
+currentPageState.resourceId = 'other-asg';
+if (createDisclosure('Inspection', new Element('section')).open) throw new Error('disclosure choice must be scoped to the selected resource');
+const firstCard = new Element('div'); firstCard.dataset.disclosureScope = 'first';
+const firstDetails = createDisclosure('Details & evidence', firstCard);
+firstDetails.open = true; firstDetails.listeners.toggle();
+const otherCard = new Element('div'); otherCard.dataset.disclosureScope = 'other';
+if (createDisclosure('Details & evidence', otherCard).open) throw new Error('expanding one map card must not expand its siblings');
+if (!createDisclosure('Details & evidence', firstCard).open) throw new Error('map card expansion should survive filtering');
+`)
+}
+
+func TestApplicationsPaginationBoundariesAndBookmarkState(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+	script := embeddedUIScriptForTest(t)
+	start := strings.Index(script, "const normalizeApplicationsPagination =")
+	end := strings.Index(script, "const parseViewState =")
+	if start < 0 || end <= start {
+		t.Fatal("expected applications pagination helpers")
+	}
+	runNodeHarness(t, `
+let currentApplicationsPagination;
+`+script[start:end]+`
+const apps = Array.from({length: 85}, (_, i) => 'app-' + (i + 1));
+let page = normalizeApplicationsPagination({}, apps.length);
+if (page.appPageSize !== 20 || page.pageCount !== 5 || apps.slice(page.start, page.end).length !== 20) throw new Error('default must render 20 of 85 apps');
+page = normalizeApplicationsPagination({appPage: 5, appPageSize: 20}, apps.length);
+if (page.start !== 80 || page.end !== 85) throw new Error('last page must contain only the remaining 5 apps');
+page = normalizeApplicationsPagination({appPage: 5, appPageSize: 20}, 21);
+if (page.appPage !== 2 || page.start !== 20 || page.end !== 21) throw new Error('refresh must clamp the page after a shrinking collection');
+for (const invalid of [-1, 0, 1.5, 'bad', Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+ if (normalizeApplicationsPagination({appPage: invalid}, 85).appPage !== 1) throw new Error('invalid page must fall back to 1');
+}
+if (normalizeApplicationsPagination({appPageSize: 1000}, 85).appPageSize !== 20) throw new Error('unsupported size must fall back to 20');
+page = normalizeApplicationsPagination({appPage: 2, appPageSize: 50}, 85);
+if (page.start !== 50 || page.end !== 85 || page.pageCount !== 2) throw new Error('50-app pages must partition the collection');
+page = normalizeApplicationsPagination({appPage: 9, appPageSize: 100}, 0);
+if (page.appPage !== 1 || page.pageCount !== 1 || page.start !== 0 || page.end !== 0) throw new Error('empty collection must not produce invalid ranges');
+const params = new URLSearchParams('q=payments&appPage=3&appPageSize=50');
+currentApplicationsPagination = {appPage: 2, appPageSize: 100};
+syncApplicationsPaginationParams(params);
+if (params.get('appPage') !== '2' || params.get('appPageSize') !== '100' || params.get('q') !== 'payments') throw new Error('pagination must preserve bookmark filters');
+currentApplicationsPagination = {appPage: 1, appPageSize: 20};
+syncApplicationsPaginationParams(params);
+if (params.has('appPage') || params.has('appPageSize') || params.get('q') !== 'payments') throw new Error('default pagination must remove only its own query parameters');
+`)
 }

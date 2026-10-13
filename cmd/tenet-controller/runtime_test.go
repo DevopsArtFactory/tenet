@@ -1676,7 +1676,26 @@ func TestEmitRuntimePlansWithoutRefreshDoesNotFabricateControllerRefreshEvidence
 	}
 }
 
+// History tests control observations so AWS credential availability cannot change the diff.
+func stubRuntimeHistoryCapacityLookup(t *testing.T) {
+	t.Helper()
+	oldLookup := runtimeLiveCapacityLookup
+	t.Cleanup(func() { runtimeLiveCapacityLookup = oldLookup })
+	runtimeLiveCapacityLookup = func(_ context.Context, _ resourceinspection.Service, _ []domain.Account, _ []domain.Environment, deployment domain.Deployment) (*runtimeLiveCapacityObservation, []domain.RuntimeObservation, error) {
+		name := deployment.Name + "-candidate"
+		return nil, []domain.RuntimeObservation{{
+			ResourceType:      "candidateAutoScalingGroup",
+			ResourceName:      name,
+			Source:            "resource_inspection",
+			Available:         false,
+			UnavailableReason: "cross_account_not_configured",
+			Summary:           "Live read-only observation for candidateAutoScalingGroup " + name + " is unavailable: cross_account_not_configured",
+		}}, nil
+	}
+}
+
 func TestEmitRuntimePlansBootstrapsRuntimeHistoryForLegacyRolloutOnlySnapshot(t *testing.T) {
+	stubRuntimeHistoryCapacityLookup(t)
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
@@ -1734,6 +1753,7 @@ func TestEmitRuntimePlansBootstrapsRuntimeHistoryForLegacyRolloutOnlySnapshot(t 
 }
 
 func TestEmitRuntimePlansAvoidsDuplicateRuntimeHistory(t *testing.T) {
+	stubRuntimeHistoryCapacityLookup(t)
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
