@@ -170,3 +170,39 @@ traffic with unknown values preserved rather than rendered as zero.
 Production advanced execution remains gated until operator-triggered native
 rollback and executor integration are verified. Current tests use fake SDK/HTTP
 clients and do not change a real AWS service.
+
+## Native rollback request prerequisite
+
+The native rollback handler prepares immutable recovery identities from an owned
+running/failed forward Apply. Its completed registration and service-update
+checkpoints must contain the actual pre-write source revision/task pair and a
+persisted mutation authorization time. A read-only adopted deployment cannot
+supply ownership for stopping someone else's rollout. The source revision is
+not guessed from the service's desired task-definition field.
+
+Immediately before a stop, the handler checks the exact current service,
+capacity, routing binding, deployment/configuration, immutable forward/source
+workloads and deployment history. Newer, concurrent or ambiguously ordered
+work blocks the stop. Concrete IAM checks include both the service and exact
+service-deployment resources for `ecs:StopServiceDeployment`. Current operator
+policy and durable ownership must additionally pass the mutation callback.
+
+Only `PENDING`/`IN_PROGRESS` cause one SDK call with `stopType: ROLLBACK` and SDK
+mutation retries disabled. Existing rollback states are observed without a new
+stop; incompatible terminal states cannot start recovery. A transport error or
+missing/mismatched response remains uncertain. Reconciliation only reads the
+fixed deployment; an unchanged active state never proves absence or permits a
+blind resend. A rollback state naming a different source revision is rejected.
+`STOP_REQUESTED` alone does not prove a rollback rather than an abort.
+
+A stop response or reconciled rollback status confirms request acceptance only.
+Even `ROLLBACK_SUCCESSFUL` must be combined with current source traffic, task and
+ALB health by the recovery observer before an operator can call it recovered.
+This prerequisite does not expose a native rollback endpoint or enable advanced
+production execution. Durable recovery-child handoff, recovery observation and
+executor/API integration are the next pieces; Rolling recovery is unchanged.
+Tests use injected SDK clients and local HTTP fixtures; no AWS mutation was run.
+
+References: [StopServiceDeployment](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_StopServiceDeployment.html),
+[eligible deployment states](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/stop-service-deployment.html)
+and [ECS IAM resources](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html).
