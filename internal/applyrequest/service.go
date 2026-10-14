@@ -636,12 +636,8 @@ func deriveOperations(plan planpreview.Record, status OperationStatus) []Operati
 
 	operations := make([]Operation, 0, len(plan.Operations))
 	for _, operation := range plan.Operations {
-		kind := ""
-		if operation.ECS != nil {
-			kind = operation.Kind
-		}
 		operations = append(operations, Operation{
-			Kind:    kind,
+			Kind:    operation.Kind,
 			ECS:     operation.ECS.Clone(),
 			ID:      operation.ID,
 			Status:  status,

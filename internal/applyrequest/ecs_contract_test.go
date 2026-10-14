@@ -175,3 +175,15 @@ func TestNativeECSContractSurvivesPlanApplyPersistenceAndRejectsStaleInputs(t *t
 		t.Fatalf("legacy manifest changed execution mode: %v", err)
 	}
 }
+
+func TestApplyOperationProjectionPreservesKindsForEveryTarget(t *testing.T) {
+	for _, kind := range []string{"RegisterECSTaskDefinition", "UpdateECSService", "StartInstanceRefresh", "CreateCodeDeployDeployment"} {
+		t.Run(kind, func(t *testing.T) {
+			plan := planpreview.Record{Operations: []planpreview.Operation{{ID: "reviewed-operation", Kind: kind, Target: "reviewed target", Summary: "reviewed intent"}}}
+			operations := deriveOperations(plan, OperationStatusQueued)
+			if len(operations) != 1 || operations[0].Kind != kind || operations[0].ID != "reviewed-operation" {
+				t.Fatalf("plan operation kind/identity was discarded: %+v", operations)
+			}
+		})
+	}
+}
