@@ -113,6 +113,29 @@ func Compile(input CatalogSpec) (Catalog, error) {
 		}
 		environment := environmentIndex[environmentRef]
 		account := accountIndex[environment.AccountRef]
+		if err := spec.ValidateECSPlacement(deployment, account.AWSAccountID, environment.Region); err != nil {
+			return Catalog{}, fmt.Errorf("deployment %q: %w", deployment.Name, err)
+		}
+		if e := deployment.ECS; e != nil {
+			min, max := spec.ECSRollingPercentages(deployment)
+			nativeStrategy := map[spec.StrategyType]string{spec.StrategyTypeRolling: "ROLLING", spec.StrategyTypeBlueGreen: "BLUE_GREEN", spec.StrategyTypeCanary: "CANARY", spec.StrategyTypeLinear: "LINEAR"}[strategy]
+			compiledDeployment.ECS = &domain.ECSDeploymentIntent{
+				AWSAccountID:          account.AWSAccountID,
+				Region:                environment.Region,
+				DeploymentController:  e.DeploymentController,
+				DeploymentStrategy:    nativeStrategy,
+				ClusterARN:            e.ClusterARN,
+				ServiceARN:            e.ServiceARN,
+				BaseTaskDefinitionARN: e.BaseTaskDefinitionARN,
+				ContainerName:         e.ContainerName,
+				Image:                 deployment.Image,
+				DesiredCount:          deployment.NormalizedCapacity().Desired,
+				MinimumHealthyPercent: min,
+				MaximumPercent:        max,
+			}
+			compiledDeployment.ExecutionMode = "ecsNative"
+			compiledDeployment.RolloutConfig.Strategy.MinHealthyPercent = min
+		}
 		compiledDeployment.Generation = deploymentGeneration(compiledDeployment, deployment, environment, account)
 		compiled.Deployments = append(compiled.Deployments, compiledDeployment)
 		if len(deployment.Stacks) > 0 {
@@ -132,6 +155,7 @@ func Compile(input CatalogSpec) (Catalog, error) {
 
 func deploymentGeneration(deployment domain.Deployment, desired spec.DeploymentSpec, environment domain.Environment, account domain.Account) int64 {
 	payload, err := json.Marshal(struct {
+		ECS               *domain.ECSDeploymentIntent        `json:"ecs,omitempty"`
 		Name              string                             `json:"name"`
 		AppRef            string                             `json:"appRef"`
 		EnvironmentRef    string                             `json:"environmentRef"`
@@ -147,6 +171,7 @@ func deploymentGeneration(deployment domain.Deployment, desired spec.DeploymentS
 		UserData          domain.DeploymentUserData          `json:"userData"`
 		Tags              []string                           `json:"tags"`
 	}{
+		ECS:            deployment.ECS,
 		Name:           deployment.Name,
 		AppRef:         deployment.AppRef,
 		EnvironmentRef: deployment.EnvironmentRef,

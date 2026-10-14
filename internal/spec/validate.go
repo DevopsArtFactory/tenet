@@ -117,7 +117,7 @@ func ValidateDeployment(deployment DeploymentSpec) error {
 		}
 	}
 
-	return nil
+	return validateECSDeployment(deployment)
 }
 
 func effectiveUserData(deployment DeploymentSpec) UserDataSpec {

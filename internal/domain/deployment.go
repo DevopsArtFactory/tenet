@@ -46,6 +46,7 @@ type DeploymentRolloutConfig struct {
 
 // Deployment is the desired deployment intent for one application and environment.
 type Deployment struct {
+	ECS               *ECSDeploymentIntent `json:"ecs,omitempty"`
 	Name              string
 	AppRef            string
 	EnvironmentRef    string

@@ -26,12 +26,13 @@ type CreateRequest struct {
 
 // Operation is one server-authored plan preview row.
 type Operation struct {
-	ID      string `json:"id,omitempty"`
-	Kind    string `json:"kind"`
-	Status  string `json:"status"`
-	Phase   string `json:"phase"`
-	Target  string `json:"target"`
-	Summary string `json:"summary"`
+	ECS     *domain.ECSDeploymentIntent `json:"ecs,omitempty"`
+	ID      string                      `json:"id,omitempty"`
+	Kind    string                      `json:"kind"`
+	Status  string                      `json:"status"`
+	Phase   string                      `json:"phase"`
+	Target  string                      `json:"target"`
+	Summary string                      `json:"summary"`
 }
 
 // Risk captures derived operator-facing risk metadata.

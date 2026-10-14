@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
@@ -157,15 +158,17 @@ func deriveSourceContext(detail catalog.DeploymentOverviewDetail) (SourceContext
 
 func stableRecordID(record Record) (string, error) {
 	type operationPayload struct {
-		Kind    string `json:"kind"`
-		Status  string `json:"status"`
-		Phase   string `json:"phase"`
-		Target  string `json:"target"`
-		Summary string `json:"summary"`
+		ECS     *domain.ECSDeploymentIntent `json:"ecs,omitempty"`
+		Kind    string                      `json:"kind"`
+		Status  string                      `json:"status"`
+		Phase   string                      `json:"phase"`
+		Target  string                      `json:"target"`
+		Summary string                      `json:"summary"`
 	}
 	operations := make([]operationPayload, 0, len(record.Operations))
 	for _, operation := range record.Operations {
 		operations = append(operations, operationPayload{
+			ECS:     operation.ECS,
 			Kind:    operation.Kind,
 			Status:  operation.Status,
 			Phase:   operation.Phase,
@@ -199,6 +202,9 @@ func stableRecordID(record Record) (string, error) {
 }
 
 func derivePlanOperations(detail catalog.DeploymentOverviewDetail) []Operation {
+	if detail.ECS != nil {
+		return deriveECSPlanOperations(detail)
+	}
 	steps := rolloutSteps(detail)
 	resources := executionResources(detail)
 	operations := make([]Operation, 0, len(steps))
@@ -219,6 +225,9 @@ func normalizeOperationIDs(operations []Operation) []Operation {
 		return nil
 	}
 	normalized := append([]Operation(nil), operations...)
+	for i := range normalized {
+		normalized[i].ECS = normalized[i].ECS.Clone()
+	}
 	used := make(map[string]struct{}, len(normalized))
 	for _, operation := range normalized {
 		if operation.ID != "" {
@@ -247,11 +256,13 @@ func normalizeOperationIDs(operations []Operation) []Operation {
 
 func planOperationIDBase(operation Operation) string {
 	payload := struct {
-		Kind    string `json:"kind"`
-		Phase   string `json:"phase"`
-		Target  string `json:"target"`
-		Summary string `json:"summary"`
+		ECS     *domain.ECSDeploymentIntent `json:"ecs,omitempty"`
+		Kind    string                      `json:"kind"`
+		Phase   string                      `json:"phase"`
+		Target  string                      `json:"target"`
+		Summary string                      `json:"summary"`
 	}{
+		ECS:     operation.ECS,
 		Kind:    operation.Kind,
 		Phase:   operation.Phase,
 		Target:  operation.Target,
@@ -286,10 +297,16 @@ func derivePlanRisk(detail catalog.DeploymentOverviewDetail) Risk {
 	level := "low"
 	if errorState || unhealthy || hasHighDrift || activeTrafficShift {
 		level = "high"
-	} else if hasMediumDrift || detail.Sync.State == domain.SyncStateReconciling || detail.Sync.State == domain.SyncStateOutOfSync || detail.Sync.State == domain.SyncStateDrifted || detail.Sync.State == domain.SyncStatePaused || len(rolloutSteps(detail)) > 1 {
+	} else if detail.ECS != nil || hasMediumDrift || detail.Sync.State == domain.SyncStateReconciling || detail.Sync.State == domain.SyncStateOutOfSync || detail.Sync.State == domain.SyncStateDrifted || detail.Sync.State == domain.SyncStatePaused || len(rolloutSteps(detail)) > 1 {
 		level = "medium"
 	}
 
+	if detail.ECS != nil {
+		reasons = append(reasons, "native ECS registration/update intent requires review of the existing service and pinned base revision")
+		if !strings.Contains(detail.ECS.Image, "@sha256:") {
+			reasons = append(reasons, "image reference is mutable; pin a digest to commit to reviewed image content")
+		}
+	}
 	if activeTrafficShift {
 		reasons = append(reasons, fmt.Sprintf("current step %s changes live traffic", currentStep))
 	}
@@ -534,6 +551,9 @@ func rolloutSteps(detail catalog.DeploymentOverviewDetail) []domain.RolloutStepS
 }
 
 func executionResources(detail catalog.DeploymentOverviewDetail) []domain.RolloutExecutionDetail {
+	if detail.ECS != nil {
+		return []domain.RolloutExecutionDetail{{Resource: "ecsService", Name: detail.ECS.ServiceARN}}
+	}
 	if detail.Rollout != nil && len(detail.Rollout.Execution) > 0 {
 		return append([]domain.RolloutExecutionDetail(nil), detail.Rollout.Execution...)
 	}

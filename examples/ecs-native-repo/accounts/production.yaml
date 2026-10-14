@@ -1,0 +1,6 @@
+name: production
+awsAccountId: '123456789012'
+roleArn: arn:aws:iam::123456789012:role/TenetDeployerRole
+observerRoleArn: arn:aws:iam::123456789012:role/TenetObserverRole
+allowedRegions:
+  - ap-northeast-2

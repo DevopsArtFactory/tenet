@@ -405,7 +405,12 @@ func runtimeLiveCapacityLookupFromInspection(ctx context.Context, inspector reso
 	if err != nil {
 		return nil, nil, err
 	}
+	clusterARN := ""
+	if deployment.ECS != nil {
+		clusterARN = deployment.ECS.ClusterARN
+	}
 	result, err := inspector.Inspect(ctx, resourceinspection.Request{
+		ClusterARN:       clusterARN,
 		DeploymentName:   deployment.Name,
 		ResourceType:     resourceType,
 		ResourceName:     resourceName,
@@ -1605,13 +1610,21 @@ func rolloutStepDetail(deployment domain.Deployment, plan reconcile.Plan, kind r
 			return codeDeployTrafficShiftDetail(deployment, "Shift all ECS service traffic to the replacement task set through CodeDeploy in a single blue/green cutover.")
 		}
 		return "Shift all production traffic from the active target group to the candidate target group in one blue/green cutover."
+	case reconcile.StepRegisterECSTaskDefinition:
+		return "Review the pinned ECS task-definition revision and named container image before registering a replacement revision; live mutation is not implemented."
 	case reconcile.StepUpdateECSService:
+		if deployment.ECS != nil {
+			return "Review an existing ECS service update using the registered revision and native " + deployment.ECS.DeploymentStrategy + " strategy."
+		}
 		return ecsRollingUpdateDetail(deployment)
 	case reconcile.StepCreateCodeDeployDeployment:
 		if deployment.ExecutionMode == "ecsCodeDeploy" {
 			return "Create a CodeDeploy deployment to coordinate blue/green ECS traffic shifting for the replacement task set."
 		}
 	case reconcile.StepVerifyServiceStability:
+		if deployment.ECS != nil {
+			return "Verify convergence to the intended ECS native service revision without inferring success from request acceptance."
+		}
 		if plan.ContainsStep(reconcile.StepCreateCodeDeployDeployment) {
 			return "Wait for the ECS service to stabilize after CodeDeploy finishes shifting traffic to the replacement task set."
 		}
@@ -1621,6 +1634,9 @@ func rolloutStepDetail(deployment domain.Deployment, plan reconcile.Plan, kind r
 }
 
 func deriveRolloutExecutionDetails(deployment domain.Deployment) []domain.RolloutExecutionDetail {
+	if deployment.ECS != nil {
+		return []domain.RolloutExecutionDetail{{Resource: "ecsService", Name: deployment.ECS.ServiceARN, Description: "Explicit existing ECS service bound by the reviewed native deployment contract"}}
+	}
 	switch deployment.ExecutionMode {
 	case "asgWeightedTargetGroups":
 		return []domain.RolloutExecutionDetail{{
@@ -1836,7 +1852,7 @@ func rolloutPhaseForStep(plan reconcile.Plan, currentIndex int) domain.RolloutPh
 		return domain.RolloutPhasePlanning
 	case reconcile.StepReconcileCurrentState:
 		return domain.RolloutPhaseProvisioning
-	case reconcile.StepCreateCandidateCapacity, reconcile.StepStartInstanceRefresh, reconcile.StepCreateCodeDeployDeployment, reconcile.StepUpdateECSService:
+	case reconcile.StepRegisterECSTaskDefinition, reconcile.StepCreateCandidateCapacity, reconcile.StepStartInstanceRefresh, reconcile.StepCreateCodeDeployDeployment, reconcile.StepUpdateECSService:
 		return domain.RolloutPhaseProvisioning
 	case reconcile.StepVerifyCandidateCapacity:
 		return domain.RolloutPhaseHealthChecking
@@ -1882,6 +1898,8 @@ func rolloutSummaryForStep(deployment domain.Deployment, status domain.Deploymen
 		return "Starting EC2 instance refresh"
 	case reconcile.StepVerifyReplacementCapacity:
 		return "Verifying replacement capacity during instance refresh"
+	case reconcile.StepRegisterECSTaskDefinition:
+		return "Reviewing native ECS task-definition registration inputs"
 	case reconcile.StepUpdateECSService:
 		if qualifiers := rolloutStrategyQualifiers(deployment.RolloutConfig.Strategy); len(qualifiers) > 0 {
 			return "Updating ECS service deployment while respecting " + strings.Join(qualifiers, " and ")
