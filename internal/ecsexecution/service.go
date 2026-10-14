@@ -199,10 +199,16 @@ func primaryDeployment(service *types.Service) string {
 }
 
 func serviceSnapshot(service *types.Service) *applyrequest.ECSServiceSnapshot {
+	if service == nil || service.DeploymentConfiguration == nil {
+		return nil
+	}
 	return &applyrequest.ECSServiceSnapshot{TaskDefinitionARN: aws.ToString(service.TaskDefinition), DesiredCount: service.DesiredCount, MinimumHealthyPercent: aws.ToInt32(service.DeploymentConfiguration.MinimumHealthyPercent), MaximumPercent: aws.ToInt32(service.DeploymentConfiguration.MaximumPercent), PrimaryDeploymentID: primaryDeployment(service)}
 }
 
 func serviceMatches(service *types.Service, target string, request applyrequest.ECSOperationRequest) bool {
+	if service == nil || service.DeploymentConfiguration == nil {
+		return false
+	}
 	return aws.ToString(service.TaskDefinition) == target && service.DesiredCount == int32(request.Intent.DesiredCount) && aws.ToInt32(service.DeploymentConfiguration.MinimumHealthyPercent) == int32(request.Intent.MinimumHealthyPercent) && aws.ToInt32(service.DeploymentConfiguration.MaximumPercent) == int32(request.Intent.MaximumPercent)
 }
 

@@ -26,6 +26,7 @@ type serviceFake struct {
 	noEffect      bool
 	singleAttempt bool
 	lagPrimary    bool
+	omitConfig    bool
 }
 
 func (f *serviceFake) DescribeServices(context.Context, *ecs.DescribeServicesInput, ...func(*ecs.Options)) (*ecs.DescribeServicesOutput, error) {
@@ -53,6 +54,11 @@ func (f *serviceFake) UpdateService(_ context.Context, input *ecs.UpdateServiceI
 	}
 	if f.updateError != nil {
 		return nil, f.updateError
+	}
+	if f.omitConfig {
+		response := f.service
+		response.DeploymentConfiguration = nil
+		return &ecs.UpdateServiceOutput{Service: &response}, nil
 	}
 	if f.lagPrimary {
 		response := f.service
@@ -257,5 +263,38 @@ func TestRollingServiceDoesNotCorrelateAnOldPrimaryFromLaggingResponse(t *testin
 	resolved, err := handler.Reconcile(context.Background(), request)
 	if err != nil || !resolved.Complete || resolved.Result.ServiceDeploymentID != "ecs-svc/new" || fake.writes != 1 {
 		t.Fatalf("could not resolve intended primary without another update: %+v %v", resolved, err)
+	}
+}
+
+func TestRollingServiceTreatsPartialUpdateResponseAsUncertain(t *testing.T) {
+	fake, handler, request := serviceFixture(t)
+	prepared, err := handler.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.PreparedResult = prepared
+	fake.omitConfig = true
+	if _, err := handler.Execute(context.Background(), request); err == nil {
+		t.Fatal("partial AWS response incorrectly confirmed update")
+	}
+	recovered, err := handler.Reconcile(context.Background(), request)
+	if err != nil || !recovered.Complete || fake.writes != 1 {
+		t.Fatalf("partial response could not reconcile without another update: %+v %v", recovered, err)
+	}
+	if serviceMatches(&types.Service{}, request.PriorResults[0].TaskDefinitionARN, request) || serviceSnapshot(&types.Service{}) != nil {
+		t.Fatal("missing deployment configuration produced valid evidence")
+	}
+}
+
+func TestRollingServiceDoesNotOverwriteRotatedPrimaryAfterSnapshot(t *testing.T) {
+	fake, handler, request := serviceFixture(t)
+	prepared, err := handler.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.PreparedResult = prepared
+	fake.service.Deployments[0].Id = aws.String("ecs-svc/external-rollout")
+	if _, err := handler.Execute(context.Background(), request); err == nil || fake.writes != 0 {
+		t.Fatal("overwrote a changed primary deployment")
 	}
 }

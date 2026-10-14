@@ -229,7 +229,7 @@ func ecsRequest(record Record, index int, role DeployerRoleReadiness) ECSOperati
 	sum := sha256.Sum256([]byte(record.ID + "/" + op.ID))
 	request := ECSOperationRequest{ApplyID: record.ID, OperationID: op.ID, RequestID: "tenet-" + hex.EncodeToString(sum[:16]), Intent: *op.ECS, Role: role}
 	for _, previous := range record.Operations[:index] {
-		if previous.ECSCheckpoint != nil {
+		if previous.ECSCheckpoint != nil && previous.ECSCheckpoint.State == "complete" {
 			request.PriorResults = append(request.PriorResults, previous.ECSCheckpoint.Result.Clone())
 		}
 	}
