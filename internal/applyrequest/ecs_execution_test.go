@@ -435,3 +435,65 @@ func TestECSExecutionRejectsMissingCheckpointAndEmptyHandlerErrors(t *testing.T)
 		t.Fatal("non-atomic store accepted execution update")
 	}
 }
+
+type preparingECSHandler struct {
+	*fakeECSHandler
+	snapshot *ECSServiceSnapshot
+}
+
+func (h preparingECSHandler) Prepare(context.Context, ECSOperationRequest) (ECSOperationResult, error) {
+	return ECSOperationResult{PreviousService: h.snapshot, PreviousTaskDefinitionARN: h.snapshot.TaskDefinitionARN}, nil
+}
+
+func TestECSExecutionPersistsPreparedRollbackStateBeforeServiceCall(t *testing.T) {
+	f := newECSFixture(t)
+	snapshot := &ECSServiceSnapshot{TaskDefinitionARN: f.intent.BaseTaskDefinitionARN, DesiredCount: 1, MinimumHealthyPercent: 50, MaximumPercent: 150, PrimaryDeploymentID: "ecs-svc/before"}
+	update := &fakeECSHandler{}
+	update.execute = func(request ECSOperationRequest) (ECSOperationResult, error) {
+		record := f.stored(t)
+		persisted := record.Operations[1].ECSCheckpoint.Result.PreviousService
+		if persisted == nil || *persisted != *snapshot || request.PreparedResult.PreviousService == nil || *request.PreparedResult.PreviousService != *snapshot {
+			t.Fatal("AWS update preceded durable rollback evidence")
+		}
+		result := request.PreparedResult.Clone()
+		result.ServiceDeploymentID = "ecs-svc/after"
+		return result, nil
+	}
+	f.executor.ECS.Handlers[f.record.Operations[1].Kind] = preparingECSHandler{fakeECSHandler: update, snapshot: snapshot}
+	if err := f.executor.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.executor.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	record := f.stored(t)
+	if record.Status != StatusRunning || record.Operations[2].Status != OperationStatusQueued || record.Operations[1].ECSCheckpoint.Result.ServiceDeploymentID != "ecs-svc/after" {
+		t.Fatal("update acceptance incorrectly finished deployment")
+	}
+	copied := NormalizeOperationIDs(record)
+	copied.Operations[1].ECSCheckpoint.Result.PreviousService.DesiredCount = 99
+	if record.Operations[1].ECSCheckpoint.Result.PreviousService.DesiredCount != 1 {
+		t.Fatal("rollback snapshot aliases read-model copies")
+	}
+}
+
+func TestECSExecutionFinishesKnownReconciledFailureWithoutMutation(t *testing.T) {
+	f := newECSFixture(t)
+	f.handler.execute = func(ECSOperationRequest) (ECSOperationResult, error) {
+		return ECSOperationResult{}, errors.New("unknown response")
+	}
+	if err := f.executor.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.handler.recover = func(ECSOperationRequest) (ECSReconciliation, error) {
+		return ECSReconciliation{Failure: "deployment failed after acceptance"}, nil
+	}
+	f.now = f.now.Add(31 * time.Second)
+	if err := f.executor.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	record := f.stored(t)
+	if record.Status != StatusFailed || record.Operations[0].ECSCheckpoint.State != "failed" || f.handler.calls.Load() != 1 {
+		t.Fatal("known terminal failure remained running or repeated the write")
+	}
+}

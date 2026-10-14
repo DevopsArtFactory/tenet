@@ -42,7 +42,7 @@ func TestDeployerClientAssumesConfiguredRoleInSameAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	actual := client.(*ecs.Client)
+	actual := client
 	creds, err := actual.Options().Credentials.Retrieve(context.Background())
 	if err != nil || creds.AccessKeyID != "assumed-access-key" || calls.Load() != 1 {
 		t.Fatalf("client reused source credentials instead of assuming role: %+v %v", creds, err)

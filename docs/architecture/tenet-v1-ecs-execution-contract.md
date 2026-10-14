@@ -229,3 +229,36 @@ paced to five per second per lookup, with cancellable waits and normal SDK
 read retries. Very old pinned bases can still require a long history scan;
 no absence is inferred from a truncated scan. Known failures before the mutation
 are classified as safe, bounded retries rather than ambiguous registration.
+
+## Rolling service update handler
+
+`internal/ecsexecution.RollingService` updates an existing ACTIVE ECS/REPLICA
+service using the exact ARN returned by registration. Native advanced strategies,
+CodeDeploy/external controllers, missing services, conflicting active rollouts,
+and incompatible network/platform/load-balancer settings fail preflight. The
+handler checks service-scoped describe/update capabilities and the registered
+revision's inherited PassRole ARNs again before a write.
+
+Before the executor permits `UpdateService`, the handler's read-only `Prepare`
+returns the old task-definition ARN, desired count, rolling bounds and primary
+deployment ID. The executor persists that snapshot in the in-flight checkpoint.
+The handler re-observes the service immediately before updating and rejects a
+changed baseline. It sends only the reviewed task-definition/count/rolling bounds,
+preserving the existing deployment alarms and circuit breaker, and leaves
+networking, load balancers, placement, capacity providers and other service fields
+untouched. Existing matching intent returns without forcing another rollout.
+
+Update responses record AWS request/deployment IDs and the old service snapshot.
+They complete only the update operation; Apply stays running until the separate
+convergence operation verifies the intended revision. Lost responses reconcile
+against observed service intent without repeating an uncertain write. A known
+failed deployment records a terminal failure; a stale response does not prove
+absence. AWS offers no conditional UpdateService comparison, so an external writer
+can still race after the final observation. Cooperating Tenet applies are
+serialized; external deployment controllers must not manage the same service.
+
+This handler and its rollback snapshot are available for explicit executor wiring;
+production startup remains local-safe until the remaining observation and trusted
+authorization wiring is complete. No real AWS updates are used in tests.
+
+Reference: [UpdateService](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_UpdateService.html).

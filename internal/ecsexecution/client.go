@@ -16,7 +16,7 @@ import (
 
 // DeployerClient always assumes the configured role, even in the control account.
 // Observer-client credentials must never be reused for live mutations.
-func DeployerClient(ctx context.Context, role applyrequest.DeployerRoleReadiness) (RegistrationClient, error) {
+func DeployerClient(ctx context.Context, role applyrequest.DeployerRoleReadiness) (*ecs.Client, error) {
 	parsed, err := arn.Parse(role.RoleARN)
 	if err != nil || parsed.Service != "iam" || !strings.HasPrefix(parsed.Resource, "role/") || parsed.AccountID != role.AWSAccountID || role.Region == "" || !role.Configured || !role.Ready || !role.CheckedWithAWS {
 		return nil, fmt.Errorf("verified target-account deployer role is required")

@@ -240,7 +240,7 @@ func TestRegistrationErrorClassification(t *testing.T) {
 		code                string
 		rejected, retryable bool
 	}{{"AccessDeniedException", true, false}, {"InvalidParameterException", true, false}, {"ThrottlingException", true, true}, {"ServerException", false, false}} {
-		classified := registrationError(&smithy.GenericAPIError{Code: tc.code, Message: tc.code})
+		classified := ecsMutationError(&smithy.GenericAPIError{Code: tc.code, Message: tc.code})
 		var call *applyrequest.ECSCallError
 		if errors.As(classified, &call) != tc.rejected || (call != nil && call.Retryable != tc.retryable) {
 			t.Fatalf("bad classification for %s", tc.code)
