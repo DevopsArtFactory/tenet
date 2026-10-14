@@ -65,6 +65,8 @@ Use `make smoke-docker` when changing the Compose stack or its runtime behavior.
 
 ## Documentation
 
+- [ECS native execution input contract](docs/architecture/tenet-v1-ecs-execution-contract.md) — explicit targets, pinned task definitions, native strategies, and reviewed plan inputs.
+
 | Guide | Covers |
 | --- | --- |
 | [Architecture](docs/architecture/tenet-v1-overview.md) | Desired state, runtime state, and control-plane scope |

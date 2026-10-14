@@ -3607,3 +3607,31 @@ func TestDeriveRuntimeHistoryEntryIncludesRolloutExecutionResourceRefs(t *testin
 		t.Fatalf("expected rollout execution resource refs, got %+v", got.ResourceRefs)
 	}
 }
+
+func TestRuntimeNativeECSObservationUsesExplicitBinding(t *testing.T) {
+	compiled, err := catalog.LoadFromRepository(filepath.Join("..", "..", "examples", "ecs-native-repo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	deployment := compiled.Deployments[0]
+	var gotReq resourceinspection.ECSRequest
+	inspector := resourceinspection.NewService(resourceinspection.Options{InspectECSService: func(_ context.Context, req resourceinspection.ECSRequest) (resourceinspection.ECSServiceInspection, error) {
+		gotReq = req
+		return resourceinspection.ECSServiceInspection{DesiredCount: 2}, nil
+	}})
+	_, observations, err := runtimeLiveCapacityLookupFromInspection(context.Background(), inspector, compiled.Accounts, compiled.Environments, deployment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotReq.ClusterARN != deployment.ECS.ClusterARN || gotReq.ResourceName != deployment.ECS.ServiceARN || gotReq.TargetAccountID != deployment.ECS.AWSAccountID || gotReq.Region != deployment.ECS.Region {
+		t.Fatalf("explicit ECS binding lost: %+v", gotReq)
+	}
+	if len(observations) != 1 || !observations[0].Available {
+		t.Fatalf("missing native service observation: %+v", observations)
+	}
+	plan := reconcile.Planner{}.Build(deployment, domain.DeploymentStatus{})
+	summary := deriveRolloutSummary(deployment, domain.DeploymentStatus{}, plan)
+	if summary.CurrentStep != string(reconcile.StepRegisterECSTaskDefinition) || summary.Phase != domain.RolloutPhaseProvisioning {
+		t.Fatalf("native registration step misrepresented: %+v", summary)
+	}
+}

@@ -20,18 +20,19 @@ type EnvironmentSpec struct {
 
 // DeploymentSpec describes desired deployment intent.
 type DeploymentSpec struct {
-	Name           string       `json:"name" yaml:"name"`
-	AppRef         string       `json:"appRef,omitempty" yaml:"appRef,omitempty"`
-	EnvironmentRef string       `json:"environmentRef,omitempty" yaml:"environmentRef,omitempty"`
-	Target         TargetSpec   `json:"target,omitempty" yaml:"target,omitempty"`
-	Strategy       StrategySpec `json:"strategy,omitempty" yaml:"strategy,omitempty"`
-	Traffic        TrafficSpec  `json:"traffic,omitempty" yaml:"traffic,omitempty"`
-	Capacity       CapacitySpec `json:"capacity,omitempty" yaml:"capacity,omitempty"`
-	Binary         string       `json:"binary,omitempty" yaml:"binary,omitempty"`
-	Image          string       `json:"image,omitempty" yaml:"image,omitempty"`
-	UserData       UserDataSpec `json:"userdata,omitempty" yaml:"userdata,omitempty"`
-	Tags           []string     `json:"tags,omitempty" yaml:"tags,omitempty"`
-	Stacks         []StackSpec  `json:"stacks,omitempty" yaml:"stacks,omitempty"`
+	ECS            *ECSDeploymentSpec `json:"ecs,omitempty" yaml:"ecs,omitempty"`
+	Name           string             `json:"name" yaml:"name"`
+	AppRef         string             `json:"appRef,omitempty" yaml:"appRef,omitempty"`
+	EnvironmentRef string             `json:"environmentRef,omitempty" yaml:"environmentRef,omitempty"`
+	Target         TargetSpec         `json:"target,omitempty" yaml:"target,omitempty"`
+	Strategy       StrategySpec       `json:"strategy,omitempty" yaml:"strategy,omitempty"`
+	Traffic        TrafficSpec        `json:"traffic,omitempty" yaml:"traffic,omitempty"`
+	Capacity       CapacitySpec       `json:"capacity,omitempty" yaml:"capacity,omitempty"`
+	Binary         string             `json:"binary,omitempty" yaml:"binary,omitempty"`
+	Image          string             `json:"image,omitempty" yaml:"image,omitempty"`
+	UserData       UserDataSpec       `json:"userdata,omitempty" yaml:"userdata,omitempty"`
+	Tags           []string           `json:"tags,omitempty" yaml:"tags,omitempty"`
+	Stacks         []StackSpec        `json:"stacks,omitempty" yaml:"stacks,omitempty"`
 }
 
 // TargetType identifies a supported workload execution platform.

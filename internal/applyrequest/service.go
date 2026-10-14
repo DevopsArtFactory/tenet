@@ -637,6 +637,8 @@ func deriveOperations(plan planpreview.Record, status OperationStatus) []Operati
 	operations := make([]Operation, 0, len(plan.Operations))
 	for _, operation := range plan.Operations {
 		operations = append(operations, Operation{
+			Kind:    operation.Kind,
+			ECS:     operation.ECS.Clone(),
 			ID:      operation.ID,
 			Status:  status,
 			Phase:   operation.Phase,
@@ -652,6 +654,9 @@ func normalizeOperationIDs(operations []Operation) []Operation {
 		return nil
 	}
 	normalized := append([]Operation(nil), operations...)
+	for i := range normalized {
+		normalized[i].ECS = normalized[i].ECS.Clone()
+	}
 	used := make(map[string]struct{}, len(normalized))
 	for _, operation := range normalized {
 		if operation.ID != "" {
@@ -820,6 +825,7 @@ func cloneOperations(existing []Operation) []Operation {
 	}
 	updated := append([]Operation(nil), existing...)
 	for i := range updated {
+		updated[i].ECS = updated[i].ECS.Clone()
 		if updated[i].ExecutionAttempt != nil {
 			attempt := *updated[i].ExecutionAttempt
 			updated[i].ExecutionAttempt = &attempt

@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"sort"
 
 	"github.com/DevopsArtFactory/tenet/internal/manifest"
@@ -8,14 +9,15 @@ import (
 
 // DeploymentView is a UI-friendly deployment listing entry.
 type DeploymentView struct {
-	Name           string `json:"name"`
-	AppRef         string `json:"appRef"`
-	EnvironmentRef string `json:"environmentRef"`
-	TargetType     string `json:"targetType,omitempty"`
-	Strategy       string `json:"strategy,omitempty"`
-	ExecutionMode  string `json:"executionMode,omitempty"`
-	Binary         string `json:"binary,omitempty"`
-	Image          string `json:"image,omitempty"`
+	ECS            *domain.ECSDeploymentIntent `json:"ecs,omitempty"`
+	Name           string                      `json:"name"`
+	AppRef         string                      `json:"appRef"`
+	EnvironmentRef string                      `json:"environmentRef"`
+	TargetType     string                      `json:"targetType,omitempty"`
+	Strategy       string                      `json:"strategy,omitempty"`
+	ExecutionMode  string                      `json:"executionMode,omitempty"`
+	Binary         string                      `json:"binary,omitempty"`
+	Image          string                      `json:"image,omitempty"`
 }
 
 // ListDeployments projects a compiled catalog into a stable deployment listing.
@@ -23,6 +25,7 @@ func ListDeployments(c manifest.Catalog) []DeploymentView {
 	deployments := make([]DeploymentView, 0, len(c.Deployments))
 	for _, deployment := range c.Deployments {
 		deployments = append(deployments, DeploymentView{
+			ECS:            deployment.ECS.Clone(),
 			Name:           deployment.Name,
 			AppRef:         deployment.AppRef,
 			EnvironmentRef: deployment.EnvironmentRef,

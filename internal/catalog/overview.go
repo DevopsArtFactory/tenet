@@ -118,6 +118,7 @@ type DeploymentOverview struct {
 
 // DeploymentOverviewDetail joins one deployment's desired intent, placement, and observed state.
 type DeploymentOverviewDetail struct {
+	ECS                        *domain.ECSDeploymentIntent       `json:"ecs,omitempty"`
 	Name                       string                            `json:"name"`
 	AppRef                     string                            `json:"appRef"`
 	EnvironmentRef             string                            `json:"environmentRef"`
@@ -279,6 +280,7 @@ type DeploymentEventsResultScope struct {
 
 // ApplicationOverviewDetail makes the application page contract explicit while preserving deployment detail semantics.
 type ApplicationOverviewDetail struct {
+	ECS                           *domain.ECSDeploymentIntent       `json:"ecs,omitempty"`
 	Name                          string                            `json:"name"`
 	AppRef                        string                            `json:"appRef"`
 	EnvironmentRef                string                            `json:"environmentRef"`
@@ -548,6 +550,7 @@ func BuildApplicationOverviewDetail(c manifest.Catalog, snapshots []statusstore.
 	}
 
 	return ApplicationOverviewDetail{
+		ECS:                           detail.ECS.Clone(),
 		Name:                          detail.Name,
 		AppRef:                        detail.AppRef,
 		EnvironmentRef:                detail.EnvironmentRef,
@@ -609,6 +612,7 @@ func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.S
 	status := statusByDeployment[deploymentName]
 
 	detail := DeploymentOverviewDetail{
+		ECS:                        deployment.ECS.Clone(),
 		Name:                       deployment.Name,
 		AppRef:                     deployment.AppRef,
 		EnvironmentRef:             deployment.EnvironmentRef,

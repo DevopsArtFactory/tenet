@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
 
@@ -114,12 +115,14 @@ type OperationExecutionAttempt struct {
 
 // Operation is one additive operator-facing execution row projected from a ready plan preview.
 type Operation struct {
-	ID               string                     `json:"id,omitempty"`
-	Status           OperationStatus            `json:"status"`
-	Phase            string                     `json:"phase"`
-	Target           string                     `json:"target"`
-	Summary          string                     `json:"summary"`
-	ExecutionAttempt *OperationExecutionAttempt `json:"executionAttempt,omitempty"`
+	Kind             string                      `json:"kind,omitempty"`
+	ECS              *domain.ECSDeploymentIntent `json:"ecs,omitempty"`
+	ID               string                      `json:"id,omitempty"`
+	Status           OperationStatus             `json:"status"`
+	Phase            string                      `json:"phase"`
+	Target           string                      `json:"target"`
+	Summary          string                      `json:"summary"`
+	ExecutionAttempt *OperationExecutionAttempt  `json:"executionAttempt,omitempty"`
 }
 
 // Lifecycle captures additive operator-facing progress metadata for one apply request.

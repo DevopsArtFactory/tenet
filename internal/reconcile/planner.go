@@ -18,6 +18,7 @@ const (
 	StepPromoteCandidateCapacity   StepKind = "PromoteCandidateCapacity"
 	StepStartInstanceRefresh       StepKind = "StartInstanceRefresh"
 	StepVerifyReplacementCapacity  StepKind = "VerifyReplacementCapacity"
+	StepRegisterECSTaskDefinition  StepKind = "RegisterECSTaskDefinition"
 	StepUpdateECSService           StepKind = "UpdateECSService"
 	StepVerifyServiceStability     StepKind = "VerifyServiceStability"
 	StepCreateCodeDeployDeployment StepKind = "CreateCodeDeployDeployment"
@@ -89,6 +90,8 @@ func rolloutStepsFor(deployment domain.Deployment) []Step {
 			{Kind: StepStartInstanceRefresh},
 			{Kind: StepVerifyReplacementCapacity},
 		}
+	case "ecsNative":
+		return []Step{{Kind: StepResolvePlacement}, {Kind: StepObserveCurrentState}, {Kind: StepRegisterECSTaskDefinition}, {Kind: StepUpdateECSService}, {Kind: StepVerifyServiceStability}}
 	case "ecsRolling":
 		return []Step{
 			{Kind: StepResolvePlacement},

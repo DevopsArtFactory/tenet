@@ -1,0 +1,20 @@
+name: worker
+appRef: worker
+environmentRef: prod
+target:
+  type: ecs
+strategy:
+  type: rolling
+image: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+capacity:
+  desired: 2
+  min: 1
+  max: 4
+ecs:
+  deploymentController: ECS
+  clusterArn: arn:aws:ecs:ap-northeast-2:123456789012:cluster/production
+  serviceArn: arn:aws:ecs:ap-northeast-2:123456789012:service/production/worker
+  baseTaskDefinitionArn: arn:aws:ecs:ap-northeast-2:123456789012:task-definition/worker:17
+  containerName: worker
+  minimumHealthyPercent: 100
+  maximumPercent: 200
