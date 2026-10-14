@@ -93,6 +93,10 @@ func respondApplyCreateError(w http.ResponseWriter, err error) {
 		respondForbiddenError(w, "forbidden: ECS execution approval requires an authenticated operator with deployment access")
 		return
 	}
+	if errors.Is(err, applyrequest.ErrRecoveryUnavailable) || errors.Is(err, applyrequest.ErrFailedIntentHeld) {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
 	if errors.Is(err, applyrequest.ErrPlanNotReady) || errors.Is(err, applyrequest.ErrSourceFingerprintConflict) {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
@@ -2446,6 +2450,8 @@ func filterAuthorizedProjectEnvironmentOverviewDetail(detail catalog.ProjectEnvi
 // Options configures the API router.
 type Options struct {
 	ECSExecutionEnabled                  bool
+	RequestApplyRollback                 func(context.Context, string) (applyrequest.CreateResult, error)
+	RetryApplyRequest                    func(context.Context, string) (applyrequest.CreateResult, error)
 	BuildInfo                            buildinfo.Info
 	Logger                               *slog.Logger
 	RequestTimeout                       time.Duration
@@ -3397,6 +3403,43 @@ func NewRouter(options Options) http.Handler {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(record)
+		case len(segments) == 2 && segments[0] != "" && (segments[1] == "rollback" || segments[1] == "retry"):
+			if !requireMethod(w, r, http.MethodPost) {
+				return
+			}
+			if options.RequireAuthenticatedIdentity && !requireAuthenticatedIdentity(w, r) {
+				return
+			}
+			if !requireOperatorRoleForWrite(w, r, options) {
+				return
+			}
+			action := options.RequestApplyRollback
+			if segments[1] == "retry" {
+				action = options.RetryApplyRequest
+			}
+			if action == nil || options.ApplyRequest == nil {
+				http.Error(w, "ECS recovery unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			parent, err := options.ApplyRequest(r.Context(), segments[0])
+			if err != nil {
+				respondLookupError(w, err)
+				return
+			}
+			if !requireDeploymentWriteAuthorization(w, r, options, parent.DeploymentName) {
+				return
+			}
+			result, err := action(r.Context(), parent.ID)
+			if err != nil {
+				respondApplyCreateError(w, err)
+				return
+			}
+			w.Header().Set("Location", "/v1/applies/"+result.Record.ID)
+			w.Header().Set("Content-Type", "application/json")
+			if result.Created {
+				w.WriteHeader(http.StatusCreated)
+			}
+			_ = json.NewEncoder(w).Encode(result.Record)
 		case len(segments) == 2 && segments[0] != "" && segments[1] == "preflight":
 			if !requireMethod(w, r, http.MethodGet) {
 				return

@@ -359,6 +359,10 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 		options.CreateDeploymentPlanPreview = planService.Create
 		options.PlanPreview = planService.Get
 		options.CreateApplyRequest = applyService.Create
+		if ecsExecutionEnabled() {
+			options.RequestApplyRollback = applyService.RequestRollback
+			options.RetryApplyRequest = applyService.Retry
+		}
 		options.ApplyRequests = applyService.List
 		options.ApplyRequest = applyService.Get
 		options.ApplyExecutionPreflight = applyService.Preflight

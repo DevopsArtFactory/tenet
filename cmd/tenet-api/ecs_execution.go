@@ -60,6 +60,20 @@ func newApplyService(source apiCatalogSource, options api.Options, planStorePath
 		PermissionSimulation:  newApplyRequestPermissionSimulationProvider(probeApplyPermissionSimulation),
 	}
 	if ecsExecutionEnabled() {
+		service.CreateRetryPlan = func(ctx context.Context, name string) (planpreview.Record, error) {
+			result, err := plans.Create(ctx, name, planpreview.CreateRequest{})
+			return result.Record, err
+		}
+		service.RollbackTarget = func(ctx context.Context, parent applyrequest.Record) (*domain.ECSDeploymentIntent, error) {
+			role, err := service.DeployerRoleReadiness(ctx, applyrequest.DeployerRoleTarget{DeploymentName: parent.DeploymentName})
+			if err != nil {
+				return nil, err
+			}
+			handler := ecsexecution.RollingService{ClientFor: func(ctx context.Context, role applyrequest.DeployerRoleReadiness) (ecsexecution.ServiceClient, error) {
+				return ecsexecution.DeployerClient(ctx, role)
+			}, CheckCapabilities: checkECSCapabilities}
+			return handler.RollbackTarget(ctx, parent, role)
+		}
 		service.AuthorizeCreate = func(ctx context.Context, record applyrequest.Record) (*applyrequest.ExecutionPrincipal, error) {
 			if len(record.Operations) != 3 || record.Operations[0].ECS == nil || record.Operations[0].ECS.DeploymentController != "ECS" || record.Operations[0].ECS.DeploymentStrategy != "ROLLING" {
 				return nil, fmt.Errorf("%w: only reviewed native ECS Rolling plans support live execution", applyrequest.ErrPlanNotReady)

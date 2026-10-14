@@ -36,6 +36,9 @@ type Actor = requestactor.Actor
 
 // Metadata captures action-specific audit details from immutable source records.
 type Metadata struct {
+	RecoveryOf        string   `json:"recoveryOf,omitempty"`
+	RetryOf           string   `json:"retryOf,omitempty"`
+	RecoveryAutomatic bool     `json:"recoveryAutomatic,omitempty"`
 	Status            string   `json:"status,omitempty"`
 	PreviousStatus    string   `json:"previousStatus,omitempty"`
 	NewStatus         string   `json:"newStatus,omitempty"`
@@ -273,6 +276,7 @@ func projectApply(record applyrequest.Record, deployment catalog.DeploymentView)
 		ApplyID:        record.ID,
 		Actor:          requestactor.Normalize(record.Actor),
 		Metadata: Metadata{
+			RecoveryOf: recoveryApplyID(record), RetryOf: record.RetryOf, RecoveryAutomatic: record.Recovery != nil && record.Recovery.Automatic,
 			Status:            string(record.Status),
 			PlanStatus:        record.Source.PlanStatus,
 			SourceFingerprint: record.Source.Fingerprint,
@@ -311,6 +315,7 @@ func projectApplyTransition(record applyrequest.Record, transition applyrequest.
 		ApplyID:        record.ID,
 		Actor:          requestactor.Normalize(transition.Actor),
 		Metadata: Metadata{
+			RecoveryOf: recoveryApplyID(record), RetryOf: record.RetryOf, RecoveryAutomatic: record.Recovery != nil && record.Recovery.Automatic,
 			Status:            string(transition.Status),
 			PreviousStatus:    string(transition.PreviousStatus),
 			NewStatus:         string(transition.Status),
@@ -381,4 +386,11 @@ func ValidAction(value string) bool {
 	default:
 		return false
 	}
+}
+
+func recoveryApplyID(record applyrequest.Record) string {
+	if record.Recovery != nil {
+		return record.Recovery.ApplyID
+	}
+	return ""
 }

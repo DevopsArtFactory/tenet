@@ -328,3 +328,33 @@ func TestRollingServiceRequiresFinalMutationGuardAfterSnapshotValidation(t *test
 		}
 	}
 }
+
+func TestExplicitRetryWaitsForNewDeploymentIdentityAfterLaggingResponse(t *testing.T) {
+	fake, handler, request := serviceFixture(t)
+	target := request.PriorResults[0].TaskDefinitionARN
+	fake.service.TaskDefinition = aws.String(target)
+	fake.service.DesiredCount = int32(request.Intent.DesiredCount)
+	fake.service.DeploymentConfiguration.MinimumHealthyPercent = aws.Int32(int32(request.Intent.MinimumHealthyPercent))
+	fake.service.DeploymentConfiguration.MaximumPercent = aws.Int32(int32(request.Intent.MaximumPercent))
+	fake.service.Deployments = []types.Deployment{{Id: aws.String("ecs-svc/failed"), Status: aws.String("PRIMARY"), TaskDefinition: aws.String(target), RolloutState: types.DeploymentRolloutStateFailed}}
+	request.RetryDeploymentID = "ecs-svc/failed"
+	prepared, err := handler.Prepare(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.PreparedResult = prepared
+	fake.noEffect = true
+	if _, err := handler.Execute(context.Background(), request); err == nil || !fake.input.ForceNewDeployment || fake.writes != 1 {
+		t.Fatal("lagging retry response was mistaken for fresh acceptance")
+	}
+	observed, err := handler.Reconcile(context.Background(), request)
+	if err != nil || observed.Complete || observed.Absent || observed.Failure != "" || fake.writes != 1 {
+		t.Fatalf("old failed primary was mistaken for the retry outcome: %+v %v", observed, err)
+	}
+	fake.service.Deployments[0].Id = aws.String("ecs-svc/new-retry")
+	fake.service.Deployments[0].RolloutState = types.DeploymentRolloutStateInProgress
+	observed, err = handler.Reconcile(context.Background(), request)
+	if err != nil || !observed.Complete || observed.Result.ServiceDeploymentID != "ecs-svc/new-retry" || fake.writes != 1 {
+		t.Fatalf("fresh retry identity did not reconcile: %+v %v", observed, err)
+	}
+}

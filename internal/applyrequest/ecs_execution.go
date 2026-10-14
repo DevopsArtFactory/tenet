@@ -57,8 +57,10 @@ type ECSOperationResult struct {
 
 // ECSOperationRequest binds an injected handler to reviewed intent and durable identity.
 type ECSOperationRequest struct {
+	RetryDeploymentID string
 	// BeforeMutation must succeed immediately before a concrete SDK write.
 	BeforeMutation func(context.Context) error
+	Recovery       *ECSRecovery
 	ApplyID        string
 	OperationID    string
 	RequestID      string
@@ -167,7 +169,7 @@ func (e Executor) advanceECS(ctx context.Context, snapshot Record) error {
 		return err
 	}
 	if record.Status.IsTerminal() {
-		return nil
+		return e.automaticECSRecovery(ctx, record)
 	}
 	if record.DeploymentName != snapshot.DeploymentName || len(record.Operations) == 0 || record.Operations[0].ECS == nil || record.Operations[0].ECS.ServiceARN != snapshot.Operations[0].ECS.ServiceARN {
 		return fmt.Errorf("execution target changed while acquiring ownership")
@@ -188,7 +190,7 @@ func (e Executor) advanceECS(ctx context.Context, snapshot Record) error {
 	// Validate every operation/handler before claiming or mutating anything.
 	role, err := e.validateECS(ctx, record, ecsNeedsMutation(record))
 	if err != nil {
-		return err
+		return e.ecsQueuedValidationError(ctx, record, err)
 	}
 	started := false
 	for _, op := range record.Operations {
@@ -205,7 +207,7 @@ func (e Executor) advanceECS(ctx context.Context, snapshot Record) error {
 			break
 		}
 		if err := e.ECS.Handlers[op.Kind].Preflight(ctx, ecsRequest(record, i, role)); err != nil {
-			return err
+			return e.ecsQueuedValidationError(ctx, record, err)
 		}
 		if started {
 			break
@@ -254,7 +256,7 @@ func (e Executor) advanceECS(ctx context.Context, snapshot Record) error {
 func ecsRequest(record Record, index int, role DeployerRoleReadiness) ECSOperationRequest {
 	op := record.Operations[index]
 	sum := sha256.Sum256([]byte(record.ID + "/" + op.ID))
-	request := ECSOperationRequest{ApplyID: record.ID, OperationID: op.ID, RequestID: "tenet-" + hex.EncodeToString(sum[:16]), Intent: *op.ECS, Role: role}
+	request := ECSOperationRequest{ApplyID: record.ID, OperationID: op.ID, RequestID: "tenet-" + hex.EncodeToString(sum[:16]), Recovery: record.Recovery.Clone(), RetryDeploymentID: record.RetryDeploymentID, Intent: *op.ECS, Role: role}
 	for _, previous := range record.Operations[:index] {
 		if previous.ECSCheckpoint != nil && previous.ECSCheckpoint.State == "complete" {
 			request.PriorResults = append(request.PriorResults, previous.ECSCheckpoint.Result.Clone())
@@ -281,6 +283,12 @@ func (e Executor) validateECS(ctx context.Context, record Record, mutation bool)
 	if plan.Status != planpreview.StatusReady || plan.ID != record.PlanID || plan.DeploymentName != record.DeploymentName || record.Source.Fingerprint != plan.Source.Fingerprint || record.Source.Fingerprint == "" || len(plan.Operations) != len(record.Operations) || len(record.Operations) != 3 {
 		return DeployerRoleReadiness{}, fmt.Errorf("apply does not match its reviewed native ECS plan")
 	}
+	if err := e.Service.validateECSRetry(ctx, record); err != nil {
+		return DeployerRoleReadiness{}, err
+	}
+	if err := e.Service.validateECSRecovery(ctx, record, plan); err != nil {
+		return DeployerRoleReadiness{}, err
+	}
 	kinds := []string{string(reconcile.StepRegisterECSTaskDefinition), string(reconcile.StepUpdateECSService), string(reconcile.StepVerifyServiceStability)}
 	expectedID, idErr := stableRecordID(record)
 	if idErr != nil || expectedID != record.ID {
@@ -290,7 +298,7 @@ func (e Executor) validateECS(ctx context.Context, record Record, mutation bool)
 	incomplete := false
 	for i, op := range record.Operations {
 		reviewed := plan.Operations[i]
-		if op.ECS == nil || op.ECS.DeploymentController != "ECS" || op.ECS.DeploymentStrategy != "ROLLING" || op.Kind != kinds[i] || e.ECS.Handlers[op.Kind] == nil || op.ID != reviewed.ID || op.Kind != reviewed.Kind || op.Target != reviewed.Target || !reflect.DeepEqual(op.ECS, reviewed.ECS) || !reflect.DeepEqual(op.ECS, record.Operations[0].ECS) {
+		if op.ECS == nil || op.ECS.DeploymentController != "ECS" || op.ECS.DeploymentStrategy != "ROLLING" || op.Kind != kinds[i] || e.ECS.Handlers[op.Kind] == nil || op.ID != reviewed.ID || op.Kind != reviewed.Kind || !reviewedECSOperationMatches(record, op, reviewed) || !reflect.DeepEqual(op.ECS, record.Operations[0].ECS) {
 			return DeployerRoleReadiness{}, fmt.Errorf("unsupported or altered reviewed ECS operation")
 		}
 		if cp := op.ECSCheckpoint; cp != nil {
@@ -313,17 +321,26 @@ func (e Executor) validateECS(ctx context.Context, record Record, mutation bool)
 		return DeployerRoleReadiness{}, err
 	}
 	if mutation {
+		if record.Recovery == nil {
+			if err := e.Service.checkFailedECSIntent(ctx, record); err != nil {
+				return DeployerRoleReadiness{}, err
+			}
+		}
 		current, err := e.ECS.CurrentIntent(ctx, record.DeploymentName)
 		if err != nil {
 			return DeployerRoleReadiness{}, err
 		}
-		if !reflect.DeepEqual(current, record.Operations[0].ECS) {
+		expected := record.Operations[0].ECS
+		if record.Recovery != nil {
+			expected = record.Recovery.ForwardIntent
+		}
+		if !reflect.DeepEqual(current, expected) {
 			return DeployerRoleReadiness{}, ErrSourceFingerprintConflict
 		}
 	}
 	// The full preview fingerprint includes observed runtime state; once execution
 	// starts, compare desired intent above so our own rollout does not invalidate it.
-	if !started {
+	if !started && record.Recovery == nil {
 		if err := e.Service.validateCurrentFingerprint(ctx, plan); err != nil {
 			return DeployerRoleReadiness{}, err
 		}
@@ -676,4 +693,25 @@ func ecsNeedsMutation(record Record) bool {
 		return cp == nil || cp.State != "in_flight" || (cp.MutationGuarded && cp.MutationAuthorizedAt == "")
 	}
 	return false
+}
+
+func (e Executor) ecsQueuedValidationError(ctx context.Context, record Record, cause error) error {
+	if record.Status != StatusQueued || hasECSCheckpoints(record) || record.Error == cause.Error() {
+		return cause
+	}
+	store, ok := e.Service.Store.(MutationStore)
+	if !ok {
+		return cause
+	}
+	_, err := store.Mutate(ctx, record.ID, func(current Record) (Record, error) {
+		if current.Status != StatusQueued || hasECSCheckpoints(current) {
+			return Record{}, ErrInvalidState
+		}
+		current.Error = cause.Error()
+		current.Details = []string{"Executor validation blocked before AWS mutation: " + cause.Error()}
+		readiness := deriveExecutionReadiness(current)
+		current.ExecutionReadiness = &readiness
+		return current, nil
+	})
+	return errors.Join(cause, err)
 }

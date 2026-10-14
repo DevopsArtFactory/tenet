@@ -97,6 +97,9 @@ func (r Registration) prepare(ctx context.Context, request applyrequest.ECSOpera
 		{Action: "ecs:RegisterTaskDefinition", ResourceType: "taskDefinition", ResourceName: familyARN, RequiredRole: request.Role.RoleARN},
 		{Action: "ecs:TagResource", ResourceType: "taskDefinition", ResourceName: familyARN, RequiredRole: request.Role.RoleARN},
 	}
+	if request.Recovery != nil {
+		checks = checks[:1]
+	}
 	roleChecks, err := passRoleChecks(input.TaskRoleArn, input.ExecutionRoleArn, request)
 	if err != nil {
 		return nil, nil, "", err
@@ -231,6 +234,9 @@ func findRevision(ctx context.Context, client RegistrationClient, request applyr
 		}
 	}
 
+	if request.Recovery != nil {
+		return nil, fmt.Errorf("rollback requires the exact previous ACTIVE task definition; registration is prohibited")
+	}
 	base, _ := arn.Parse(request.Intent.BaseTaskDefinitionARN)
 	_, baseVersion, _ := strings.Cut(strings.TrimPrefix(base.Resource, "task-definition/"), ":")
 	baseRevision, _ := strconv.ParseInt(baseVersion, 10, 32)

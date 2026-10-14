@@ -12,6 +12,7 @@ import (
 
 // ECSDeploymentSpec binds reviewed intent to an existing ECS service and base revision.
 type ECSDeploymentSpec struct {
+	RollbackOnFailure     bool   `json:"rollbackOnFailure,omitempty" yaml:"rollbackOnFailure,omitempty"`
 	DeploymentController  string `json:"deploymentController" yaml:"deploymentController"`
 	ClusterARN            string `json:"clusterArn" yaml:"clusterArn"`
 	ServiceARN            string `json:"serviceArn" yaml:"serviceArn"`
@@ -34,6 +35,9 @@ func validateECSDeployment(d DeploymentSpec) error {
 	}
 	if d.NormalizedTargetType() != TargetTypeECS {
 		return fmt.Errorf("ecs execution inputs require an ecs target")
+	}
+	if e.RollbackOnFailure && d.NormalizedStrategy() != StrategyTypeRolling {
+		return fmt.Errorf("ecs.rollbackOnFailure currently supports Rolling only")
 	}
 	if e.DeploymentController != "ECS" {
 		return fmt.Errorf("ecs.deploymentController must be ECS; legacy CodeDeploy manifests must omit ecs execution inputs")

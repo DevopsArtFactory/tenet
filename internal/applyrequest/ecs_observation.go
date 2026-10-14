@@ -161,6 +161,10 @@ func ecsReadiness(record Record, checkedAt string) ExecutionReadiness {
 		state = "queued"
 		summary = "Approved native ECS Apply awaits executor validation of current authorization, intent and AWS capabilities."
 	}
+	if record.Status == StatusQueued && record.Error != "" {
+		state = "blocked"
+		summary = record.Error
+	}
 	if record.Status == StatusSucceeded {
 		state = "completed"
 		summary = "Native ECS execution completed with persisted operation results."
@@ -173,6 +177,9 @@ func ecsReadiness(record Record, checkedAt string) ExecutionReadiness {
 		summary = record.ECSRuntime.Summary
 		checkedAt = record.ECSRuntime.ObservedAt
 		evidence = append(evidence, "Runtime reason: "+record.ECSRuntime.Reason)
+	}
+	if record.Recovery != nil {
+		summary = "Rolling recovery of failed Apply " + record.Recovery.ApplyID + ": " + summary
 	}
 	return ExecutionReadiness{State: state, Summary: summary, CheckedAt: checkedAt, Evidence: evidence, Operations: deriveOperationExecutionPreflight(record, nil)}
 }
