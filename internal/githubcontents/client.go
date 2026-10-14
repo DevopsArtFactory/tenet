@@ -130,7 +130,7 @@ func (c Client) List(ctx context.Context, req Request) ([]Entry, error) {
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = defaultBaseURL
 	}
-	base, err := url.Parse(baseURL)
+	base, err := url.Parse(strings.TrimRight(baseURL, "/") + "/")
 	if err != nil {
 		return nil, &Error{
 			Code:    ErrorCodeInvalidInput,
@@ -217,7 +217,7 @@ func (c Client) Fetch(ctx context.Context, req Request) (File, error) {
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = defaultBaseURL
 	}
-	base, err := url.Parse(baseURL)
+	base, err := url.Parse(strings.TrimRight(baseURL, "/") + "/")
 	if err != nil {
 		return File{}, &Error{
 			Code:    ErrorCodeInvalidInput,
@@ -460,7 +460,7 @@ func contentsAPIPath(owner string, repo string, manifestPath string) string {
 	for _, segment := range strings.Split(manifestPath, "/") {
 		escapedPath = append(escapedPath, url.PathEscape(segment))
 	}
-	return fmt.Sprintf("/repos/%s/%s/contents/%s", url.PathEscape(owner), url.PathEscape(repo), strings.Join(escapedPath, "/"))
+	return fmt.Sprintf("repos/%s/%s/contents/%s", url.PathEscape(owner), url.PathEscape(repo), strings.Join(escapedPath, "/"))
 }
 
 func invalidInputError(err error) error {

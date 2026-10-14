@@ -375,3 +375,16 @@ func assertCode(t *testing.T, err error, want ErrorCode) {
 		t.Fatalf("unexpected error code: got %q want %q", fetchErr.Code, want)
 	}
 }
+
+func TestContentsRequestsPreserveEnterpriseAPIBasePath(t *testing.T) {
+	client := testClient(t, func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path != "/api/v3/repos/acme/config/contents/accounts" {
+			t.Fatalf("enterprise API prefix lost: %s", request.URL.Path)
+		}
+		return jsonResponse(http.StatusOK, `[]`), nil
+	})
+	client.BaseURL = "https://github.example/api/v3"
+	if _, err := client.List(context.Background(), Request{Repository: "acme/config", Ref: "main", Path: "accounts"}); err != nil {
+		t.Fatal(err)
+	}
+}

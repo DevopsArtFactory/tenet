@@ -221,3 +221,14 @@ This slice deliberately does not introduce live AWS reconciliation yet. The next
 
 
 The smoke helper still runs `docker compose down --remove-orphans` even on failure so local cleanup stays deterministic.
+
+
+## Pinned GitHub ECS execution
+
+The historical GitHub/local-safe Apply restriction applies when the separate
+`TENET_AWS_ENABLE_ECS_EXECUTION` flag is false. Explicit live ECS mode can use a
+GitHub catalog with a configured repository/ref and versioned RBAC policy. It
+resolves that ref once per snapshot and fetches manifest/policy files by immutable
+commit SHA. See the [ECS execution contract](tenet-v1-ecs-execution-contract.md#enabling-reviewed-rolling-execution)
+for live flags, authenticated approval, role checks and source correlation.
+This does not yet enable an automatic Git deployment loop.

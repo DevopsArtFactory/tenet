@@ -14,6 +14,7 @@ import (
 
 // CatalogSpec is the parser-facing bundle of desired resources.
 type CatalogSpec struct {
+	Git          *domain.GitSource
 	Accounts     []spec.AccountSpec
 	Environments []spec.EnvironmentSpec
 	Deployments  []spec.DeploymentSpec
@@ -21,6 +22,7 @@ type CatalogSpec struct {
 
 // Catalog is the runtime-facing bundle used by controller components.
 type Catalog struct {
+	Git          *domain.GitSource
 	Accounts     []domain.Account
 	Environments []domain.Environment
 	Deployments  []domain.Deployment
@@ -29,6 +31,7 @@ type Catalog struct {
 // Compile validates a spec catalog and converts it into runtime domain objects.
 func Compile(input CatalogSpec) (Catalog, error) {
 	compiled := Catalog{
+		Git:          input.Git.Clone(),
 		Accounts:     make([]domain.Account, 0, len(input.Accounts)),
 		Environments: make([]domain.Environment, 0, len(input.Environments)),
 		Deployments:  make([]domain.Deployment, 0, len(input.Deployments)),

@@ -12320,6 +12320,7 @@
               ['Created at', metricValue(activePlanRecord.createdAt)],
               ['Source route', metricValue(activePlanRecord.source?.route)],
               ['Source fingerprint', metricValue(activePlanRecord.source?.fingerprint)],
+              ...(activePlanRecord.source?.git ? [['Git revision', `${activePlanRecord.source.git.ref} · ${activePlanRecord.source.git.revision.slice(0, 12)}`]] : []),
               ['Source runtime', [metricValue(activePlanRecord.source?.runtimeSource), metricValue(activePlanRecord.source?.runtimeTimestamp)].join(' · ')],
               ['Source generations', `desired ${generationValue(activePlanRecord.source?.desiredGeneration)} · observed ${generationValue(activePlanRecord.source?.observedGeneration)}`],
             ].forEach(([label, value]) => {
@@ -12408,6 +12409,7 @@
               ['Source plan status', metricValue(activeApplyRecord.source?.planStatus)],
               ['Source plan created', metricValue(activeApplyRecord.source?.planCreatedAt)],
               ['Source fingerprint', metricValue(activeApplyRecord.source?.fingerprint)],
+              ...(activeApplyRecord.source?.git ? [['Git revision', `${activeApplyRecord.source.git.ref} · ${activeApplyRecord.source.git.revision.slice(0, 12)}`]] : []),
             ].forEach(([label, value]) => {
               recordGrid.append(createMetric(label, value));
             });

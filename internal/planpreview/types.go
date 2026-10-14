@@ -52,19 +52,20 @@ type Approval struct {
 
 // SourceContext captures the deployment-detail inputs used to derive a preview.
 type SourceContext struct {
-	DeploymentName     string        `json:"deploymentName"`
-	Route              string        `json:"route"`
-	Fingerprint        string        `json:"fingerprint"`
-	TargetType         string        `json:"targetType,omitempty"`
-	Strategy           string        `json:"strategy,omitempty"`
-	ExecutionMode      string        `json:"executionMode,omitempty"`
-	RuntimeTimestamp   string        `json:"runtimeTimestamp,omitempty"`
-	RuntimeSource      string        `json:"runtimeSource,omitempty"`
-	CurrentStep        string        `json:"currentStep,omitempty"`
-	DesiredGeneration  int64         `json:"desiredGeneration,omitempty"`
-	ObservedGeneration int64         `json:"observedGeneration,omitempty"`
-	Sync               domain.Sync   `json:"sync"`
-	Health             domain.Health `json:"health"`
+	Git                *domain.GitSource `json:"git,omitempty"`
+	DeploymentName     string            `json:"deploymentName"`
+	Route              string            `json:"route"`
+	Fingerprint        string            `json:"fingerprint"`
+	TargetType         string            `json:"targetType,omitempty"`
+	Strategy           string            `json:"strategy,omitempty"`
+	ExecutionMode      string            `json:"executionMode,omitempty"`
+	RuntimeTimestamp   string            `json:"runtimeTimestamp,omitempty"`
+	RuntimeSource      string            `json:"runtimeSource,omitempty"`
+	CurrentStep        string            `json:"currentStep,omitempty"`
+	DesiredGeneration  int64             `json:"desiredGeneration,omitempty"`
+	ObservedGeneration int64             `json:"observedGeneration,omitempty"`
+	Sync               domain.Sync       `json:"sync"`
+	Health             domain.Health     `json:"health"`
 }
 
 // Record is an immutable, deployment-scoped plan preview snapshot.

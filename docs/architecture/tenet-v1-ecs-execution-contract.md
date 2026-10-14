@@ -139,8 +139,8 @@ CodeDeploy operations are rejected before mutation.
 
 ### Enabling reviewed Rolling execution
 
-Use a filesystem desired-state checkout, a persistent local disk for the plan
-and Apply files, a valid `rbac/policy.yaml` (or JSON) policy, and either managed
+Use a filesystem desired-state checkout or configured GitHub repository/ref, a
+persistent local disk for the plan and Apply files, a valid `rbac/policy.yaml` (or JSON) policy, and either managed
 login or an explicitly trusted authenticating front door. The live startup gate
 requires both flags:
 
@@ -190,7 +190,15 @@ Simulation is additional evidence; AWS still authorizes every actual API call.
 See [IAM simulation](https://docs.aws.amazon.com/IAM/latest/APIReference/API_SimulatePrincipalPolicy.html)
 and [ECS action scopes](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html).
 
-GitHub-backed Apply and automatic Git reconciliation remain tracked by #1800.
+GitHub-backed live execution requires `TENET_CATALOG_GITHUB_REF` and reads all
+manifests and repository RBAC from one resolved immutable commit SHA. The branch
+head is re-resolved at each gate; only immutable commit content is cached. New
+policy revocations are therefore visible without a branch TTL cache, and failed
+loads never fall back to an older cached commit. Plans/Applies preserve the
+repository/ref/path/revision, and the commit participates in the reviewed source
+fingerprint. A moving branch cannot mix account, environment, deployment or RBAC
+files from different revisions. Explicit manual approval is still required;
+automatic Git reconciliation remains tracked by #1800.
 No real AWS mutation is required for local/unit/smoke tests.
 
 A cooperating executor holds OS execution locks for both the deployment name and

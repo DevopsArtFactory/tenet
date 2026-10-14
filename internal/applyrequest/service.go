@@ -92,6 +92,7 @@ func (s Service) create(ctx context.Context, planID, retryOf string) (CreateResu
 		Details:        s.initialDetails(),
 		Operations:     deriveOperations(plan, s.initialOperationStatus()),
 		Source: SourceContext{
+			Git:           plan.Source.Git.Clone(),
 			PlanID:        plan.ID,
 			Route:         "/v1/plans/" + plan.ID,
 			PlanStatus:    string(plan.Status),
