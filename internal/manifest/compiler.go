@@ -123,6 +123,7 @@ func Compile(input CatalogSpec) (Catalog, error) {
 			min, max := spec.ECSRollingPercentages(deployment)
 			nativeStrategy := map[spec.StrategyType]string{spec.StrategyTypeRolling: "ROLLING", spec.StrategyTypeBlueGreen: "BLUE_GREEN", spec.StrategyTypeCanary: "CANARY", spec.StrategyTypeLinear: "LINEAR"}[strategy]
 			compiledDeployment.ECS = &domain.ECSDeploymentIntent{
+				Advanced:              e.Advanced.Intent(),
 				RollbackOnFailure:     e.RollbackOnFailure,
 				AWSAccountID:          account.AWSAccountID,
 				Region:                environment.Region,

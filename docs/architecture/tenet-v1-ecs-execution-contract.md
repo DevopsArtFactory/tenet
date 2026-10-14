@@ -68,10 +68,11 @@ behind a mutable tag; use a digest for reproducible reviewed content.
 | `linear` | `LINEAR` | `ecsNative` |
 
 Adding the explicit `ecs` block selects native ECS intent. Native non-rolling
-strategies are never implicitly mapped to CodeDeploy. Their traffic settings,
-alarms/hooks, routing prerequisites and execution support are tracked in
-[#1801](https://github.com/DevopsArtFactory/tenet/issues/1801); recording their
-strategy intent here does not implement or authorize a traffic shift.
+strategies are never implicitly mapped to CodeDeploy. Optional reviewed
+[advanced traffic inputs](ecs-native-advanced-inputs.md) bind ALB routing,
+Canary/Linear percentages, bake times, alarms and Lambda hooks. Live execution,
+monitoring and rollback remain tracked in [#1801](https://github.com/DevopsArtFactory/tenet/issues/1801);
+recording strategy/configuration intent does not authorize a traffic shift.
 
 Manifests without the block retain their legacy read-only interpretation:
 `ecsRolling` for Rolling and `ecsCodeDeploy` for the other ECS strategies. Existing

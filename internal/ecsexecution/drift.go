@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
@@ -34,7 +35,7 @@ func (p ManagedDrift) Observe(ctx context.Context, intent domain.ECSDeploymentIn
 	if p.ClientFor == nil || p.CheckCapabilities == nil || se != nil || ce != nil || pe != nil || service.Service != "ecs" || !strings.HasPrefix(service.Resource, "service/") || cluster.Service != "ecs" || !strings.HasPrefix(cluster.Resource, "cluster/") || service.AccountID != intent.AWSAccountID || cluster.AccountID != intent.AWSAccountID || service.Region != intent.Region || cluster.Region != intent.Region || service.Partition != cluster.Partition || principal.Partition != service.Partition || principal.Service != "iam" || !strings.HasPrefix(principal.Resource, "role/") || principal.AccountID != intent.AWSAccountID || !role.Configured || !role.Ready || !role.CheckedWithAWS || role.AWSAccountID != intent.AWSAccountID || role.Region != intent.Region || intent.DeploymentController != "ECS" || intent.DeploymentStrategy != "ROLLING" {
 		return false, "", fmt.Errorf("managed drift requires verified Rolling service placement and deployer role")
 	}
-	if verified.Status != applyrequest.StatusSucceeded || verified.ECSRuntime == nil || verified.ECSRuntime.State != "converged" || len(verified.Operations) != 3 || verified.Operations[0].ECS == nil || *verified.Operations[0].ECS != intent || verified.Operations[0].ECSCheckpoint == nil {
+	if verified.Status != applyrequest.StatusSucceeded || verified.ECSRuntime == nil || verified.ECSRuntime.State != "converged" || len(verified.Operations) != 3 || verified.Operations[0].ECS == nil || !reflect.DeepEqual(verified.Operations[0].ECS, &intent) || verified.Operations[0].ECSCheckpoint == nil {
 		return false, "", fmt.Errorf("managed drift requires the last verified reviewed intent")
 	}
 	target := verified.Operations[0].ECSCheckpoint.Result.TaskDefinitionARN

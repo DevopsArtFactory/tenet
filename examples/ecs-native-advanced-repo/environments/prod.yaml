@@ -1,0 +1,3 @@
+name: prod
+accountRef: production
+region: ap-northeast-2

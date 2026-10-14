@@ -67,6 +67,7 @@ Use `make smoke-docker` when changing the Compose stack or its runtime behavior.
 
 - [ECS Git reconciliation](docs/runbooks/ecs-git-reconciliation.md) — manual plans, scoped automatic sync, drift and operational boundaries.
 - [ECS Rolling recovery](docs/runbooks/ecs-rolling-recovery.md) — explicit/approved automatic rollback, failed-intent holds, and retries.
+- [Native advanced traffic inputs](docs/architecture/ecs-native-advanced-inputs.md) — reviewed ALB, Canary/Linear, bake, alarm and Lambda-hook settings; execution still in progress.
 - [ECS native execution input contract](docs/architecture/tenet-v1-ecs-execution-contract.md) — explicit targets, pinned task definitions, native strategies, and reviewed plan inputs.
 
 | Guide | Covers |
