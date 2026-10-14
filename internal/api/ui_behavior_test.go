@@ -15790,3 +15790,25 @@ syncApplicationsPaginationParams(params);
 if (params.has('appPage') || params.has('appPageSize') || params.get('q') !== 'payments') throw new Error('default pagination must remove only its own query parameters');
 `)
 }
+
+func TestEmbeddedUIECSRuntimeProgressUsesVerifiedCountsAndPreservesZero(t *testing.T) {
+	script := embeddedUIScriptForTest(t)
+	start := strings.Index(script, "const ecsRuntimeProgressText =")
+	if start < 0 {
+		t.Fatal("missing ECS runtime formatter")
+	}
+	end := strings.Index(script[start:], "const ecsRuntimeRows =")
+	if end < 0 {
+		t.Fatal("missing ECS runtime row boundary")
+	}
+	formatter := script[start : start+end]
+	runNodeHarness(t, `const metricValue = (value) => value ?? '—';
+`+formatter+`
+const assert = require('node:assert/strict');
+assert.equal(ecsRuntimeProgressText({state:'converged',tasksObserved:true,runningCount:0,desiredCount:0,healthyCount:0,pendingCount:0}), '0/0 running · 0 healthy · 0 pending');
+assert.equal(ecsRuntimeProgressText({state:'progressing',tasksObserved:true,runningCount:1,desiredCount:2,healthyCount:1,pendingCount:1}), '1/2 running · 1 healthy · 1 pending');
+assert.equal(ecsRuntimeProgressText({state:'unavailable',tasksObserved:false,runningCount:2,desiredCount:2,healthyCount:2,pendingCount:0}), 'Observation unavailable');
+assert.equal(ecsRuntimeProgressText({state:'failed',tasksObserved:false}), 'Rollout failed');
+assert.equal(ecsRuntimeProgressText({state:'progressing',tasksObserved:false}), 'Awaiting deployment evidence');
+`)
+}

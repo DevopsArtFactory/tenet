@@ -10375,7 +10375,7 @@
       };
       const createApplyTransitionTimelineSection = (record) => {
         const section = createDetailSection('Apply transition timeline');
-        const intro = createElement('div', 'detail-state', 'Immutable apply lifecycle transitions are read-only executor/audit evidence. They explain how this stored apply moved over time without implying live AWS mutation.');
+        const intro = createElement('div', 'detail-state', hasNativeECSExecution(record) ? 'Persisted executor transitions and AWS observation evidence for this Apply.' : 'Immutable apply lifecycle transitions are read-only executor/audit evidence. They explain how this stored apply moved over time without implying live AWS mutation.');
         section.append(intro);
         const transitions = applyTransitionTimeline(record);
         if (!transitions.length) {
@@ -10422,6 +10422,28 @@
         ];
         return candidates.find((candidate) => candidate && typeof candidate === 'object') || null;
       };
+      const hasNativeECSExecution = (record) => Array.isArray(record?.operations) && record.operations.some((operation) => Boolean(operation?.ecsCheckpoint));
+      const ecsRuntimeProgressText = (runtime) => {
+        if (!runtime) return 'No ECS observation';
+        if (!runtime.tasksObserved) {
+          if (runtime.state === 'unavailable') return 'Observation unavailable';
+          if (runtime.state === 'failed') return 'Rollout failed';
+          return 'Awaiting deployment evidence';
+        }
+        return `${metricValue(runtime.runningCount)}/${metricValue(runtime.desiredCount)} running · ${metricValue(runtime.healthyCount)} healthy · ${metricValue(runtime.pendingCount)} pending${runtime.previousCount > 0 ? ` · ${metricValue(runtime.previousCount)} previous` : ''}`;
+      };
+      const ecsRuntimeRows = (record) => {
+        const runtime = record?.ecsRuntime;
+        if (!runtime) return [];
+        return [
+          ['ECS rollout', ecsRuntimeProgressText(runtime), 'summary'],
+          ['Rollout evidence', runtime.summary || 'Awaiting AWS evidence'],
+          ['Observation reason', String(runtime.reason || 'unknown').replaceAll('_', ' ')],
+          ['Last AWS observation', runtime.observedAt || '—'],
+          ['Rollout deadline', runtime.deadlineAt || '—'],
+          ['ECS deployment', runtime.deploymentId || runtime.serviceDeploymentArn || '—'],
+        ];
+      };
       const applyExecutionReadinessState = (record, readinessOverride = null) => {
         const readiness = applyExecutionReadinessSource(record, readinessOverride);
         const raw = String(readiness?.state || readiness?.status || readiness?.result || '').toLowerCase();
@@ -10435,6 +10457,11 @@
         return 'not-reported';
       };
       const applyExecutionReadinessLabel = (record, readinessOverride = null) => {
+        if (hasNativeECSExecution(record)) {
+          if (record.status === 'succeeded') return record.ecsRuntime?.state === 'converged' ? 'Deployment verified' : 'Execution completed';
+          if (record.status === 'failed') return 'Execution failed';
+          return 'ECS execution active';
+        }
         switch (applyExecutionReadinessState(record, readinessOverride)) {
           case 'ready':
             return 'Preflight ready';
@@ -10808,9 +10835,10 @@
           ['Operation progress', applyOperationProgressSummary(record.operations || []), 'summary'],
           ...applyNextSafeActionRows(record),
           ...queuedApplyClaimRows(record),
+          ...ecsRuntimeRows(record),
           ...applyExecutionReadinessRows(record),
         ].forEach(([label, value, className]) => {
-          const target = ['Created at', 'Operation progress', 'Next safe action', 'Execution readiness'].includes(label) ? metrics : evidence;
+          const target = ['Created at', 'Operation progress', 'Next safe action', 'Execution readiness', 'ECS rollout'].includes(label) ? metrics : evidence;
           target.append(createMetric(label, value, className || ''));
         });
         top.append(metrics);
@@ -10955,6 +10983,7 @@
           phase: textOrDash(operation?.phase),
           target: textOrDash(operation?.target),
           summary: textOrDash(operation?.summary),
+          runtime: operation?.ecsCheckpoint?.result?.observation || null,
           lifecycleStatus: normalizedStatus,
           lifecycleLabel: applyRecordStatusLabel(normalizedStatus),
         };
@@ -11235,7 +11264,16 @@
             operationLinks.append(createNavLink(shareURLForOperation(operation), 'Share operation', '_self'));
             operationCell.append(operationLinks);
           }
-          const noteCell = createElement('td', '', operation.summary);
+          const noteCell = createElement('td', '', operation.runtime ? '' : operation.summary);
+          if (operation.runtime) {
+            noteCell.append(createElement('strong', '', ecsRuntimeProgressText(operation.runtime)));
+            if (['failed', 'unavailable'].includes(operation.runtime.state) || operation.runtime.reason === 'task_startup_error') {
+              noteCell.append(createElement('span', 'detail-condition-meta', operation.runtime.summary || operation.runtime.reason));
+            }
+            const reviewed = createElement('p', '', operation.summary);
+            reviewed.dataset.disclosureScope = operation.id || operation.anchorID || '';
+            noteCell.append(createDisclosure('Reviewed intent', reviewed));
+          }
           if (operation.links?.length) {
             const handoffLinks = createElement('div', 'row-links');
             operation.links.forEach(([label, href, target]) => {
@@ -12354,8 +12392,10 @@
             ].forEach(([label, value, className]) => {
               lifecycleSummaryGrid.append(createMetric(label, value, className || ''));
             });
-            applyExecutionReadinessRows(activeApplyRecord, activeApplyReadiness).forEach(([label, value, className]) => {
-              readinessGrid.append(createMetric(label, value, className || ''));
+            [...ecsRuntimeRows(activeApplyRecord), ...applyExecutionReadinessRows(activeApplyRecord, activeApplyReadiness)].forEach(([label, value, className]) => {
+              const metric = createMetric(label, value, className || '');
+              if (label === 'ECS rollout') markPoliteStatusNode(metric);
+              readinessGrid.append(metric);
             });
             if (hasApplyLifecycleMetadata(activeApplyRecord)) {
               [
@@ -12371,7 +12411,7 @@
             }
             if (hasApplyClaimMetadata(activeApplyRecord)) {
               [
-                ['Executor claim', 'Claimed by a local-safe executor worker; no live AWS mutation is implied by this handoff.', 'summary'],
+                ['Executor claim', hasNativeECSExecution(activeApplyRecord) ? 'Owned by the ECS executor; inspect checkpoints and runtime evidence for the outcome.' : 'Claimed by a local-safe executor worker; no live AWS mutation is implied by this handoff.', 'summary'],
                 ['Executor worker', applyClaimWorkerValue(activeApplyRecord)],
                 ['Claimed at', applyClaimTimestampValue(activeApplyRecord)],
                 ...applyClaimFreshnessRows(activeApplyRecord),
@@ -12420,7 +12460,7 @@
               () => applyState?.onReloadPreflight?.(activeApplyRecord.id)?.catch(() => {}),
             );
             preflightActions.append(readinessRefreshButton);
-            const readinessIntro = createElement('div', 'detail-state', 'Execution-readiness copy prefers the standalone non-mutating preflight read route when it is loaded, then falls back to immutable apply-record evidence. This keeps local-safe handoffs clear without implying live AWS mutation.');
+            const readinessIntro = createElement('div', 'detail-state', hasNativeECSExecution(activeApplyRecord) ? 'Read-only executor evidence. Runtime observations and checkpoints describe the outcome; this panel does not authorize another AWS call.' : 'Execution-readiness copy prefers the standalone non-mutating preflight read route when it is loaded, then falls back to immutable apply-record evidence. This keeps local-safe handoffs clear without implying live AWS mutation.');
             const preflightState = createElement('div', applyPreflightStateClassName(applyState) ? 'detail-state error' : 'detail-state', applyPreflightStateMessage(applyState));
             const readinessDetailsGrid = createElement('div', 'detail-grid');
             applyExecutionReadinessRows(activeApplyRecord, activeApplyReadiness).forEach(([label, value, className]) => {

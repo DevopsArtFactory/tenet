@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -99,7 +100,14 @@ func (h RollingService) observe(ctx context.Context, request applyrequest.ECSOpe
 	if err := compatibleServiceTask(service, definition); err != nil {
 		return nil, nil, nil, err
 	}
-	if !serviceMatches(service, target, request) {
+	matchesImage := false
+	for _, container := range definition.ContainerDefinitions {
+		if aws.ToString(container.Name) == e.ContainerName && aws.ToString(container.Image) == e.Image {
+			matchesImage = true
+		}
+	}
+	targetIsFinal := len(request.PriorResults) > 0 || (matchesImage && definition.Status == types.TaskDefinitionStatusActive)
+	if !targetIsFinal || !serviceMatches(service, target, request) {
 		if service.PendingCount > 0 {
 			return nil, nil, nil, fmt.Errorf("service has pending work from a conflicting rollout")
 		}
@@ -245,6 +253,7 @@ func (h RollingService) Execute(ctx context.Context, request applyrequest.ECSOpe
 	if serviceMatches(service, target, request) {
 		result := request.PreparedResult.Clone()
 		result.ServiceDeploymentID = deploymentForTarget(service, target)
+		result.ServiceDeploymentCreatedAt = deploymentCreatedForTarget(service, target)
 		return result, nil
 	}
 	if !reflect.DeepEqual(request.PreparedResult.PreviousService, serviceSnapshot(service)) {
@@ -270,6 +279,7 @@ func (h RollingService) Execute(ctx context.Context, request applyrequest.ECSOpe
 	result := request.PreparedResult.Clone()
 	result.TaskDefinitionARN = target
 	result.ServiceDeploymentID = deploymentForTarget(output.Service, target)
+	result.ServiceDeploymentCreatedAt = deploymentCreatedForTarget(output.Service, target)
 	result.AWSRequestID, _ = awsmiddleware.GetRequestIDMetadata(output.ResultMetadata)
 	return result, nil
 }
@@ -285,6 +295,7 @@ func (h RollingService) Reconcile(ctx context.Context, request applyrequest.ECSO
 	if serviceMatches(service, request.PriorResults[0].TaskDefinitionARN, request) {
 		result := request.PreparedResult.Clone()
 		result.ServiceDeploymentID = deploymentForTarget(service, request.PriorResults[0].TaskDefinitionARN)
+		result.ServiceDeploymentCreatedAt = deploymentCreatedForTarget(service, request.PriorResults[0].TaskDefinitionARN)
 		return applyrequest.ECSReconciliation{Complete: true, Result: result}, nil
 	}
 	for _, deployment := range service.Deployments {
@@ -300,6 +311,15 @@ func deploymentForTarget(service *types.Service, target string) string {
 	for _, deployment := range service.Deployments {
 		if aws.ToString(deployment.Status) == "PRIMARY" && aws.ToString(deployment.TaskDefinition) == target {
 			return aws.ToString(deployment.Id)
+		}
+	}
+	return ""
+}
+
+func deploymentCreatedForTarget(service *types.Service, target string) string {
+	for _, deployment := range service.Deployments {
+		if aws.ToString(deployment.Status) == "PRIMARY" && aws.ToString(deployment.TaskDefinition) == target && deployment.CreatedAt != nil {
+			return deployment.CreatedAt.UTC().Format(time.RFC3339Nano)
 		}
 	}
 	return ""
