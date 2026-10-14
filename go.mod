@@ -11,6 +11,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.58.2
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.257.0
 	github.com/aws/aws-sdk-go-v2/service/ecs v1.66.0
+	github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2 v1.51.3
 	github.com/aws/aws-sdk-go-v2/service/sts v1.38.6
 	github.com/redis/go-redis/v9 v9.18.0
 	gopkg.in/yaml.v3 v3.0.1

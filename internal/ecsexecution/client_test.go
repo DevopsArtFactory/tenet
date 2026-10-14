@@ -47,6 +47,14 @@ func TestDeployerClientAssumesConfiguredRoleInSameAccount(t *testing.T) {
 	if err != nil || creds.AccessKeyID != "assumed-access-key" || calls.Load() != 1 {
 		t.Fatalf("client reused source credentials instead of assuming role: %+v %v", creds, err)
 	}
+	albClient, err := DeployerALBClient(context.Background(), request.Role)
+	if err != nil {
+		t.Fatal(err)
+	}
+	albCreds, err := albClient.Options().Credentials.Retrieve(context.Background())
+	if err != nil || albCreds.AccessKeyID != "assumed-access-key" || calls.Load() != 2 {
+		t.Fatal("ALB preflight reused source credentials instead of assuming deployer role")
+	}
 }
 
 type httpRegistration struct {
