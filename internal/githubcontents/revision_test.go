@@ -23,7 +23,7 @@ func TestResolveCommitUsesSHAResponseAndPreservesEnterpriseBasePath(t *testing.T
 	}
 }
 func TestResolveCommitRejectsMutableOrMalformedRevisionEvidence(t *testing.T) {
-	for _, body := range []string{"main", "abc123", `{"sha":"` + strings.Repeat("a", 40) + `"}`, strings.Repeat("a", 41)} {
+	for _, body := range []string{"main", "abc123", `{"sha":"` + strings.Repeat("a", 40) + `"}`, strings.Repeat("a", 41), strings.Repeat("a", 40) + strings.Repeat(" ", 200) + "unread-garbage"} {
 		client := testClient(t, func(*http.Request) (*http.Response, error) {
 			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(body))}, nil
 		})

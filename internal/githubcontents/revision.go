@@ -68,6 +68,9 @@ func (c Client) ResolveCommit(ctx context.Context, req Request) (string, error) 
 	if err != nil {
 		return "", err
 	}
+	if len(body) > 128 {
+		return "", &Error{Code: ErrorCodeInvalidResponse, Message: "GitHub revision response exceeded the SHA-only response limit"}
+	}
 	revision := strings.TrimSpace(string(body))
 	if !commitSHA.MatchString(revision) {
 		return "", &Error{Code: ErrorCodeInvalidResponse, Message: "GitHub revision response did not contain an immutable commit SHA"}
