@@ -1,5 +1,11 @@
 # Tenet operator reference
 
+> Execution mode: the local-safe behavior below applies when
+> `TENET_AWS_ENABLE_ECS_EXECUTION` is unset/false. Explicitly enabled native ECS
+> Rolling execution can change AWS after trusted approval; see the
+> [ECS execution guide](tenet-v1-ecs-execution-contract.md#enabling-reviewed-rolling-execution).
+
+
 Detailed UI behavior, endpoint contracts, auth settings, and release checks live
 here so the [README](../../README.md) stays focused on getting started.
 For the full endpoint and read-model specification, see

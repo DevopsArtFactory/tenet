@@ -136,6 +136,11 @@ func (h RollingService) observe(ctx context.Context, request applyrequest.ECSOpe
 		return nil, nil, nil, err
 	}
 	checks = append(checks, roleChecks...)
+	for i := range checks {
+		if strings.HasPrefix(checks[i].Action, "ecs:") && checks[i].Action != "ecs:DescribeTaskDefinition" {
+			checks[i].Context = map[string]string{"ecs:cluster": e.ClusterARN}
+		}
+	}
 	if err := h.CheckCapabilities(ctx, request.Role, checks); err != nil {
 		return nil, nil, nil, err
 	}
@@ -269,6 +274,9 @@ func (h RollingService) Execute(ctx context.Context, request applyrequest.ECSOpe
 	}
 	config.MinimumHealthyPercent = aws.Int32(int32(request.Intent.MinimumHealthyPercent))
 	config.MaximumPercent = aws.Int32(int32(request.Intent.MaximumPercent))
+	if err := authorizeMutation(ctx, request); err != nil {
+		return applyrequest.ECSOperationResult{}, beforeMutationError(err)
+	}
 	output, err := client.UpdateService(ctx, &ecs.UpdateServiceInput{Cluster: aws.String(request.Intent.ClusterARN), Service: aws.String(request.Intent.ServiceARN), TaskDefinition: aws.String(target), DesiredCount: aws.Int32(int32(request.Intent.DesiredCount)), DeploymentConfiguration: &config}, func(options *ecs.Options) { options.Retryer = aws.NopRetryer{}; options.RetryMaxAttempts = 1 })
 	if err != nil {
 		return applyrequest.ECSOperationResult{}, ecsMutationError(err)

@@ -2,7 +2,7 @@
 
 Tenet is a repository-driven deployment control plane for multi-account AWS environments. It brings declared deployment intent, runtime status, rollout progress, and resource evidence into one operator UI for **EC2 and ECS**.
 
-**Status: early-stage, primarily read-only.** Tenet can inspect AWS resources, create deployment plans, and record apply requests. Live AWS deployment mutation is not implemented. Enabling apply advances local handoff metadata only; the current executor stops before changing AWS resources.
+**Status: early-stage.** Tenet can inspect AWS resources, create deployment plans, and execute explicitly approved **native ECS Rolling** updates behind a separate live-execution opt-in. The default local demo remains safe for inspection. Automatic Git reconciliation, explicit rollback, and advanced native traffic strategies are still in progress; see the [ECS execution guide](docs/architecture/tenet-v1-ecs-execution-contract.md#enabling-reviewed-rolling-execution).
 
 ## What it does
 

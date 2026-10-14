@@ -2,8 +2,8 @@
 
 Tenet accepts an optional `ecs` block on ECS deployment manifests. It binds a
 reviewed plan to an **existing** cluster/service and a **pinned base Task
-Definition revision**. This is an input/planning contract, not a live executor.
-Apply remains local-safe and stops before AWS mutation.
+Definition revision**. Native Rolling execution is available behind a separate,
+explicit opt-in. Default/local demo execution remains local-safe.
 
 See [the complete example repository](../../examples/ecs-native-repo/) and the
 [execution tracking issue](https://github.com/DevopsArtFactory/tenet/issues/1793).
@@ -49,11 +49,9 @@ mode, runtime resources and secret references from that revision. No secret
 values or environment-variable bodies are accepted in the execution contract.
 
 Compilation validates references and syntax without contacting AWS. Before any
-future registration/update, the executor must read the base revision and existing
+registration/update, the executor must read the base revision and existing
 service, confirm the container exists, validate inherited runtime/role/network
-settings and service compatibility, and check authorization. These checks are
-part of the subsequent executor/registration issues; a ready plan does not prove
-that they passed.
+settings and service compatibility, and check authorization. The executor repeats these checks; a ready plan does not prove that they passed.
 
 Digest-pinned images are preferred. Tag references remain accepted for
 compatibility, but the registration operation explicitly warns that their content
@@ -97,9 +95,9 @@ source fingerprints and stable operation/plan identities. Apply uses the existin
 source-fingerprint guard to reject stale reviewed intent. Native plans take
 precedence over old runtime CodeDeploy step metadata.
 
-This contract does not create clusters/services, build images, register Task
-Definitions, update ECS, or execute rollback. The current Apply executor boundary
-continues to prevent live AWS mutation, including when apply is enabled.
+This contract does not create clusters/services or build images. Explicitly
+enabled Rolling execution registers Task Definitions and updates existing
+services. Explicit/failure-triggered rollback remains tracked by #1799.
 
 ## Apply persistence before live execution
 
@@ -119,9 +117,8 @@ holding the store lock. Lock waits in context-aware methods are cancellable.
 This protects cooperating processes sharing one local filesystem. It does not
 provide distributed coordination across independent hosts or network filesystems.
 Other operating systems reject file-store writes until an equivalent locking
-implementation is provided. Per-deployment execution ownership and AWS response
-recovery remain follow-up work in #1795; file locking alone does not enable live
-AWS changes.
+implementation is provided. Per-deployment execution ownership and AWS response recovery are described below;
+file locking alone does not enable live AWS changes.
 
 ## Opt-in executor boundary
 
@@ -134,11 +131,66 @@ not authorize execution. The authorization provider must re-evaluate an
 **authenticated** operator's role and deployment/project/environment grants;
 `Record.Actor` or user-supplied actor headers are insufficient evidence.
 
-The API startup still installs no live ECS handlers. `TENET_AWS_ENABLE_APPLY`
-alone continues to use the existing local-safe path. Concrete registration, update and observation handlers are described below.
-Production startup still requires trusted authorization and executor wiring; the
-boundary and handlers are verified with injected fake clients. Advanced native strategies and legacy CodeDeploy operations are rejected
-before any handler mutation.
+The API installs the concrete registration, update and observation handlers only
+for the separately enabled native ECS executor. `TENET_AWS_ENABLE_APPLY=true`
+alone retains the local-safe stub. Advanced native strategies and legacy
+CodeDeploy operations are rejected before mutation.
+
+### Enabling reviewed Rolling execution
+
+Use a filesystem desired-state checkout, a persistent local disk for the plan
+and Apply files, a valid `rbac/policy.yaml` (or JSON) policy, and either managed
+login or an explicitly trusted authenticating front door. The live startup gate
+requires both flags:
+
+```bash
+TENET_AWS_ENABLE_APPLY=true
+TENET_AWS_ENABLE_ECS_EXECUTION=true
+```
+
+For a front door, also set `TENET_API_TRUST_AUTHENTICATED_HEADERS=true`; restrict
+API network access to that front door and strip incoming identity headers before
+setting verified claims. Managed login can instead supply authenticated session
+identities without trusting forwarded headers. Live mode always enforces
+identity, operator role, deployment read/write scope and repository policy,
+regardless of the optional enforcement flags used by the local demo.
+
+For example, bind the authenticated subject ID from your login provider to one
+concrete deployment:
+
+```yaml
+version: v1
+users:
+  - id: your-authenticated-subject-id
+    roles: [operator]
+    deployments: [worker]
+```
+
+A new Apply records a trusted `principal` separately from user-editable `actor`
+attribution. Its immutable ID binds that principal to the reviewed source plan;
+legacy IDs are unchanged when the field is absent. Historical local-safe records
+are never upgraded into trusted approvals. Create a fresh reviewed Apply after
+enabling live mode. Workers re-read repository policy and placement on each
+execution gate; removing the operator role or scope blocks subsequent execution.
+Persisted group claims represent the approval-time login, not a live IdP group
+membership query; revoke an outstanding approval through repository policy.
+
+The target account must configure a deployer role. Tenet always assumes it,
+including same-account calls. Its policy must allow the necessary ECS reads,
+registration/tagging, service update, scoped inherited `iam:PassRole`, and
+`iam:SimulatePrincipalPolicy` for itself. Permission checks use the concrete
+service/family/task-role targets, `ecs:cluster` context where relevant,
+`iam:PassedToService=ecs-tasks.amazonaws.com`, and create-time tagging context.
+`DescribeTaskDefinition` requires `Resource: "*"` under the ECS IAM action
+reference. Missing simulation results, denials, truncation or missing condition
+context block execution. Policies with additional request/resource-tag conditions
+may require more context than this gate currently supplies; they fail closed.
+Simulation is additional evidence; AWS still authorizes every actual API call.
+See [IAM simulation](https://docs.aws.amazon.com/IAM/latest/APIReference/API_SimulatePrincipalPolicy.html)
+and [ECS action scopes](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html).
+
+GitHub-backed Apply and automatic Git reconciliation remain tracked by #1800.
+No real AWS mutation is required for local/unit/smoke tests.
 
 A cooperating executor holds OS execution locks for both the deployment name and
 physical ECS service throughout a call. Atomic claim/state changes also prevent a
@@ -151,7 +203,13 @@ subsequent checkpoint or AWS writes. Independent hosts/network filesystems remai
 unsupported by this file-backed implementation.
 
 Each operation persists an `in_flight` checkpoint **before** invoking its handler,
-with a stable request identity derived from Apply/operation IDs. Only identifiers
+with a stable request identity derived from Apply/operation IDs. Concrete handlers must
+pass the executor ownership/authorization guard immediately before their SDK
+mutation, after discovery reads. The guard durably records mutation authorization.
+A new guarded checkpoint without that marker proves that no write was sent and
+can resume preparation without inferring absence from eventually consistent AWS
+reads. Older checkpoints remain conservative. A crash after authorization but
+before the call still requires reconciliation. Only identifiers
 are persisted in operation results. A crash after the call but before completion
 storage therefore resumes through a read-only `Reconcile`, never blind replay.
 Handlers must disable automatic mutation retries in their AWS client, use the
@@ -170,10 +228,13 @@ an executor checkpoint, and disabling the boundary preserves active checkpoints
 for later recovery.
 
 The full preview fingerprint is checked before the first operation. Afterward,
-the executor compares current desired ECS intent to the reviewed intent, allowing
+the executor compares current desired ECS intent before each new mutation, allowing
 runtime observations from its own rollout to change without invalidating the
 Apply. Every new mutation still requires current authorization and deployer-role
-readiness. Completed operation results can be finalized locally after restart
+readiness. Read-only recovery and rollout observation can finish the previously
+approved target after Git intent changes. If Git changes between registration
+and an unsent service update, further writes stop; automatic supersession of that
+Apply is part of #1800. Completed operation results can be finalized locally after restart
 without issuing another AWS call.
 
 A handler may also classify an explicit AWS response as a confirmed, retryable
@@ -187,8 +248,8 @@ remain `in_flight` and require reconciliation.
 `internal/ecsexecution.Registration` implements the registration operation using
 an injected client and a mandatory concrete capability check. Its default client
 factory always assumes the deployer role, including same-account execution.
-The handler's client interface contains no service-update API. Production startup
-still requires explicit wiring alongside update/convergence handlers.
+The handler's client interface contains no service-update API. The explicitly enabled API
+executor wires it alongside update/convergence handlers.
 
 The handler reads the exact pinned base revision and deep-copies registration
 fields, changes only the uniquely named container's image, and preserves other
@@ -256,9 +317,8 @@ absence. AWS offers no conditional UpdateService comparison, so an external writ
 can still race after the final observation. Cooperating Tenet applies are
 serialized; external deployment controllers must not manage the same service.
 
-This handler and its rollback snapshot are available for explicit executor wiring;
-production startup remains local-safe until the remaining observation and trusted
-authorization wiring is complete. No real AWS updates are used in tests.
+This handler and its rollback snapshot are wired only in the explicitly enabled
+native ECS executor. No real AWS updates are used in tests.
 
 Reference: [UpdateService](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_UpdateService.html).
 

@@ -1,5 +1,11 @@
 # Tenet v1 Local Runtime
 
+> Execution mode: the local-safe behavior below applies when
+> `TENET_AWS_ENABLE_ECS_EXECUTION` is unset/false. Explicitly enabled native ECS
+> Rolling execution can change AWS after trusted approval; see the
+> [ECS execution guide](tenet-v1-ecs-execution-contract.md#enabling-reviewed-rolling-execution).
+
+
 The local runtime packages the current mutation-safe control-plane foundation as a Docker-friendly stack.
 
 ## What is implemented in this slice

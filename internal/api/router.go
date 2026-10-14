@@ -89,6 +89,10 @@ func respondReadLookupError(w http.ResponseWriter, err error, unavailableMessage
 }
 
 func respondApplyCreateError(w http.ResponseWriter, err error) {
+	if errors.Is(err, applyrequest.ErrExecutionUnauthorized) {
+		respondForbiddenError(w, "forbidden: ECS execution approval requires an authenticated operator with deployment access")
+		return
+	}
 	if errors.Is(err, applyrequest.ErrPlanNotReady) || errors.Is(err, applyrequest.ErrSourceFingerprintConflict) {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
@@ -856,6 +860,7 @@ var (
 )
 
 type operatorContextResponse struct {
+	ECSExecutionEnabled   bool                                         `json:"ecsExecutionEnabled"`
 	TrustedHeaders        operatorContextTrustedHeaders                `json:"trustedHeaders"`
 	AuthRuntime           AuthRuntimeDiagnostic                        `json:"authRuntime"`
 	Enforcement           operatorContextEnforcement                   `json:"enforcement"`
@@ -1145,6 +1150,7 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 	summary := buildOperatorContextAccessSummary(r.Context(), options, deployments, scopes)
 	repositoryPolicy := buildOperatorContextRepositoryPolicy(r.Context(), options, identity, requestactor.AuthenticatedGroupsFromContext(r.Context()))
 	return operatorContextResponse{
+		ECSExecutionEnabled: options.ECSExecutionEnabled,
 		TrustedHeaders: operatorContextTrustedHeaders{
 			Enabled:                               options.TrustAuthenticatedHeaders,
 			AuthenticatedIdentityRequired:         options.RequireAuthenticatedIdentity,
@@ -2439,6 +2445,7 @@ func filterAuthorizedProjectEnvironmentOverviewDetail(detail catalog.ProjectEnvi
 
 // Options configures the API router.
 type Options struct {
+	ECSExecutionEnabled                  bool
 	BuildInfo                            buildinfo.Info
 	Logger                               *slog.Logger
 	RequestTimeout                       time.Duration

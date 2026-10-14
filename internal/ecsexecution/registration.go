@@ -170,6 +170,9 @@ func (r Registration) Execute(ctx context.Context, request applyrequest.ECSOpera
 		return *found, nil
 	}
 	input.Tags = append(input.Tags, types.Tag{Key: aws.String(intentTag), Value: aws.String(fingerprint)}, types.Tag{Key: aws.String(requestTag), Value: aws.String(request.RequestID)})
+	if err := authorizeMutation(ctx, request); err != nil {
+		return applyrequest.ECSOperationResult{}, beforeMutationError(err)
+	}
 	output, err := client.RegisterTaskDefinition(ctx, input, func(options *ecs.Options) { options.Retryer = aws.NopRetryer{}; options.RetryMaxAttempts = 1 })
 	if err != nil {
 		return applyrequest.ECSOperationResult{}, ecsMutationError(err)

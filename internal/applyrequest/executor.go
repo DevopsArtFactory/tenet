@@ -68,6 +68,9 @@ func (e Executor) RunOnce(ctx context.Context) error {
 }
 
 func (e Executor) advance(ctx context.Context, record Record) error {
+	if record.Principal != nil && (e.ECS == nil || !e.ECS.Enabled || !e.Service.EnableAWSApply) {
+		return nil
+	}
 	for _, op := range record.Operations {
 		if op.ECSCheckpoint != nil && (e.ECS == nil || !e.ECS.Enabled) {
 			return nil
