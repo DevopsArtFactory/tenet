@@ -134,8 +134,10 @@ type ECSExecution struct {
 	Handlers map[string]ECSOperationHandler
 	// Authorize must recheck a trusted authenticated subject's operator role and
 	// deployment scope. Record.Actor is attribution, and must not authorize work.
-	Authorize     func(context.Context, Record) error
-	CurrentIntent func(context.Context, string) (*domain.ECSDeploymentIntent, error)
+	Authorize func(context.Context, Record) error
+	// AuthorizeMutation can pause automation writes while read-only reconciliation finishes.
+	AuthorizeMutation func(context.Context, Record) error
+	CurrentIntent     func(context.Context, string) (*domain.ECSDeploymentIntent, error)
 }
 
 // ECSExecutionStore combines durable state changes and exclusive execution of
@@ -183,7 +185,12 @@ func (e Executor) advanceECS(ctx context.Context, snapshot Record) error {
 	}
 	for _, other := range records {
 		if ecsApplyConflicts(record, other) {
-			return nil
+			if record.Principal == nil || !ECSReplacementNeeded(record, other) {
+				return nil
+			}
+			if err := e.supersedeECSConflict(ctx, record, other); err != nil {
+				return e.ecsQueuedValidationError(ctx, record, err)
+			}
 		}
 	}
 
@@ -280,7 +287,7 @@ func (e Executor) validateECS(ctx context.Context, record Record, mutation bool)
 		return DeployerRoleReadiness{}, err
 	}
 	plan = planpreview.NormalizeOperationIDs(plan)
-	if plan.Status != planpreview.StatusReady || plan.ID != record.PlanID || plan.DeploymentName != record.DeploymentName || record.Source.Fingerprint != plan.Source.Fingerprint || !reflect.DeepEqual(record.Source.Git, plan.Source.Git) || record.Source.Fingerprint == "" || len(plan.Operations) != len(record.Operations) || len(record.Operations) != 3 {
+	if plan.Status != planpreview.StatusReady || plan.ID != record.PlanID || plan.DeploymentName != record.DeploymentName || !reviewedDriftLink(record, plan) || record.Source.Fingerprint != plan.Source.Fingerprint || !reflect.DeepEqual(record.Source.Git, plan.Source.Git) || record.Source.Fingerprint == "" || len(plan.Operations) != len(record.Operations) || len(record.Operations) != 3 {
 		return DeployerRoleReadiness{}, fmt.Errorf("apply does not match its reviewed native ECS plan")
 	}
 	if err := e.Service.validateECSRetry(ctx, record); err != nil {
@@ -321,6 +328,11 @@ func (e Executor) validateECS(ctx context.Context, record Record, mutation bool)
 		return DeployerRoleReadiness{}, err
 	}
 	if mutation {
+		if e.ECS.AuthorizeMutation != nil {
+			if err := e.ECS.AuthorizeMutation(ctx, record); err != nil {
+				return DeployerRoleReadiness{}, err
+			}
+		}
 		if record.Recovery == nil {
 			if err := e.Service.checkFailedECSIntent(ctx, record); err != nil {
 				return DeployerRoleReadiness{}, err

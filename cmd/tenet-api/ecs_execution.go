@@ -83,7 +83,10 @@ func newApplyService(source apiCatalogSource, options api.Options, planStorePath
 			if len(record.Operations) != 3 || record.Operations[0].ECS == nil || record.Operations[0].ECS.DeploymentController != "ECS" || record.Operations[0].ECS.DeploymentStrategy != "ROLLING" {
 				return nil, fmt.Errorf("%w: only reviewed native ECS Rolling plans support live execution", applyrequest.ErrPlanNotReady)
 			}
-			principal := &applyrequest.ExecutionPrincipal{Identity: requestactor.AuthenticatedIdentityFromContext(ctx), Groups: requestactor.AuthenticatedGroupsFromContext(ctx)}
+			principal := &applyrequest.ExecutionPrincipal{Automatic: applyrequest.AutomaticApprovalFromContext(ctx), Identity: requestactor.AuthenticatedIdentityFromContext(ctx), Groups: requestactor.AuthenticatedGroupsFromContext(ctx)}
+			if err := authorizeECSAutomaticApproval(principal); err != nil {
+				return nil, err
+			}
 			if err := authorizeECSPrincipal(ctx, options, principal, record.DeploymentName); err != nil {
 				return nil, err
 			}
@@ -93,10 +96,18 @@ func newApplyService(source apiCatalogSource, options api.Options, planStorePath
 	return service
 }
 
+func authorizeECSAutomaticApproval(principal *applyrequest.ExecutionPrincipal) error {
+	if principal != nil && principal.Automatic && (!ecsAutoSyncEnabled() || !ecsReconcileEnabled() || principal.Identity.ID != strings.TrimSpace(os.Getenv("TENET_ECS_AUTO_SYNC_SUBJECT"))) {
+		return applyrequest.ErrExecutionUnauthorized
+	}
+	return nil
+}
+
 func authorizeECSPrincipal(ctx context.Context, options api.Options, principal *applyrequest.ExecutionPrincipal, deployment string) error {
 	if principal == nil || !principal.Identity.Authenticated || (principal.Identity.ID == "" && principal.Identity.Email == "") || options.RepositoryPolicy == nil {
 		return applyrequest.ErrExecutionUnauthorized
 	}
+
 	policy, err := options.RepositoryPolicy(ctx, principal.Identity, principal.Groups)
 	if err != nil {
 		return fmt.Errorf("reload ECS execution RBAC policy: %w", err)
@@ -137,6 +148,9 @@ func newNativeECSExecutor(source apiCatalogSource, options api.Options, planStor
 	}
 	return applyrequest.Executor{Service: service, Logger: logger, PollInterval: time.Second, WorkerID: fmt.Sprintf("tenet-api-ecs-%d-%d", os.Getpid(), time.Now().UnixNano()), ECS: &applyrequest.ECSExecution{
 		Enabled: ecsExecutionEnabled(), Handlers: handlers,
+		AuthorizeMutation: func(_ context.Context, record applyrequest.Record) error {
+			return authorizeECSAutomaticApproval(record.Principal)
+		},
 		Authorize: func(ctx context.Context, record applyrequest.Record) error {
 			return authorizeECSPrincipal(ctx, options, record.Principal, record.DeploymentName)
 		},

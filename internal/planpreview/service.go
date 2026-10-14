@@ -55,6 +55,7 @@ func (s Service) Create(ctx context.Context, deploymentName string, req CreateRe
 		return CreateResult{}, err
 	}
 
+	source.ManagedDrift = req.ManagedDrift.Clone()
 	record := Record{
 		DeploymentName: detail.Name,
 		Status:         StatusReady,
@@ -124,6 +125,7 @@ func (s Service) Get(ctx context.Context, id string) (Record, error) {
 // without rewriting the immutable stored payload.
 func NormalizeOperationIDs(record Record) Record {
 	record.Source.Git = record.Source.Git.Clone()
+	record.Source.ManagedDrift = record.Source.ManagedDrift.Clone()
 	record.Operations = normalizeOperationIDs(record.Operations)
 	return record
 }

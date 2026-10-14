@@ -85,6 +85,9 @@ func main() {
 	if err := validateECSExecutionConfiguration(catalogSource); err != nil {
 		log.Fatal(err)
 	}
+	if err := validateECSReconcileConfiguration(catalogSource); err != nil {
+		log.Fatal(err)
+	}
 	requestTimeout, err := requestTimeoutFromEnv()
 	if err != nil {
 		log.Fatal(err)
@@ -124,6 +127,17 @@ func main() {
 		defer stopApplyExecutor()
 	}
 
+	if ecsReconcileEnabled() {
+		reconciler := newECSGitReconciler(catalogSource, options, store, planStorePath, applyStorePath, logger)
+		reconcileCtx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		logger.Info("starting ECS Git reconciliation", "automatic_sync", ecsAutoSyncEnabled(), "interval", reconciler.Interval)
+		go func() {
+			if err := reconciler.Run(reconcileCtx); err != nil && !errors.Is(err, context.Canceled) {
+				logger.Warn("ECS Git reconciler stopped", "error", err)
+			}
+		}()
+	}
 	if err := http.ListenAndServe(addr, api.NewRouter(options)); err != nil {
 		log.Fatal(err)
 	}
@@ -176,7 +190,7 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 		options.AuthorizeWithRepositoryPolicy = true
 	}
 	configureManagedLoginRuntime(&options)
-	if source.loadPolicy != nil && (source.kind == apiCatalogSourceFilesystem || ecsExecutionEnabled()) {
+	if source.loadPolicy != nil && (source.kind == apiCatalogSourceFilesystem || ecsSourcePinningEnabled()) {
 		options.RepositoryPolicy = func(ctx context.Context, identity requestactor.AuthenticatedIdentity, groups requestactor.AuthenticatedGroups) (rbacpolicy.Evaluation, error) {
 			policy, err := source.loadPolicy(ctx)
 			if err != nil {

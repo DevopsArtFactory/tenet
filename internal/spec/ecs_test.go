@@ -140,3 +140,17 @@ func TestAutomaticECSRecoveryRequiresExplicitRollingOptIn(t *testing.T) {
 		t.Fatal("advanced native strategy accepted Rolling recovery policy")
 	}
 }
+
+func TestECSSyncPolicyDefaultsAndValidation(t *testing.T) {
+	for _, tc := range []struct {
+		mode  string
+		heal  bool
+		valid bool
+	}{{"", false, true}, {"manual", false, true}, {"automatic", false, true}, {"automatic", true, true}, {"", true, false}, {"manual", true, false}, {"auto", false, false}} {
+		d := ecsContractSpec(t)
+		d.ECS.SyncPolicy = &ECSSyncPolicy{Mode: tc.mode, SelfHeal: tc.heal}
+		if err := ValidateDeployment(d); (err == nil) != tc.valid {
+			t.Fatalf("mode=%q selfHeal=%v: %v", tc.mode, tc.heal, err)
+		}
+	}
+}

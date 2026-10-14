@@ -123,14 +123,14 @@ func newGitHubCatalogSource(baseURL string, req githubcontents.Request) (apiCata
 			return snapshot.Policy, err
 		},
 		loadCatalog: func(ctx context.Context) (manifest.Catalog, error) {
-			if ecsExecutionEnabled() {
+			if ecsSourcePinningEnabled() {
 				snapshot, err := pinned(ctx)
 				return snapshot.Catalog, err
 			}
 			return catalog.LoadFromGitHub(ctx, client, req)
 		},
 		loadSpec: func(ctx context.Context) (manifest.CatalogSpec, error) {
-			if ecsExecutionEnabled() {
+			if ecsSourcePinningEnabled() {
 				snapshot, err := pinned(ctx)
 				return snapshot.Spec, err
 			}

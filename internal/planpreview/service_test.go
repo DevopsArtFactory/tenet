@@ -338,3 +338,13 @@ func TestStableRecordIDIgnoresAdditiveOperationIDs(t *testing.T) {
 		t.Fatalf("expected additive operation IDs not to churn plan ID, got %q and %q", withoutID, withID)
 	}
 }
+
+func TestClientCannotSupplyManagedDriftApprovalTrigger(t *testing.T) {
+	var request CreateRequest
+	if err := json.Unmarshal([]byte(`{"managedDrift":{"signature":"forged","lastVerifiedApplyId":"old"}}`), &request); err != nil {
+		t.Fatal(err)
+	}
+	if request.ManagedDrift != nil {
+		t.Fatal("client supplied internal managed-drift trigger")
+	}
+}

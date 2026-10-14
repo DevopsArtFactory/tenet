@@ -197,8 +197,8 @@ policy revocations are therefore visible without a branch TTL cache, and failed
 loads never fall back to an older cached commit. Plans/Applies preserve the
 repository/ref/path/revision, and the commit participates in the reviewed source
 fingerprint. A moving branch cannot mix account, environment, deployment or RBAC
-files from different revisions. Explicit manual approval is still required;
-automatic Git reconciliation remains tracked by #1800.
+files from different revisions. Manual approval is the default; the separate
+Git reconciler can approve work only with all automatic-sync gates enabled.
 No real AWS mutation is required for local/unit/smoke tests.
 
 A cooperating executor holds OS execution locks for both the deployment name and
@@ -242,8 +242,8 @@ runtime observations from its own rollout to change without invalidating the
 Apply. Every new mutation still requires current authorization and deployer-role
 readiness. Read-only recovery and rollout observation can finish the previously
 approved target after Git intent changes. If Git changes between registration
-and an unsent service update, further writes stop; automatic supersession of that
-Apply is part of #1800. Completed operation results can be finalized locally after restart
+and an unsent service update, further writes stop. A newly reviewed/current Apply
+can supersede it only with positive evidence that no service update was sent. Completed operation results can be finalized locally after restart
 without issuing another AWS call.
 
 A handler may also classify an explicit AWS response as a confirmed, retryable
@@ -412,3 +412,10 @@ A ready source plan must remain available across restarts for its approved Apply
 a concurrent plan write cannot silently remove it. These locks support cooperating
 Linux/macOS processes on one local filesystem; they do not provide distributed or
 network-filesystem coordination. Keep the stable `.lock` sidecars in place.
+
+## Git reconciliation
+
+The default-off polling reconciler creates plans from immutable GitHub commits.
+Automatic approvals require global, per-deployment and RBAC service-subject gates;
+self-heal is separately opt-in. Read [ECS Git reconciliation](../runbooks/ecs-git-reconciliation.md)
+for configuration, concurrency, failed-intent holds and drift semantics.

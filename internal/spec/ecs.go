@@ -12,14 +12,15 @@ import (
 
 // ECSDeploymentSpec binds reviewed intent to an existing ECS service and base revision.
 type ECSDeploymentSpec struct {
-	RollbackOnFailure     bool   `json:"rollbackOnFailure,omitempty" yaml:"rollbackOnFailure,omitempty"`
-	DeploymentController  string `json:"deploymentController" yaml:"deploymentController"`
-	ClusterARN            string `json:"clusterArn" yaml:"clusterArn"`
-	ServiceARN            string `json:"serviceArn" yaml:"serviceArn"`
-	BaseTaskDefinitionARN string `json:"baseTaskDefinitionArn" yaml:"baseTaskDefinitionArn"`
-	ContainerName         string `json:"containerName" yaml:"containerName"`
-	MinimumHealthyPercent *int   `json:"minimumHealthyPercent,omitempty" yaml:"minimumHealthyPercent,omitempty"`
-	MaximumPercent        *int   `json:"maximumPercent,omitempty" yaml:"maximumPercent,omitempty"`
+	SyncPolicy            *ECSSyncPolicy `json:"syncPolicy,omitempty" yaml:"syncPolicy,omitempty"`
+	RollbackOnFailure     bool           `json:"rollbackOnFailure,omitempty" yaml:"rollbackOnFailure,omitempty"`
+	DeploymentController  string         `json:"deploymentController" yaml:"deploymentController"`
+	ClusterARN            string         `json:"clusterArn" yaml:"clusterArn"`
+	ServiceARN            string         `json:"serviceArn" yaml:"serviceArn"`
+	BaseTaskDefinitionARN string         `json:"baseTaskDefinitionArn" yaml:"baseTaskDefinitionArn"`
+	ContainerName         string         `json:"containerName" yaml:"containerName"`
+	MinimumHealthyPercent *int           `json:"minimumHealthyPercent,omitempty" yaml:"minimumHealthyPercent,omitempty"`
+	MaximumPercent        *int           `json:"maximumPercent,omitempty" yaml:"maximumPercent,omitempty"`
 }
 
 var ecsClusterPattern = regexp.MustCompile(`^cluster/[a-zA-Z0-9_-]{1,255}$`)
@@ -38,6 +39,18 @@ func validateECSDeployment(d DeploymentSpec) error {
 	}
 	if e.RollbackOnFailure && d.NormalizedStrategy() != StrategyTypeRolling {
 		return fmt.Errorf("ecs.rollbackOnFailure currently supports Rolling only")
+	}
+	if e.SyncPolicy != nil {
+		mode := strings.TrimSpace(e.SyncPolicy.Mode)
+		if mode != "" && mode != "manual" && mode != "automatic" {
+			return fmt.Errorf("ecs.syncPolicy.mode must be manual or automatic")
+		}
+		if (mode == "automatic" || e.SyncPolicy.SelfHeal) && d.NormalizedStrategy() != StrategyTypeRolling {
+			return fmt.Errorf("automatic ECS sync currently supports Rolling only")
+		}
+		if e.SyncPolicy.SelfHeal && mode != "automatic" {
+			return fmt.Errorf("ecs.syncPolicy.selfHeal requires automatic mode")
+		}
 	}
 	if e.DeploymentController != "ECS" {
 		return fmt.Errorf("ecs.deploymentController must be ECS; legacy CodeDeploy manifests must omit ecs execution inputs")
@@ -120,4 +133,9 @@ func ValidateECSPlacement(d DeploymentSpec, accountID, region string) error {
 		return fmt.Errorf("ecs target must match the environment account and region")
 	}
 	return nil
+}
+
+type ECSSyncPolicy struct {
+	Mode     string `json:"mode,omitempty" yaml:"mode,omitempty"`
+	SelfHeal bool   `json:"selfHeal,omitempty" yaml:"selfHeal,omitempty"`
 }
