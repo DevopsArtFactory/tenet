@@ -126,7 +126,7 @@ func (p ALBReadiness) Observe(ctx context.Context, intent domain.ECSDeploymentIn
 	groups := map[string]elbtypes.TargetGroup{}
 	for _, group := range groupOutput.TargetGroups {
 		value := aws.ToString(group.TargetGroupArn)
-		if (value != routing.TargetGroupARN && value != routing.AlternateTargetGroupARN) || groups[value].TargetGroupArn != nil || aws.ToString(group.VpcId) != aws.ToString(observedLB.VpcId) || group.TargetType != elbtypes.TargetTypeEnumIp || aws.ToInt32(group.Port) != routing.ContainerPort || (group.Protocol != elbtypes.ProtocolEnumHttp && group.Protocol != elbtypes.ProtocolEnumHttps) {
+		if (value != routing.TargetGroupARN && value != routing.AlternateTargetGroupARN) || groups[value].TargetGroupArn != nil || aws.ToString(group.VpcId) != aws.ToString(observedLB.VpcId) || group.TargetType != elbtypes.TargetTypeEnumIp || group.IpAddressType == elbtypes.TargetGroupIpAddressTypeEnumIpv6 || aws.ToInt32(group.Port) != routing.ContainerPort || (group.Protocol != elbtypes.ProtocolEnumHttp && group.Protocol != elbtypes.ProtocolEnumHttps) {
 			return empty, fmt.Errorf("target groups require reviewed IP targets, HTTP/HTTPS port and ALB VPC")
 		}
 		for _, associated := range group.LoadBalancerArns {
