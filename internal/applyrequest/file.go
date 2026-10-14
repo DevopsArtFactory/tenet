@@ -2,6 +2,8 @@ package applyrequest
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -171,6 +173,13 @@ func (s FileStore) Save(ctx context.Context, record Record) error {
 			return nil
 		}
 	}
+	if record.Status == StatusRunning {
+		for _, other := range records {
+			if ecsApplyConflicts(record, other) {
+				return ErrExecutionBusy
+			}
+		}
+	}
 	return saveUnlocked(s.Path, append(records, record))
 }
 
@@ -203,6 +212,13 @@ func (s FileStore) Mutate(ctx context.Context, id string, change func(Record) (R
 		if updated.ID != existing.ID {
 			return Record{}, fmt.Errorf("apply mutation cannot change record identity")
 		}
+		if updated.Status == StatusRunning && existing.Status != StatusRunning {
+			for _, other := range records {
+				if ecsApplyConflicts(updated, other) {
+					return Record{}, ErrExecutionBusy
+				}
+			}
+		}
 		records[i] = updated
 		if err := saveUnlocked(s.Path, records); err != nil {
 			return Record{}, err
@@ -220,4 +236,30 @@ func (s FileStore) Claim(ctx context.Context, id string, _ ClaimRequest, claim f
 // Heartbeat atomically persists a validated refresh using the same lock as all writers.
 func (s FileStore) Heartbeat(ctx context.Context, id string, _ HeartbeatRequest, heartbeat func(Record) (Record, error)) (Record, error) {
 	return s.Mutate(ctx, id, heartbeat)
+}
+
+// LockExecution serializes physical services and deployment names, including
+// aliases that refer to the same service. Callers hold this across AWS calls.
+func (s FileStore) LockExecution(ctx context.Context, deployment, serviceARN string) (func(), error) {
+	if s.Path == "" || deployment == "" || serviceARN == "" {
+		return nil, fmt.Errorf("execution store, deployment and service ARN are required")
+	}
+	keys := []string{"deployment/" + deployment, "service/" + serviceARN}
+	sort.Strings(keys)
+	var unlocks []func()
+	release := func() {
+		for i := len(unlocks) - 1; i >= 0; i-- {
+			unlocks[i]()
+		}
+	}
+	for _, key := range keys {
+		hash := sha256.Sum256([]byte(key))
+		unlock, err := lockFile(ctx, s.Path+".execution-"+hex.EncodeToString(hash[:16]), false)
+		if err != nil {
+			release()
+			return nil, err
+		}
+		unlocks = append(unlocks, unlock)
+	}
+	return release, nil
 }

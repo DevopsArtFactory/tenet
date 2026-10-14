@@ -3,6 +3,7 @@ package applyrequest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"time"
@@ -13,8 +14,9 @@ const (
 	executorFailedError         = "apply executor handoff stopped before live AWS mutation because this backend slice is still local-safe"
 )
 
-// Executor advances queued immutable apply requests through the local-safe executor handoff path.
+// Executor advances local-safe requests or explicitly injected native ECS execution.
 type Executor struct {
+	ECS          *ECSExecution
 	Service      Service
 	PollInterval time.Duration
 	WorkerID     string
@@ -53,15 +55,28 @@ func (e Executor) RunOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	var scanErr error
 	for _, record := range records {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if err := e.advance(ctx, record); err != nil {
-			return err
+			scanErr = errors.Join(scanErr, fmt.Errorf("apply %s: %w", record.ID, err))
 		}
 	}
-	return nil
+	return scanErr
 }
 
 func (e Executor) advance(ctx context.Context, record Record) error {
+	for _, op := range record.Operations {
+		if op.ECSCheckpoint != nil && (e.ECS == nil || !e.ECS.Enabled) {
+			return nil
+		}
+	}
+	if e.ECS != nil && e.ECS.Enabled && len(record.Operations) > 0 && record.Operations[0].ECS != nil {
+		return e.advanceECS(ctx, record)
+	}
+
 	if record.Status == StatusQueued {
 		updated, err := e.Service.Claim(ctx, record.ID, ClaimRequest{WorkerID: e.workerID()})
 		if err != nil {

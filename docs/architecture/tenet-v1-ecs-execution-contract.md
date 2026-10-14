@@ -122,3 +122,57 @@ Other operating systems reject file-store writes until an equivalent locking
 implementation is provided. Per-deployment execution ownership and AWS response
 recovery remain follow-up work in #1795; file locking alone does not enable live
 AWS changes.
+
+## Opt-in executor boundary
+
+`applyrequest.Executor.ECS` is a separate, disabled-by-default execution boundary.
+It requires both `ECSExecution.Enabled` and `Service.EnableAWSApply`, an injected
+handler for each reviewed Rolling operation, a trusted authorization provider,
+current desired intent, the immutable plan, the initial source fingerprint and a
+verified target-account deployer role. Actor attribution and IAM simulation do
+not authorize execution. The authorization provider must re-evaluate an
+**authenticated** operator's role and deployment/project/environment grants;
+`Record.Actor` or user-supplied actor headers are insufficient evidence.
+
+The API startup still installs no live ECS handlers. `TENET_AWS_ENABLE_APPLY`
+alone continues to use the existing local-safe path. Concrete AWS clients,
+registration, service updates and convergence observation are supplied by the
+following implementation issues; this boundary is currently verified with fake
+handlers. Advanced native strategies and legacy CodeDeploy operations are rejected
+before any handler mutation.
+
+A cooperating executor holds OS execution locks for both the deployment name and
+physical ECS service throughout a call. Atomic claim/state changes also prevent a
+second Apply from becoming running against that deployment/service. A running
+Apply keeps that reservation between polls, including after its lease expires:
+lease expiry is not evidence that an AWS call failed. Claims and heartbeats use
+the existing five-minute lease; a replacement worker recovers expired ownership
+under the execution lock. Losing ownership cancels the call context and prevents
+subsequent checkpoint or AWS writes. Independent hosts/network filesystems remain
+unsupported by this file-backed implementation.
+
+Each operation persists an `in_flight` checkpoint **before** invoking its handler,
+with a stable request identity derived from Apply/operation IDs. Only identifiers
+are persisted in operation results. A crash after the call but before completion
+storage therefore resumes through a read-only `Reconcile`, never blind replay.
+Handlers must disable automatic mutation retries in their AWS client, use the
+assumed deployer role and perform read-only preflight of concrete inputs/actions,
+including scoped `iam:PassRole` for inherited roles. All handlers are preflighted
+before the first call; the next handler is checked again before execution.
+
+Confirmed permanent rejection fails the Apply. Other errors and unknown outcomes
+retain ownership and reconcile after 30 seconds. A retry requires **positive
+evidence of absence**, uses the same request identity, and is limited to three
+attempts. Unresolved outcomes remain running with their error/checkpoint visible;
+operators must restore authorization/desired intent or resolve the outstanding
+AWS operation rather than start an overlapping Apply. Completion and error
+transitions retain audit evidence. Manual lifecycle transitions cannot overwrite
+an executor checkpoint, and disabling the boundary preserves active checkpoints
+for later recovery.
+
+The full preview fingerprint is checked before the first operation. Afterward,
+the executor compares current desired ECS intent to the reviewed intent, allowing
+runtime observations from its own rollout to change without invalidating the
+Apply. Every new mutation still requires current authorization and deployer-role
+readiness. Completed operation results can be finalized locally after restart
+without issuing another AWS call.
