@@ -1,6 +1,8 @@
 package spec
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"math"
 	"regexp"
@@ -9,7 +11,41 @@ import (
 
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
+	"gopkg.in/yaml.v3"
 )
+
+// Strict decoding is scoped to the new advanced contract. Unsupported fields
+// cannot silently disappear from a reviewed traffic policy.
+type ECSAdvancedSpec domain.ECSAdvancedConfiguration
+
+func (s *ECSAdvancedSpec) UnmarshalJSON(content []byte) error {
+	type plain ECSAdvancedSpec
+	var value plain
+	decoder := json.NewDecoder(bytes.NewReader(content))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&value); err != nil {
+		return fmt.Errorf("decode ecs.advanced: %w", err)
+	}
+	*s = ECSAdvancedSpec(value)
+	return nil
+}
+func (s *ECSAdvancedSpec) UnmarshalYAML(node *yaml.Node) error {
+	var value any
+	if err := node.Decode(&value); err != nil {
+		return err
+	}
+	content, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("encode ecs.advanced YAML: %w", err)
+	}
+	return s.UnmarshalJSON(content)
+}
+func (s *ECSAdvancedSpec) Intent() *domain.ECSAdvancedConfiguration {
+	if s == nil {
+		return nil
+	}
+	return (*domain.ECSAdvancedConfiguration)(s).Clone()
+}
 
 var ecsALBTargetGroupPattern = regexp.MustCompile(`^targetgroup/[a-zA-Z0-9-]{1,32}/[a-fA-F0-9]{16}$`)
 var ecsALBRulePattern = regexp.MustCompile(`^listener-rule/app/[a-zA-Z0-9-]{1,32}/[a-fA-F0-9]{16}/[a-fA-F0-9]{16}/[a-fA-F0-9]{16}$`)

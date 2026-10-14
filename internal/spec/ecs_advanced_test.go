@@ -1,6 +1,8 @@
 package spec
 
 import (
+	"encoding/json"
+	"gopkg.in/yaml.v3"
 	"math"
 	"strings"
 	"testing"
@@ -16,7 +18,7 @@ func advancedContract(t *testing.T, strategy StrategyType) DeploymentSpec {
 	percent := 5.5
 	step := 12.5
 	prefix := "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:"
-	d.ECS.Advanced = &domain.ECSAdvancedConfiguration{BakeTimeInMinutes: &zero, Routing: domain.ECSALBRouting{TargetGroupARN: prefix + "targetgroup/worker-blue/1111111111111111", AlternateTargetGroupARN: prefix + "targetgroup/worker-green/2222222222222222", ProductionListenerRuleARN: prefix + "listener-rule/app/worker/3333333333333333/4444444444444444/5555555555555555", TestListenerRuleARN: prefix + "listener-rule/app/worker/3333333333333333/6666666666666666/7777777777777777", InfrastructureRoleARN: "arn:aws:iam::123456789012:role/tenet/ecs-routing", ContainerPort: 8080}, Alarms: &domain.ECSDeploymentAlarms{Enable: true, Rollback: true, Names: []string{"worker-health"}}, LifecycleHooks: []domain.ECSLambdaHook{{FunctionARN: "arn:aws:lambda:ap-northeast-2:123456789012:function:validate-worker:3", RoleARN: "arn:aws:iam::123456789012:role/ecs-hook", Stages: []string{"POST_SCALE_UP"}}}}
+	d.ECS.Advanced = &ECSAdvancedSpec{BakeTimeInMinutes: &zero, Routing: domain.ECSALBRouting{TargetGroupARN: prefix + "targetgroup/worker-blue/1111111111111111", AlternateTargetGroupARN: prefix + "targetgroup/worker-green/2222222222222222", ProductionListenerRuleARN: prefix + "listener-rule/app/worker/3333333333333333/4444444444444444/5555555555555555", TestListenerRuleARN: prefix + "listener-rule/app/worker/3333333333333333/6666666666666666/7777777777777777", InfrastructureRoleARN: "arn:aws:iam::123456789012:role/tenet/ecs-routing", ContainerPort: 8080}, Alarms: &domain.ECSDeploymentAlarms{Enable: true, Rollback: true, Names: []string{"worker-health"}}, LifecycleHooks: []domain.ECSLambdaHook{{FunctionARN: "arn:aws:lambda:ap-northeast-2:123456789012:function:validate-worker:3", RoleARN: "arn:aws:iam::123456789012:role/ecs-hook", Stages: []string{"POST_SCALE_UP"}}}}
 	if strategy == StrategyTypeCanary {
 		d.ECS.Advanced.Canary = &domain.ECSCanaryConfiguration{Percent: &percent, BakeTimeInMinutes: &zero}
 	}
@@ -120,5 +122,23 @@ func TestNativeAdvancedInputsRejectAmbiguousOrUnsupportedConfiguration(t *testin
 	*linear.ECS.Advanced.Linear.StepBakeTimeInMinutes = 60
 	if err := ValidateDeployment(linear); err == nil {
 		t.Fatal("multi-day Linear schedule accepted")
+	}
+}
+
+func TestAdvancedDecoderRejectsUnsupportedFieldsInJSONAndYAML(t *testing.T) {
+	for _, content := range []string{
+		`{"bakeTimeInMinutes":0,"unknownSetting":true}`,
+		`{"canary":{"percent":5,"bakeTimeInMinutes":0,"unknownSetting":true}}`,
+		`{"routing":{"type":"nlb"}}`,
+		`{"lifecycleHooks":[{"targetType":"PAUSE"}]}`,
+	} {
+		var d ECSAdvancedSpec
+		if err := json.Unmarshal([]byte(content), &d); err == nil {
+			t.Fatal("unsupported JSON traffic policy silently ignored")
+		}
+	}
+	var d ECSAdvancedSpec
+	if err := yaml.Unmarshal([]byte("bakeTimeInMinutes: 0\ncanary:\n  percent: 5\n  bakeTimeInMinutes: 0\n  unknownSetting: true\n"), &d); err == nil {
+		t.Fatal("unsupported YAML traffic policy silently ignored")
 	}
 }

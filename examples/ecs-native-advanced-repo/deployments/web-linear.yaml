@@ -1,0 +1,42 @@
+name: web-linear
+appRef: web-linear
+environmentRef: prod
+target:
+  type: ecs
+strategy:
+  type: linear
+image: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/web-linear@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+capacity:
+  desired: 2
+  min: 1
+  max: 4
+ecs:
+  deploymentController: ECS
+  clusterArn: arn:aws:ecs:ap-northeast-2:123456789012:cluster/production
+  serviceArn: arn:aws:ecs:ap-northeast-2:123456789012:service/production/web-linear
+  baseTaskDefinitionArn: arn:aws:ecs:ap-northeast-2:123456789012:task-definition/web-linear:17
+  containerName: web
+  syncPolicy:
+    mode: manual
+  advanced:
+    bakeTimeInMinutes: 5
+    linear:
+      stepPercent: 12.5
+      stepBakeTimeInMinutes: 5
+    routing:
+      targetGroupArn: arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/web-linear-blue/0000000000000003
+      alternateTargetGroupArn: arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/web-linear-green/000000000000000d
+      productionListenerRuleArn: arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener-rule/app/tenet-example/1111111111111111/2222222222222222/0000000000000017
+      testListenerRuleArn: arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener-rule/app/tenet-example/1111111111111111/3333333333333333/0000000000000021
+      infrastructureRoleArn: arn:aws:iam::123456789012:role/tenet/ecs-routing
+      containerPort: 8080
+    alarms:
+      enable: true
+      rollback: true
+      names:
+        - web-linear-health
+    lifecycleHooks:
+      - functionArn: arn:aws:lambda:ap-northeast-2:123456789012:function:validate-web:3
+        roleArn: arn:aws:iam::123456789012:role/tenet/ecs-hook
+        stages:
+          - POST_SCALE_UP
