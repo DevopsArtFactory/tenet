@@ -55,9 +55,25 @@ func (h NativeObservation) Preflight(ctx context.Context, r applyrequest.ECSOper
 	checks = append(checks, applyrequest.OperationExecutionCapabilityCheck{Action: "ecs:DescribeServices", ResourceName: r.Intent.ServiceARN, RequiredRole: r.Role.RoleARN, Context: map[string]string{"ecs:cluster": r.Intent.ClusterARN}}, applyrequest.OperationExecutionCapabilityCheck{Action: "ecs:DescribeTaskDefinition", ResourceName: target, RequiredRole: r.Role.RoleARN}, applyrequest.OperationExecutionCapabilityCheck{Action: "ecs:ListTasks", ResourceName: "*", RequiredRole: r.Role.RoleARN, Context: map[string]string{"ecs:cluster": r.Intent.ClusterARN}}, applyrequest.OperationExecutionCapabilityCheck{Action: "ecs:DescribeTasks", ResourceName: fmt.Sprintf("arn:%s:ecs:%s:%s:task/%s/*", service.Partition, r.Intent.Region, r.Intent.AWSAccountID, strings.TrimPrefix(cluster.Resource, "cluster/")), RequiredRole: r.Role.RoleARN, Context: map[string]string{"ecs:cluster": r.Intent.ClusterARN}})
 	return h.CheckCapabilities(ctx, r.Role, checks)
 }
-func (h NativeObservation) Prepare(_ context.Context, r applyrequest.ECSOperationRequest) (applyrequest.ECSOperationResult, error) {
-	if len(r.PriorResults) != 2 || r.PriorResults[0].TaskDefinitionARN == "" || r.PriorResults[1].TaskDefinitionARN != r.PriorResults[0].TaskDefinitionARN || !nativeScopedARN(r.PriorResults[1].ServiceDeploymentARN, "service-deployment", r.Intent) || !nativeScopedARN(r.PriorResults[1].ServiceRevisionARN, "service-revision", r.Intent) {
-		return applyrequest.ECSOperationResult{}, fmt.Errorf("native observation requires registered workload and correlated deployment/revision checkpoints")
+func (h NativeObservation) Prepare(ctx context.Context, r applyrequest.ECSOperationRequest) (applyrequest.ECSOperationResult, error) {
+	return h.prepare(ctx, r, nil)
+}
+func (h NativeObservation) prepare(_ context.Context, r applyrequest.ECSOperationRequest, rollback *NativeRollbackTarget) (applyrequest.ECSOperationResult, error) {
+	var accepted applyrequest.ECSOperationResult
+	if rollback != nil {
+		if err := rollback.validate(r); err != nil {
+			return accepted, err
+		}
+		accepted = rollbackResult(*rollback)
+		if len(r.PriorResults) != 1 || !sameNativeRollbackResult(r.PriorResults[0], *rollback) {
+			return applyrequest.ECSOperationResult{}, fmt.Errorf("native recovery requires its fixed stop acceptance checkpoint")
+		}
+		accepted = r.PriorResults[0].Clone()
+	} else {
+		if len(r.PriorResults) != 2 || r.PriorResults[0].TaskDefinitionARN == "" || r.PriorResults[1].TaskDefinitionARN != r.PriorResults[0].TaskDefinitionARN || !nativeScopedARN(r.PriorResults[1].ServiceDeploymentARN, "service-deployment", r.Intent) || !nativeScopedARN(r.PriorResults[1].ServiceRevisionARN, "service-revision", r.Intent) {
+			return applyrequest.ECSOperationResult{}, fmt.Errorf("native observation requires registered workload and correlated deployment/revision checkpoints")
+		}
+		accepted = r.PriorResults[1].Clone()
 	}
 	result := r.PreparedResult.Clone()
 	if result.Observation == nil {
@@ -66,12 +82,15 @@ func (h NativeObservation) Prepare(_ context.Context, r applyrequest.ECSOperatio
 			timeout = 36 * time.Hour
 		}
 		now := h.now()
-		result = r.PriorResults[1].Clone()
+		result = accepted.Clone()
 		result.Observation = &applyrequest.ECSRolloutObservation{Source: "aws-ecs-native", State: "initializing", Reason: "awaiting_native_observation", Summary: "Awaiting native ECS lifecycle, configured traffic and task evidence.", StartedAt: now.Format(time.RFC3339Nano), DeadlineAt: now.Add(timeout).Format(time.RFC3339Nano), ClusterARN: r.Intent.ClusterARN, ServiceARN: r.Intent.ServiceARN, ServiceDeploymentARN: result.ServiceDeploymentARN, TaskDefinitionARN: result.TaskDefinitionARN, DesiredCount: int32(r.Intent.DesiredCount)}
+	}
+	if rollback != nil {
+		result.Observation.Source = "aws-ecs-native-rollback"
 	}
 	start, startErr := time.Parse(time.RFC3339Nano, result.Observation.StartedAt)
 	deadline, deadlineErr := time.Parse(time.RFC3339Nano, result.Observation.DeadlineAt)
-	if startErr != nil || deadlineErr != nil || !deadline.After(start) || result.TaskDefinitionARN != r.PriorResults[1].TaskDefinitionARN || result.ServiceDeploymentARN != r.PriorResults[1].ServiceDeploymentARN || result.ServiceRevisionARN != r.PriorResults[1].ServiceRevisionARN {
+	if (rollback != nil && !sameNativeRollbackResult(result, *rollback)) || startErr != nil || deadlineErr != nil || !deadline.After(start) || result.TaskDefinitionARN != accepted.TaskDefinitionARN || result.ServiceDeploymentARN != accepted.ServiceDeploymentARN || result.ServiceRevisionARN != accepted.ServiceRevisionARN || result.PreviousServiceRevisionARN != accepted.PreviousServiceRevisionARN {
 		return applyrequest.ECSOperationResult{}, fmt.Errorf("persisted native observation identity/deadline is invalid")
 	}
 	return result, nil
@@ -90,13 +109,16 @@ func (h NativeObservation) Execute(ctx context.Context, r applyrequest.ECSOperat
 	return applyrequest.ECSOperationResult{}, &applyrequest.ECSObservationPending{Result: result.Result, RetryAfter: result.RetryAfter}
 }
 func (h NativeObservation) Reconcile(ctx context.Context, r applyrequest.ECSOperationRequest) (applyrequest.ECSReconciliation, error) {
+	return h.reconcile(ctx, r, nil)
+}
+func (h NativeObservation) reconcile(ctx context.Context, r applyrequest.ECSOperationRequest, rollback *NativeRollbackTarget) (applyrequest.ECSReconciliation, error) {
 	if err := ctx.Err(); err != nil {
 		return applyrequest.ECSReconciliation{}, err
 	}
 	if r.PreparedResult.Observation == nil {
 		return applyrequest.ECSReconciliation{}, fmt.Errorf("durable native deadline required before polling")
 	}
-	result, err := h.Prepare(ctx, r)
+	result, err := h.prepare(ctx, r, rollback)
 	if err != nil {
 		return applyrequest.ECSReconciliation{}, err
 	}
@@ -138,8 +160,47 @@ func (h NativeObservation) Reconcile(ctx context.Context, r applyrequest.ECSOper
 	if deployment.Rollback != nil {
 		o.Native.RollbackRevisionARN = aws.ToString(deployment.Rollback.ServiceRevisionArn)
 	}
-	if aws.ToString(deployment.TargetServiceRevision.Arn) != result.ServiceRevisionARN || !advancedConfigMatches(deployment.DeploymentConfiguration, r.Intent) {
+	expectedForwardRevision := result.ServiceRevisionARN
+	if rollback != nil {
+		expectedForwardRevision = rollback.ForwardRevisionARN
+	}
+	if aws.ToString(deployment.TargetServiceRevision.Arn) != expectedForwardRevision || !advancedConfigMatches(deployment.DeploymentConfiguration, r.Intent) {
 		return observedFailure(result, "native_deployment_mismatch", "Correlated native deployment no longer matches its reviewed target revision/configuration."), nil
+	}
+	if rollback != nil {
+		if len(deployment.SourceServiceRevisions) != 1 || aws.ToString(deployment.SourceServiceRevisions[0].Arn) != rollback.SourceRevisionARN || (deployment.Rollback != nil && aws.ToString(deployment.Rollback.ServiceRevisionArn) != rollback.SourceRevisionARN) {
+			return observedFailure(result, "native_rollback_revision_mismatch", "ECS rollback does not match the fixed source revision."), nil
+		}
+		revisions := []struct{ revision, task string }{{rollback.ForwardRevisionARN, rollback.ForwardTaskDefinitionARN}, {rollback.SourceRevisionARN, rollback.SourceTaskDefinitionARN}}
+		for _, ref := range revisions {
+			revision, err := describeNativeRevision(ctx, client, ref.revision, r)
+			if err != nil {
+				return observationUnavailable(result, err), nil
+			}
+			if aws.ToString(revision.TaskDefinition) != ref.task {
+				return observedFailure(result, "native_rollback_revision_mismatch", "Native recovery immutable workload reference changed."), nil
+			}
+		}
+		history, err := listNativeDeployments(ctx, client, r)
+		if err != nil {
+			return observationUnavailable(result, err), nil
+		}
+		found := false
+		for _, brief := range history {
+			if aws.ToString(brief.ServiceDeploymentArn) == rollback.DeploymentARN {
+				found = true
+				continue
+			}
+			if brief.CreatedAt == nil || deployment.CreatedAt == nil {
+				return observationUnavailable(result, fmt.Errorf("native recovery deployment ordering unavailable")), nil
+			}
+			if !brief.CreatedAt.Before(*deployment.CreatedAt) || !nativeTerminal(brief.Status) {
+				return observedFailure(result, "native_rollback_superseded", "Intervening or concurrent native deployment prevents attributing current health to this recovery."), nil
+			}
+		}
+		if !found {
+			return observationUnavailable(result, fmt.Errorf("native recovery deployment missing from history")), nil
+		}
 	}
 	if !validNativePercent(deployment.TargetServiceRevision.RequestedProductionTrafficWeight) {
 		return observationUnavailable(result, fmt.Errorf("invalid native target traffic evidence")), nil
@@ -163,13 +224,22 @@ func (h NativeObservation) Reconcile(ctx context.Context, r applyrequest.ECSOper
 		}
 		o.Native.SourceRequestedPercent = aws.Float64(sourcePercent)
 	}
+	if rollback != nil {
+		o.Native.TargetRequestedPercent = copyNativePercent(deployment.SourceServiceRevisions[0].RequestedProductionTrafficWeight)
+		o.Native.SourceRequestedPercent = copyNativePercent(deployment.TargetServiceRevision.RequestedProductionTrafficWeight)
+	}
 	switch deployment.Status {
 	case types.ServiceDeploymentStatusStopped:
 		return observedFailure(result, "native_deployment_stopped", "AWS stopped the native deployment: "+shortEvidence(aws.ToString(deployment.StatusReason))), nil
 	case types.ServiceDeploymentStatusRollbackFailed:
 		return observedFailure(result, "native_rollback_failed", "AWS reports native rollback failure: "+shortEvidence(aws.ToString(deployment.StatusReason))), nil
 	case types.ServiceDeploymentStatusRollbackSuccessful:
-		return observedFailure(result, "native_rollback_reported", "AWS reports a rollback to its source revision; the requested forward revision did not succeed."), nil
+		if rollback == nil {
+			return observedFailure(result, "native_rollback_reported", "AWS reports a rollback to its source revision; the requested forward revision did not succeed."), nil
+		}
+		if deployment.Rollback == nil {
+			return observationUnavailable(result, fmt.Errorf("completed rollback source identity unavailable")), nil
+		}
 	}
 	target, err := describeNativeRevision(ctx, client, result.ServiceRevisionARN, r)
 	if err != nil {
@@ -218,7 +288,7 @@ func (h NativeObservation) Reconcile(ctx context.Context, r applyrequest.ECSOper
 	if definition == nil || definition.TaskDefinition == nil || aws.ToString(definition.TaskDefinition.TaskDefinitionArn) != result.TaskDefinitionARN {
 		return observationUnavailable(result, fmt.Errorf("registered native task definition unavailable")), nil
 	}
-	if definition.TaskDefinition.Status != types.TaskDefinitionStatusActive {
+	if rollback == nil && definition.TaskDefinition.Status != types.TaskDefinitionStatusActive {
 		return observedFailure(result, "requested_revision_inactive", "The registered native task definition was deactivated."), nil
 	}
 	tasks, err := runningTasks(ctx, client, r)
@@ -271,10 +341,21 @@ func (h NativeObservation) Reconcile(ctx context.Context, r applyrequest.ECSOper
 			sourcesDrained = false
 		}
 	}
-	if deployment.Status == types.ServiceDeploymentStatusSuccessful && targetPercent == 100 && sourcesDrained && aws.ToString(service.TaskDefinition) == result.TaskDefinitionARN && service.DesiredCount == desired && service.RunningCount == desired && service.PendingCount == 0 && running == desired && healthy == desired && targetHealth.UnexpectedTargets == 0 && old == 0 && pending == 0 && advancedConfigMatches(service.DeploymentConfiguration, r.Intent) {
+	controlComplete := deployment.Status == types.ServiceDeploymentStatusSuccessful
+	configComplete := advancedConfigMatches(service.DeploymentConfiguration, r.Intent)
+	if rollback != nil {
+		controlComplete = deployment.Status == types.ServiceDeploymentStatusRollbackSuccessful
+		configComplete = service.DeploymentConfiguration != nil && string(service.DeploymentConfiguration.Strategy) == r.Intent.DeploymentStrategy
+		sourcesDrained = deployment.TargetServiceRevision.RunningTaskCount == 0 && deployment.TargetServiceRevision.PendingTaskCount == 0
+	}
+	if controlComplete && targetPercent == 100 && sourcesDrained && aws.ToString(service.TaskDefinition) == result.TaskDefinitionARN && service.DesiredCount == desired && service.RunningCount == desired && service.PendingCount == 0 && running == desired && healthy == desired && targetHealth.UnexpectedTargets == 0 && old == 0 && pending == 0 && configComplete {
 		o.State = "converged"
 		o.Reason = "native_revision_healthy"
 		o.Summary = fmt.Sprintf("Native ECS deployment verified: %d/%d healthy tasks, configured target traffic 100%%, source traffic/tasks drained.", healthy, desired)
+		if rollback != nil {
+			o.Reason = "native_source_recovered"
+			o.Summary = fmt.Sprintf("Native ECS rollback verified: %d/%d source tasks healthy, configured source traffic 100%%, forward tasks drained.", healthy, desired)
+		}
 		return applyrequest.ECSReconciliation{Complete: true, Result: result}, nil
 	}
 	reason := "native_deployment_in_progress"
@@ -287,7 +368,7 @@ func (h NativeObservation) Reconcile(ctx context.Context, r applyrequest.ECSOper
 		reason = "native_rollback_in_progress"
 	} else if deployment.Status == types.ServiceDeploymentStatusStopRequested {
 		reason = "native_stop_requested"
-	} else if deployment.Status == types.ServiceDeploymentStatusSuccessful {
+	} else if controlComplete {
 		reason = "native_completion_evidence_pending"
 	}
 	traffic := "unknown"
