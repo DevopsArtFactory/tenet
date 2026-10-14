@@ -206,3 +206,33 @@ Tests use injected SDK clients and local HTTP fixtures; no AWS mutation was run.
 References: [StopServiceDeployment](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_StopServiceDeployment.html),
 [eligible deployment states](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/stop-service-deployment.html)
 and [ECS IAM resources](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html).
+
+## Native source-recovery observation prerequisite
+
+The shared native observer can also observe a separately prepared rollback
+request. Recovery retains the original deployment ARN and forward/source
+revision identities, but its health goal is the fixed source revision. Requested
+and configured traffic are presented relative to that recovery goal; raw AWS
+status/stage and rollback revision remain unchanged.
+
+A recovered result requires AWS `ROLLBACK_SUCCESSFUL` naming the captured source,
+100% current configured source traffic, drained forward revision counts, the
+current service pointing to the exact source workload at the reviewed capacity,
+and the complete source task set healthy in both container and ALB evidence.
+Historical rollback success alone cannot pass. Missing ALB data, remaining
+forward tasks, partial traffic, mismatched immutable revision/task references,
+or newer/concurrent deployment history prevent completion. A stopped rollout,
+failed rollback and observation timeout remain distinct failures.
+
+ECS may restore the source's previous bake/alarm policy; recovery therefore does
+not require the forward policy to remain applied. Existing source tasks can be
+observed after task-definition deregistration, since this observer neither
+registers that definition again nor launches replacement tasks. Exact workload
+identity, current health, capacity and routing are still required.
+
+The recovery observation has its own persisted deadline, which is not extended
+on restart. It never modifies the original forward Apply or calls a mutation
+API. Fake SDK tests cover all three strategies, source/forward attribution,
+partial progress, missing health evidence, failures, supersession and restart.
+Production advanced writes remain gated until durable child-apply ownership and
+executor/API integration are verified; no actual AWS rollout was performed.
