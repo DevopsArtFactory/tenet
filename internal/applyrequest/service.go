@@ -514,55 +514,61 @@ func (s Service) Transition(ctx context.Context, id string, request TransitionRe
 		return Record{}, fmt.Errorf("%w: unsupported target status %q", ErrInvalidState, request.Status)
 	}
 
+	change := func(record Record) (Record, error) {
+		record = NormalizeOperationIDs(record)
+		if err := validateTransition(record, request); err != nil {
+			return Record{}, err
+		}
+
+		previousStatus := record.Status
+		now := s.now()
+		record.Status = request.Status
+		if request.Error != "" || request.Status == StatusRunning || request.Status == StatusSucceeded {
+			record.Error = request.Error
+		}
+		if request.Details != nil {
+			record.Details = append([]string(nil), request.Details...)
+		}
+		record.Operations = transitionOperations(record.Operations, request.Status, request.Step)
+		record.Operations = recordOperationAttempt(record.Operations, operationAttemptEvent{
+			Status:    request.Status,
+			Step:      request.Step,
+			WorkerID:  transitionWorkerID(record),
+			Timestamp: now.UTC().Format(time.RFC3339),
+			Reason:    transitionAttemptReason(request),
+			Summary:   transitionAttemptSummary(record, request),
+		})
+		record.Lifecycle = transitionLifecycle(record.Lifecycle, len(record.Operations), request, now)
+		readiness := deriveExecutionReadiness(record)
+		record.ExecutionReadiness = &readiness
+		record.Transitions = appendTransition(record.Transitions, Transition{
+			TransitionedAt: now.UTC().Format(time.RFC3339),
+			PreviousStatus: previousStatus,
+			Status:         request.Status,
+			Step:           request.Step,
+			Actor:          requestactor.FromContext(ctx),
+			Error:          request.Error,
+			Details:        append([]string(nil), request.Details...),
+			Lifecycle:      record.Lifecycle,
+		})
+
+		return record, nil
+	}
+	if store, ok := s.Store.(MutationStore); ok {
+		return store.Mutate(ctx, id, change)
+	}
 	record, err := s.Store.Get(ctx, id)
 	if err != nil {
 		return Record{}, err
 	}
-	record = NormalizeOperationIDs(record)
-	if err := validateTransition(record, request); err != nil {
-		return Record{}, err
-	}
-
-	previousStatus := record.Status
-	now := s.now()
-	record.Status = request.Status
-	if request.Error != "" || request.Status == StatusRunning || request.Status == StatusSucceeded {
-		record.Error = request.Error
-	}
-	if request.Details != nil {
-		record.Details = append([]string(nil), request.Details...)
-	}
-	record.Operations = transitionOperations(record.Operations, request.Status, request.Step)
-	record.Operations = recordOperationAttempt(record.Operations, operationAttemptEvent{
-		Status:    request.Status,
-		Step:      request.Step,
-		WorkerID:  transitionWorkerID(record),
-		Timestamp: now.UTC().Format(time.RFC3339),
-		Reason:    transitionAttemptReason(request),
-		Summary:   transitionAttemptSummary(record, request),
-	})
-	record.Lifecycle = transitionLifecycle(record.Lifecycle, len(record.Operations), request, now)
-	readiness := deriveExecutionReadiness(record)
-	record.ExecutionReadiness = &readiness
-	record.Transitions = appendTransition(record.Transitions, Transition{
-		TransitionedAt: now.UTC().Format(time.RFC3339),
-		PreviousStatus: previousStatus,
-		Status:         request.Status,
-		Step:           request.Step,
-		Actor:          requestactor.FromContext(ctx),
-		Error:          request.Error,
-		Details:        append([]string(nil), request.Details...),
-		Lifecycle:      record.Lifecycle,
-	})
-
-	if err := s.Store.Update(ctx, record); err != nil {
-		return Record{}, err
-	}
-	stored, err := s.Store.Get(ctx, id)
+	record, err = change(record)
 	if err != nil {
 		return Record{}, err
 	}
-	return NormalizeOperationIDs(stored), nil
+	if err := s.Store.Update(ctx, record); err != nil {
+		return Record{}, err
+	}
+	return s.Get(ctx, id)
 }
 
 func (s Service) now() time.Time {

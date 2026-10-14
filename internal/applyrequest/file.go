@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"sync"
 
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
@@ -16,7 +15,6 @@ import (
 var (
 	createTempFile = os.CreateTemp
 	renameFile     = os.Rename
-	claimLocks     sync.Map
 )
 
 // FileStore persists immutable apply requests in a local JSON file.
@@ -54,6 +52,15 @@ func Load(path string) ([]Record, error) {
 
 // Save writes the full immutable apply-request set atomically.
 func Save(path string, records []Record) error {
+	unlock, err := lockStore(context.Background(), path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return saveUnlocked(path, records)
+}
+
+func saveUnlocked(path string, records []Record) error {
 	sorted := list(records)
 	content, err := json.MarshalIndent(sorted, "", "  ")
 	if err != nil {
@@ -89,12 +96,23 @@ func Save(path string, records []Record) error {
 	if _, err := tempFile.Write(content); err != nil {
 		return fmt.Errorf("write temp apply request store: %w", err)
 	}
+	if err := tempFile.Sync(); err != nil {
+		return fmt.Errorf("sync temp apply request store: %w", err)
+	}
 	if err := tempFile.Close(); err != nil {
 		return fmt.Errorf("close temp apply request store: %w", err)
 	}
 	tempFile = nil
 	if err := renameFile(tempPath, path); err != nil {
 		return fmt.Errorf("rename apply request store: %w", err)
+	}
+	directory, err := os.Open(dir)
+	if err != nil {
+		return fmt.Errorf("open apply request store directory: %w", err)
+	}
+	defer directory.Close()
+	if err := directory.Sync(); err != nil {
+		return fmt.Errorf("sync apply request store directory: %w", err)
 	}
 	return nil
 }
@@ -132,7 +150,12 @@ func (s FileStore) List(_ context.Context) ([]Record, error) {
 }
 
 // Save persists one immutable apply request by ID.
-func (s FileStore) Save(_ context.Context, record Record) error {
+func (s FileStore) Save(ctx context.Context, record Record) error {
+	unlock, err := lockStore(ctx, s.Path)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if s.Path == "" {
 		return fmt.Errorf("file apply request store path is required")
 	}
@@ -148,61 +171,40 @@ func (s FileStore) Save(_ context.Context, record Record) error {
 			return nil
 		}
 	}
-	return Save(s.Path, append(records, record))
+	return saveUnlocked(s.Path, append(records, record))
 }
 
 // Update replaces one persisted apply request by ID.
-func (s FileStore) Update(_ context.Context, record Record) error {
-	if s.Path == "" {
-		return fmt.Errorf("file apply request store path is required")
-	}
-	records, err := Load(s.Path)
-	if err != nil {
-		var pathErr *os.PathError
-		if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
-			return ErrNotFound
-		}
-		return err
-	}
-	for i, existing := range records {
-		if existing.ID == record.ID {
-			records[i] = record
-			return Save(s.Path, records)
-		}
-	}
-	return fmt.Errorf("%w: %s", ErrNotFound, record.ID)
+func (s FileStore) Update(ctx context.Context, record Record) error {
+	_, err := s.Mutate(ctx, record.ID, func(Record) (Record, error) { return record, nil })
+	return err
 }
 
-// Claim protects the local file-backed queued-apply lease boundary with one
-// in-process lock per store path, then persists the transformed record in the
-// same load/check/save critical section.
-func (s FileStore) Claim(_ context.Context, id string, _ ClaimRequest, claim func(Record) (Record, error)) (Record, error) {
-	if s.Path == "" {
-		return Record{}, fmt.Errorf("file apply request store path is required")
-	}
-	lockValue, _ := claimLocks.LoadOrStore(s.Path, &sync.Mutex{})
-	lock := lockValue.(*sync.Mutex)
-	lock.Lock()
-	defer lock.Unlock()
-
-	records, err := Load(s.Path)
+// Mutate loads, checks and persists one record under a process-shared store lock.
+// Callbacks must only transform local state; do not perform network calls here.
+func (s FileStore) Mutate(ctx context.Context, id string, change func(Record) (Record, error)) (Record, error) {
+	unlock, err := lockStore(ctx, s.Path)
 	if err != nil {
-		var pathErr *os.PathError
-		if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
-			return Record{}, ErrNotFound
-		}
+		return Record{}, err
+	}
+	defer unlock()
+	records, err := s.List(ctx)
+	if err != nil {
 		return Record{}, err
 	}
 	for i, existing := range records {
 		if existing.ID != id {
 			continue
 		}
-		updated, err := claim(existing)
+		updated, err := change(existing)
 		if err != nil {
 			return Record{}, err
 		}
+		if updated.ID != existing.ID {
+			return Record{}, fmt.Errorf("apply mutation cannot change record identity")
+		}
 		records[i] = updated
-		if err := Save(s.Path, records); err != nil {
+		if err := saveUnlocked(s.Path, records); err != nil {
 			return Record{}, err
 		}
 		return updated, nil
@@ -210,39 +212,12 @@ func (s FileStore) Claim(_ context.Context, id string, _ ClaimRequest, claim fun
 	return Record{}, fmt.Errorf("%w: %s", ErrNotFound, id)
 }
 
-// Heartbeat protects the local file-backed claim refresh boundary with one
-// in-process lock per store path, then persists the transformed record in the
-// same load/check/save critical section.
-func (s FileStore) Heartbeat(_ context.Context, id string, _ HeartbeatRequest, heartbeat func(Record) (Record, error)) (Record, error) {
-	if s.Path == "" {
-		return Record{}, fmt.Errorf("file apply request store path is required")
-	}
-	lockValue, _ := claimLocks.LoadOrStore(s.Path, &sync.Mutex{})
-	lock := lockValue.(*sync.Mutex)
-	lock.Lock()
-	defer lock.Unlock()
+// Claim atomically persists a validated claim using the same lock as all writers.
+func (s FileStore) Claim(ctx context.Context, id string, _ ClaimRequest, claim func(Record) (Record, error)) (Record, error) {
+	return s.Mutate(ctx, id, claim)
+}
 
-	records, err := Load(s.Path)
-	if err != nil {
-		var pathErr *os.PathError
-		if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
-			return Record{}, ErrNotFound
-		}
-		return Record{}, err
-	}
-	for i, existing := range records {
-		if existing.ID != id {
-			continue
-		}
-		updated, err := heartbeat(existing)
-		if err != nil {
-			return Record{}, err
-		}
-		records[i] = updated
-		if err := Save(s.Path, records); err != nil {
-			return Record{}, err
-		}
-		return updated, nil
-	}
-	return Record{}, fmt.Errorf("%w: %s", ErrNotFound, id)
+// Heartbeat atomically persists a validated refresh using the same lock as all writers.
+func (s FileStore) Heartbeat(ctx context.Context, id string, _ HeartbeatRequest, heartbeat func(Record) (Record, error)) (Record, error) {
+	return s.Mutate(ctx, id, heartbeat)
 }
