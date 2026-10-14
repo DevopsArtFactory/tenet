@@ -136,3 +136,37 @@ not expose an UpdateService compare-and-swap token.
 Production advanced execution remains disabled until the observation and
 rollback integration is complete. These handlers are verified through fake SDK
 clients and local HTTP serialization fixtures; no real AWS deployment was run.
+
+## Native observation prerequisite
+
+The read-only observer now persists a 36-hour default observation deadline and
+resumes it across restarts. Each poll reads the exact correlated deployment and
+service revision, records AWS lifecycle/status and alarm evidence, resolves the
+revision's ALB target group, and checks current configured traffic weights.
+Requested traffic percentages remain optional AWS snapshots; they are not
+measurements of HTTP traffic or substitutes for current ALB configuration.
+
+A successful forward result requires AWS `SUCCESSFUL`, 100% configured traffic
+to the resolved reviewed target, drained source task counts, matching current
+service/revision/capacity/configuration and the exact intended healthy task set.
+Current ALB target health is matched to sampled task IPv4 addresses and container
+ports. Unrelated healthy targets cannot satisfy the check; extra or draining
+members prevent completion. The initial matrix therefore uses IPv4 awsvpc/IP
+targets. Container-only health and a historical AWS completion status do not
+replace current ALB health evidence.
+
+Traffic at 100% during `BAKE_TIME` remains in progress. Missing/throttled/denied
+reads, unresolved routing and incomplete task/target health never become healthy
+counts. Pending polls back off from two to 30 seconds. The deadline is a Tenet
+observation bound, not an AWS deployment timeout or a command to stop ECS.
+
+AWS `STOPPED`, `ROLLBACK_FAILED` and `ROLLBACK_SUCCESSFUL` are distinct forward
+failure outcomes. A reported source rollback does not turn the requested new
+revision into a successful deployment. Native status, stage, configured traffic
+and triggered alarms are durable evidence; meaningful changes enter audit while
+timestamp-only polls do not. The existing monitor shows lifecycle and configured
+traffic with unknown values preserved rather than rendered as zero.
+
+Production advanced execution remains gated until operator-triggered native
+rollback and executor integration are verified. Current tests use fake SDK/HTTP
+clients and do not change a real AWS service.

@@ -4,33 +4,70 @@ import (
 	"context"
 	"fmt"
 	"github.com/DevopsArtFactory/tenet/internal/reconcile"
+	"reflect"
 	"time"
 )
+
+// ECSNativeRolloutObservation contains AWS-reported lifecycle and configured
+// traffic weights, never a locally inferred traffic shift or measured HTTP rate.
+type ECSNativeRolloutObservation struct {
+	Status                  string   `json:"status,omitempty"`
+	Stage                   string   `json:"stage,omitempty"`
+	TargetRevisionARN       string   `json:"targetRevisionArn"`
+	SourceRevisionARN       string   `json:"sourceRevisionArn,omitempty"`
+	TargetRequestedPercent  *float64 `json:"targetRequestedPercent,omitempty"`
+	SourceRequestedPercent  *float64 `json:"sourceRequestedPercent,omitempty"`
+	TargetConfiguredPercent *float64 `json:"targetConfiguredPercent,omitempty"`
+	SourceConfiguredPercent *float64 `json:"sourceConfiguredPercent,omitempty"`
+	TriggeredAlarms         []string `json:"triggeredAlarms,omitempty"`
+	RollbackRevisionARN     string   `json:"rollbackRevisionArn,omitempty"`
+}
+
+func (n *ECSNativeRolloutObservation) Clone() *ECSNativeRolloutObservation {
+	if n == nil {
+		return nil
+	}
+	copy := *n
+	clonePercent := func(value *float64) *float64 {
+		if value == nil {
+			return nil
+		}
+		v := *value
+		return &v
+	}
+	copy.TargetRequestedPercent = clonePercent(n.TargetRequestedPercent)
+	copy.SourceRequestedPercent = clonePercent(n.SourceRequestedPercent)
+	copy.TargetConfiguredPercent = clonePercent(n.TargetConfiguredPercent)
+	copy.SourceConfiguredPercent = clonePercent(n.SourceConfiguredPercent)
+	copy.TriggeredAlarms = append([]string(nil), n.TriggeredAlarms...)
+	return &copy
+}
 
 // ECSRolloutObservation is secret-free AWS runtime evidence for the Apply monitor.
 // A timestamp is present only after an observation attempt; unavailable evidence
 // must never be interpreted as a healthy deployment.
 type ECSRolloutObservation struct {
-	TasksObserved        bool   `json:"tasksObserved"`
-	PreviousCount        int32  `json:"previousCount"`
-	ServiceRunningCount  int32  `json:"serviceRunningCount"`
-	Source               string `json:"source"`
-	State                string `json:"state"`
-	Reason               string `json:"reason"`
-	Summary              string `json:"summary"`
-	StartedAt            string `json:"startedAt"`
-	DeadlineAt           string `json:"deadlineAt"`
-	ObservedAt           string `json:"observedAt,omitempty"`
-	ClusterARN           string `json:"clusterArn"`
-	ServiceARN           string `json:"serviceArn"`
-	TaskDefinitionARN    string `json:"taskDefinitionArn"`
-	DeploymentID         string `json:"deploymentId,omitempty"`
-	ServiceDeploymentARN string `json:"serviceDeploymentArn,omitempty"`
-	DesiredCount         int32  `json:"desiredCount"`
-	RunningCount         int32  `json:"runningCount"`
-	PendingCount         int32  `json:"pendingCount"`
-	HealthyCount         int32  `json:"healthyCount"`
-	Polls                int    `json:"polls"`
+	Native               *ECSNativeRolloutObservation `json:"native,omitempty"`
+	TasksObserved        bool                         `json:"tasksObserved"`
+	PreviousCount        int32                        `json:"previousCount"`
+	ServiceRunningCount  int32                        `json:"serviceRunningCount"`
+	Source               string                       `json:"source"`
+	State                string                       `json:"state"`
+	Reason               string                       `json:"reason"`
+	Summary              string                       `json:"summary"`
+	StartedAt            string                       `json:"startedAt"`
+	DeadlineAt           string                       `json:"deadlineAt"`
+	ObservedAt           string                       `json:"observedAt,omitempty"`
+	ClusterARN           string                       `json:"clusterArn"`
+	ServiceARN           string                       `json:"serviceArn"`
+	TaskDefinitionARN    string                       `json:"taskDefinitionArn"`
+	DeploymentID         string                       `json:"deploymentId,omitempty"`
+	ServiceDeploymentARN string                       `json:"serviceDeploymentArn,omitempty"`
+	DesiredCount         int32                        `json:"desiredCount"`
+	RunningCount         int32                        `json:"runningCount"`
+	PendingCount         int32                        `json:"pendingCount"`
+	HealthyCount         int32                        `json:"healthyCount"`
+	Polls                int                          `json:"polls"`
 }
 
 func (o *ECSRolloutObservation) Clone() *ECSRolloutObservation {
@@ -38,6 +75,7 @@ func (o *ECSRolloutObservation) Clone() *ECSRolloutObservation {
 		return nil
 	}
 	copy := *o
+	copy.Native = o.Native.Clone()
 	return &copy
 }
 
@@ -131,7 +169,7 @@ func observationChanged(before, after *ECSRolloutObservation) bool {
 	if before == nil || after == nil {
 		return before != after
 	}
-	return before.State != after.State || before.Reason != after.Reason || (before.State != "unavailable" && before.Summary != after.Summary) || before.DeploymentID != after.DeploymentID || before.TaskDefinitionARN != after.TaskDefinitionARN || before.DesiredCount != after.DesiredCount || before.RunningCount != after.RunningCount || before.PendingCount != after.PendingCount || before.HealthyCount != after.HealthyCount || before.TasksObserved != after.TasksObserved || before.PreviousCount != after.PreviousCount
+	return !reflect.DeepEqual(before.Native, after.Native) || before.State != after.State || before.Reason != after.Reason || (before.State != "unavailable" && before.Summary != after.Summary) || before.DeploymentID != after.DeploymentID || before.TaskDefinitionARN != after.TaskDefinitionARN || before.DesiredCount != after.DesiredCount || before.RunningCount != after.RunningCount || before.PendingCount != after.PendingCount || before.HealthyCount != after.HealthyCount || before.TasksObserved != after.TasksObserved || before.PreviousCount != after.PreviousCount
 }
 
 // ECSObservationFailure carries observed terminal evidence into the same atomic

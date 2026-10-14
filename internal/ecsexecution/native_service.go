@@ -17,11 +17,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 )
 
-type NativeServiceClient interface {
-	ServiceClient
+type NativeDeploymentClient interface {
 	ListServiceDeployments(context.Context, *ecs.ListServiceDeploymentsInput, ...func(*ecs.Options)) (*ecs.ListServiceDeploymentsOutput, error)
 	DescribeServiceDeployments(context.Context, *ecs.DescribeServiceDeploymentsInput, ...func(*ecs.Options)) (*ecs.DescribeServiceDeploymentsOutput, error)
 	DescribeServiceRevisions(context.Context, *ecs.DescribeServiceRevisionsInput, ...func(*ecs.Options)) (*ecs.DescribeServiceRevisionsOutput, error)
+}
+
+type NativeServiceClient interface {
+	ServiceClient
+	NativeDeploymentClient
 }
 
 // AdvancedService requests one ECS-owned traffic deployment. It never writes to
@@ -81,26 +85,9 @@ func (h AdvancedService) observe(ctx context.Context, r applyrequest.ECSOperatio
 	if service.DesiredCount != int32(e.DesiredCount) {
 		return empty, fmt.Errorf("initial native advanced execution does not resize service capacity")
 	}
-	if len(service.Deployments) == 0 {
-		return empty, fmt.Errorf("native service deployment routing evidence unavailable")
-	}
-	for _, deployment := range service.Deployments {
-		if (deployment.ServiceConnectConfiguration != nil && deployment.ServiceConnectConfiguration.Enabled) || len(deployment.VpcLatticeConfigurations) > 0 {
-			return empty, fmt.Errorf("Service Connect/VPC Lattice routing is outside the initial native ALB matrix")
-		}
-	}
 	routing := e.Advanced.Routing
-	if len(service.LoadBalancers) != 1 {
-		return empty, fmt.Errorf("native advanced execution requires one existing ALB binding")
-	}
-	binding := service.LoadBalancers[0]
-	advanced := binding.AdvancedConfiguration
-	if advanced == nil || aws.ToString(binding.ContainerName) != e.ContainerName || aws.ToInt32(binding.ContainerPort) != routing.ContainerPort || aws.ToString(advanced.RoleArn) != routing.InfrastructureRoleARN || aws.ToString(advanced.ProductionListenerRule) != routing.ProductionListenerRuleARN || aws.ToString(advanced.TestListenerRule) != routing.TestListenerRuleARN {
-		return empty, fmt.Errorf("service ALB binding/role/rules do not match reviewed routing")
-	}
-	primary, alternate := aws.ToString(binding.TargetGroupArn), aws.ToString(advanced.AlternateTargetGroupArn)
-	if !((primary == routing.TargetGroupARN && alternate == routing.AlternateTargetGroupARN) || (primary == routing.AlternateTargetGroupARN && alternate == routing.TargetGroupARN)) {
-		return empty, fmt.Errorf("service target groups do not match the reviewed ALB pair")
+	if !nativeBindingMatches(service, e) {
+		return empty, fmt.Errorf("existing service routing must match the reviewed native ALB-only binding, role and target pair")
 	}
 	base, _ := arn.Parse(e.BaseTaskDefinitionARN)
 	family, _, _ := strings.Cut(strings.TrimPrefix(base.Resource, "task-definition/"), ":")
@@ -358,7 +345,7 @@ func (h AdvancedService) Reconcile(ctx context.Context, r applyrequest.ECSOperat
 	}
 	return h.reconcileWithClient(ctx, client, r)
 }
-func (h AdvancedService) reconcileWithClient(ctx context.Context, client NativeServiceClient, r applyrequest.ECSOperationRequest) (applyrequest.ECSReconciliation, error) {
+func (h AdvancedService) reconcileWithClient(ctx context.Context, client NativeDeploymentClient, r applyrequest.ECSOperationRequest) (applyrequest.ECSReconciliation, error) {
 	prepared := r.PreparedResult
 	if prepared.NativeService == nil || prepared.PreviousService == nil || prepared.TaskDefinitionARN == "" {
 		return applyrequest.ECSReconciliation{}, fmt.Errorf("native reconciliation requires durable pre-update evidence")
@@ -489,7 +476,7 @@ func nativeTerminal(status types.ServiceDeploymentStatus) bool {
 func nativeKnownStatus(status types.ServiceDeploymentStatus) bool {
 	return nativeTerminal(status) || status == types.ServiceDeploymentStatusPending || status == types.ServiceDeploymentStatusInProgress || status == types.ServiceDeploymentStatusStopRequested || status == types.ServiceDeploymentStatusRollbackRequested || status == types.ServiceDeploymentStatusRollbackInProgress
 }
-func listNativeDeployments(ctx context.Context, client NativeServiceClient, r applyrequest.ECSOperationRequest) ([]types.ServiceDeploymentBrief, error) {
+func listNativeDeployments(ctx context.Context, client NativeDeploymentClient, r applyrequest.ECSOperationRequest) ([]types.ServiceDeploymentBrief, error) {
 	var deployments []types.ServiceDeploymentBrief
 	var token *string
 	seenTokens := map[string]bool{}
@@ -531,7 +518,7 @@ func listNativeDeployments(ctx context.Context, client NativeServiceClient, r ap
 	}
 	return nil, fmt.Errorf("native deployment history exceeds the initial 1000-record correlation bound")
 }
-func describeNativeDeployment(ctx context.Context, client NativeServiceClient, value string, r applyrequest.ECSOperationRequest) (*types.ServiceDeployment, error) {
+func describeNativeDeployment(ctx context.Context, client NativeDeploymentClient, value string, r applyrequest.ECSOperationRequest) (*types.ServiceDeployment, error) {
 	if !nativeScopedARN(value, "service-deployment", r.Intent) {
 		return nil, fmt.Errorf("unreviewed native deployment ARN")
 	}
@@ -551,7 +538,7 @@ func describeNativeDeployment(ctx context.Context, client NativeServiceClient, v
 	}
 	return d, nil
 }
-func describeNativeRevision(ctx context.Context, client NativeServiceClient, value string, r applyrequest.ECSOperationRequest) (*types.ServiceRevision, error) {
+func describeNativeRevision(ctx context.Context, client NativeDeploymentClient, value string, r applyrequest.ECSOperationRequest) (*types.ServiceRevision, error) {
 	if !nativeScopedARN(value, "service-revision", r.Intent) {
 		return nil, fmt.Errorf("unreviewed native service revision ARN")
 	}

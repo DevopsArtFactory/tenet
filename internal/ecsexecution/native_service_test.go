@@ -78,9 +78,13 @@ func (f *nativeFake) DescribeServiceRevisions(_ context.Context, input *ecs.Desc
 }
 func (f *nativeFake) UpdateService(ctx context.Context, input *ecs.UpdateServiceInput, options ...func(*ecs.Options)) (*ecs.UpdateServiceOutput, error) {
 	previous := f.service.DeploymentConfiguration
+	previousCount := f.service.DesiredCount
 	output, err := f.serviceFake.UpdateService(ctx, input, options...)
 	if !f.noEffect {
 		// Model ECS partial update semantics rather than replacing omitted fields.
+		if input.DesiredCount == nil {
+			f.service.DesiredCount = previousCount
+		}
 		content, _ := json.Marshal(input.DeploymentConfiguration)
 		var actual types.DeploymentConfiguration
 		_ = json.Unmarshal(content, &actual)

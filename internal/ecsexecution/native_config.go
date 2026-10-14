@@ -124,3 +124,22 @@ func nativeConfigurationHash(config *types.DeploymentConfiguration) (string, err
 	sum := sha256.Sum256(content)
 	return hex.EncodeToString(sum[:]), nil
 }
+
+func nativeBindingMatches(service *types.Service, intent domain.ECSDeploymentIntent) bool {
+	if service == nil || intent.Advanced == nil || len(service.LoadBalancers) != 1 || len(service.Deployments) == 0 {
+		return false
+	}
+	for _, deployment := range service.Deployments {
+		if deployment.ServiceConnectConfiguration != nil && deployment.ServiceConnectConfiguration.Enabled || len(deployment.VpcLatticeConfigurations) > 0 {
+			return false
+		}
+	}
+	routing := intent.Advanced.Routing
+	binding := service.LoadBalancers[0]
+	advanced := binding.AdvancedConfiguration
+	if advanced == nil || aws.ToString(binding.ContainerName) != intent.ContainerName || aws.ToInt32(binding.ContainerPort) != routing.ContainerPort || aws.ToString(advanced.RoleArn) != routing.InfrastructureRoleARN || aws.ToString(advanced.ProductionListenerRule) != routing.ProductionListenerRuleARN || aws.ToString(advanced.TestListenerRule) != routing.TestListenerRuleARN {
+		return false
+	}
+	primary, alternate := aws.ToString(binding.TargetGroupArn), aws.ToString(advanced.AlternateTargetGroupArn)
+	return primary == routing.TargetGroupARN && alternate == routing.AlternateTargetGroupARN || primary == routing.AlternateTargetGroupARN && alternate == routing.TargetGroupARN
+}

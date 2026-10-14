@@ -10438,11 +10438,19 @@
         }
         return `${metricValue(runtime.runningCount)}/${metricValue(runtime.desiredCount)} running · ${metricValue(runtime.healthyCount)} healthy · ${metricValue(runtime.pendingCount)} pending${runtime.previousCount > 0 ? ` · ${metricValue(runtime.previousCount)} previous` : ''}`;
       };
+      const nativeConfiguredTrafficText = (native) => {
+        const percent = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100 ? `${Number(value.toFixed(1))}%` : '—';
+        return `Source ${percent(native?.sourceConfiguredPercent)} → Target ${percent(native?.targetConfiguredPercent)}`;
+      };
       const ecsRuntimeRows = (record) => {
         const runtime = record?.ecsRuntime;
         if (!runtime) return [];
         return [
           ['ECS rollout', ecsRuntimeProgressText(runtime), 'summary'],
+          ...(runtime.native ? [
+            ['Native ECS lifecycle', [runtime.native.status, runtime.native.stage].filter(Boolean).map((value) => String(value).replaceAll('_', ' ').toLowerCase()).join(' · ') || 'Awaiting AWS evidence'],
+            ['Configured ALB traffic', nativeConfiguredTrafficText(runtime.native)],
+          ] : []),
           ['Rollout evidence', runtime.summary || 'Awaiting AWS evidence'],
           ['Observation reason', String(runtime.reason || 'unknown').replaceAll('_', ' ')],
           ['Last AWS observation', runtime.observedAt || '—'],

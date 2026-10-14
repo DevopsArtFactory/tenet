@@ -15846,3 +15846,21 @@ assert.equal(ecsRuntimeProgressText({state:'failed',tasksObserved:false}), 'Roll
 assert.equal(ecsRuntimeProgressText({state:'progressing',tasksObserved:false}), 'Awaiting deployment evidence');
 `)
 }
+
+func TestNativeTrafficDisplayPreservesZeroAndUnavailableEvidence(t *testing.T) {
+	script := embeddedUIScriptForTest(t)
+	start := strings.Index(script, "const nativeConfiguredTrafficText =")
+	if start < 0 {
+		t.Fatal("native configured traffic helper missing")
+	}
+	end := strings.Index(script[start:], "const ecsRuntimeRows =")
+	if end < 0 {
+		t.Fatal("native traffic helper boundary missing")
+	}
+	runNodeHarness(t, `const assert = require('node:assert/strict');`+script[start:start+end]+`
+assert.equal(nativeConfiguredTrafficText({sourceConfiguredPercent:100,targetConfiguredPercent:0}), 'Source 100% → Target 0%');
+assert.equal(nativeConfiguredTrafficText({sourceConfiguredPercent:94.5,targetConfiguredPercent:5.5}), 'Source 94.5% → Target 5.5%');
+assert.equal(nativeConfiguredTrafficText({targetConfiguredPercent:null}), 'Source — → Target —');
+assert.equal(nativeConfiguredTrafficText({targetConfiguredPercent:NaN}), 'Source — → Target —');
+`)
+}
