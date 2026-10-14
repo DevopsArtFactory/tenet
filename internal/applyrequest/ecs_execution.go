@@ -30,6 +30,8 @@ type ECSCheckpoint struct {
 
 // ECSOperationResult contains identifiers only, never task-definition bodies or secrets.
 type ECSOperationResult struct {
+	TaskDefinitionRevision    int32  `json:"taskDefinitionRevision,omitempty"`
+	TaskDefinitionIntent      string `json:"taskDefinitionIntent,omitempty"`
 	TaskDefinitionARN         string `json:"taskDefinitionArn,omitempty"`
 	PreviousTaskDefinitionARN string `json:"previousTaskDefinitionArn,omitempty"`
 	ServiceDeploymentARN      string `json:"serviceDeploymentArn,omitempty"`

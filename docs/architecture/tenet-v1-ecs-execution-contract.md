@@ -182,3 +182,43 @@ rejection. That evidence is persisted as `retryable_rejection` and permits a
 bounded retry after the same 30-second backoff without guessing whether an
 ambiguous registration is absent. Unclassified network/server failures always
 remain `in_flight` and require reconciliation.
+
+## Task-definition registration handler
+
+`internal/ecsexecution.Registration` implements the registration operation using
+an injected client and a mandatory concrete capability check. Its default client
+factory always assumes the deployer role, including same-account execution.
+The handler's client interface contains no service-update API. Production startup
+still requires explicit wiring alongside update/convergence handlers.
+
+The handler reads the exact pinned base revision and deep-copies registration
+fields, changes only the uniquely named container's image, and preserves other
+containers, roles, secrets references, environment, logging, runtime platform,
+volumes and resource settings. Response-only metadata is excluded. Inherited
+`aws:` tags are omitted, user tags are preserved in deterministic order, and two
+tag slots are required for `tenet:request-id` and
+`tenet:task-definition-intent`. No task-definition body or secret material is
+written to the Apply checkpoint; only ARN, revision, content hash and AWS request
+identity are returned.
+
+Preflight checks the pinned base and concrete `ecs:DescribeTaskDefinition`,
+`ecs:ListTaskDefinitions`, `ecs:RegisterTaskDefinition`, `ecs:TagResource` and
+inherited `iam:PassRole` targets. Both task roles must be in the reviewed account.
+The capability checker must account for create-time tagging and
+`iam:PassedToService=ecs-tasks.amazonaws.com` conditions; IAM simulation remains
+additional evidence rather than a guarantee of AWS acceptance.
+
+Before registering, the handler paginates active revisions in the exact family,
+uses recovery tags to find known matching content, and verifies the actual
+registration fields before reuse. Equivalent content can be reused by later
+Apply requests; a copied tag alone cannot prove equivalence. SDK mutation retries
+are disabled. An interrupted response is resolved by the executor's read-only
+reconciliation path. A missing list result is treated as uncertain, so delayed
+visibility cannot trigger another non-idempotent registration. Confirmed
+read failures before registration are safe to retry; confirmed mutation
+rejections use the executor's bounded retry policy.
+
+References: [RegisterTaskDefinition](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RegisterTaskDefinition.html),
+[ListTaskDefinitions](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_ListTaskDefinitions.html),
+[create-time tagging permissions](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/supported-iam-actions-tagging.html),
+and [ECS IAM action reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html).
