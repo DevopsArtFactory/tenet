@@ -2,7 +2,7 @@
 
 Tenet is a repository-driven deployment control plane for multi-account AWS environments. It brings declared deployment intent, runtime status, rollout progress, and resource evidence into one operator UI for **EC2 and ECS**.
 
-**Status: early-stage.** Tenet can inspect AWS resources, create deployment plans, and execute explicitly approved **native ECS Rolling** updates behind a separate live-execution opt-in. The default local demo remains safe for inspection. Automatic Git reconciliation, explicit rollback, and advanced native traffic strategies are still in progress; see the [ECS execution guide](docs/architecture/tenet-v1-ecs-execution-contract.md#enabling-reviewed-rolling-execution).
+**Status: early-stage.** Tenet can inspect AWS resources, create deployment plans, and execute explicitly approved **native ECS Rolling** updates behind a separate live-execution opt-in. The default local demo remains safe for inspection. Rolling rollback and explicit retry are supported with separate audit outcomes. Automatic Git reconciliation and advanced native traffic strategies are still in progress; see the [ECS execution guide](docs/architecture/tenet-v1-ecs-execution-contract.md#enabling-reviewed-rolling-execution).
 
 ## What it does
 
@@ -65,6 +65,7 @@ Use `make smoke-docker` when changing the Compose stack or its runtime behavior.
 
 ## Documentation
 
+- [ECS Rolling recovery](docs/runbooks/ecs-rolling-recovery.md) — explicit/approved automatic rollback, failed-intent holds, and retries.
 - [ECS native execution input contract](docs/architecture/tenet-v1-ecs-execution-contract.md) — explicit targets, pinned task definitions, native strategies, and reviewed plan inputs.
 
 | Guide | Covers |

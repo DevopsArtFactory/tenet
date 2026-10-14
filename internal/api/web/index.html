@@ -9754,6 +9754,8 @@
           if (Number.isFinite(entry.metadata?.step) && entry.metadata.step > 0) metadataLabels.push(`Transition step · ${entry.metadata.step}`);
           if (Number.isFinite(entry.metadata?.currentStep) && entry.metadata.currentStep > 0) metadataLabels.push(`Current step · ${entry.metadata.currentStep}`);
           if (Number.isFinite(entry.metadata?.completedSteps) || Number.isFinite(entry.metadata?.totalSteps)) metadataLabels.push(`Completed steps · ${Number.isFinite(entry.metadata?.completedSteps) ? entry.metadata.completedSteps : '—'} of ${Number.isFinite(entry.metadata?.totalSteps) ? entry.metadata.totalSteps : '—'}`);
+          if (entry.metadata?.recoveryOf) metadataLabels.push(`Recovery of · ${entry.metadata.recoveryOf} · ${entry.metadata.recoveryAutomatic ? 'automatic' : 'operator approved'}`);
+          if (entry.metadata?.retryOf) metadataLabels.push(`Retry of · ${entry.metadata.retryOf}`);
           if (entry.metadata?.planStatus) metadataLabels.push(`Plan status · ${entry.metadata.planStatus}`);
           if (entry.metadata?.sourceFingerprint) metadataLabels.push(`Source fingerprint · ${entry.metadata.sourceFingerprint}`);
           if (entry.metadata?.error) metadataLabels.push(`Error · ${entry.metadata.error}`);
@@ -10078,6 +10080,10 @@
         return responseErrorMessage(response, fallback).then((message) => {
           throw requestError(response.status === 409 ? 'stale-plan' : response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
         });
+      });
+      const createECSRecoveryRequest = (applyId, action) => fetch(`/v1/applies/${encodeURIComponent(applyId)}/${action}`, { method: 'POST' }).then((response) => {
+        if (response.ok) return response.json();
+        return responseErrorMessage(response, `ECS ${action} request failed (${response.status})`).then((message) => { throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status); });
       });
       const normalizePlanOperationStatus = (status) => {
         const normalized = String(status || '').toLowerCase();
@@ -10458,9 +10464,9 @@
       };
       const applyExecutionReadinessLabel = (record, readinessOverride = null) => {
         if (hasNativeECSExecution(record)) {
-          if (record.status === 'queued') return 'Approved · awaiting executor';
-          if (record.status === 'succeeded') return record.ecsRuntime?.state === 'converged' ? 'Deployment verified' : 'Execution completed';
-          if (record.status === 'failed') return 'Execution failed';
+          if (record.status === 'queued') return record.error ? 'Execution blocked' : 'Approved · awaiting executor';
+          if (record.status === 'succeeded') return record.ecsRuntime?.state === 'converged' ? (record.recovery ? 'Previous revision verified' : 'Deployment verified') : 'Execution completed';
+          if (record.status === 'failed') return record.recovery ? 'Recovery failed' : 'Execution failed';
           return 'ECS execution active';
         }
         switch (applyExecutionReadinessState(record, readinessOverride)) {
@@ -10837,6 +10843,8 @@
           ...applyNextSafeActionRows(record),
           ...queuedApplyClaimRows(record),
           ...ecsRuntimeRows(record),
+          ...(record.recovery ? [['Recovery of', record.recovery.applyId], ['Recovery policy', record.recovery.automatic ? 'Approved automatic recovery' : 'Explicit operator recovery']] : []),
+          ...(record.retryOf ? [['Retry of', record.retryOf]] : []),
           ...applyExecutionReadinessRows(record),
         ].forEach(([label, value, className]) => {
           const target = ['Created at', 'Operation progress', 'Next safe action', 'Execution readiness', 'ECS rollout'].includes(label) ? metrics : evidence;
@@ -10848,6 +10856,7 @@
         const links = createElement('div', 'row-links row-links-shell');
         if (record?.deploymentName && record?.id) {
           links.append(createNavLink(buildPageURL('plan', { deployment: record.deploymentName, applyId: record.id }), 'Open plan/apply workspace', '_self'));
+          if (record.recovery?.applyId || record.retryOf) links.append(createNavLink(buildPageURL('plan', { deployment: record.deploymentName, applyId: record.recovery?.applyId || record.retryOf }), 'Original failed deployment', '_self'));
         }
         if (record?.id) {
           const previewState = appliesMonitorExecutionPreviewState(state, record.id);
@@ -11455,12 +11464,13 @@
         const activeApplyRecord = applyState?.record || null;
         const activeApplyID = activeApplyRecord?.id || applyState?.applyId || '';
         const activePlanID = activeApplyRecord?.planId || planState?.record?.id || planState?.planId || currentPageState.planId || '';
-        const disabledNote = 'Live execution is intentionally disabled by default, so failed immutable apply records are expected and useful for operator review.';
+        const disabledNote = hasNativeECSExecution(activeApplyRecord) ? 'Inspect the persisted AWS execution evidence before recovery or retry.' : 'Live execution is intentionally disabled by default, so failed immutable apply records are expected and useful for operator review.';
         switch (applyState?.status) {
           case 'loading':
             if (applyState.request === 'load' && activeApplyID) {
               return `Loading immutable apply request ${activeApplyID} from GET /v1/applies/${activeApplyID}. Deployment and plan context remain visible below while the record loads.`;
             }
+            if (applyState.recoveryAction) return `Recording approved ${applyState.recoveryAction} as a separate Apply. The forward result remains unchanged.`;
             return `Creating immutable apply request via POST /v1/applies/plans/${activePlanID || 'planId'}. Deployment and plan context remain visible below while Tenet stores the server-authored record.`;
           case 'queued':
             if (applyState.request === 'create') {
@@ -12351,6 +12361,24 @@
             applyStateHead,
             applyStateCallout,
           );
+          if (activeApplyRecord?.recovery) {
+            applySection.append(createElement('div', 'detail-state', `Rolling recovery of failed Apply ${activeApplyRecord.recovery.applyId}. The forward deployment remains failed; this record reports recovery separately.`));
+            applySection.append(createNavLink(buildPageURL('plan', { deployment: detail.name, applyId: activeApplyRecord.recovery.applyId }), 'Original failed deployment', '_self'));
+          }
+          if (activeApplyRecord?.retryOf) applySection.append(createNavLink(buildPageURL('plan', { deployment: detail.name, applyId: activeApplyRecord.retryOf }), 'Original failed deployment', '_self'));
+          if (activeApplyRecord?.status === 'failed' && activeApplyRecord.principal && !activeApplyRecord.recovery) {
+            const baseline = activeApplyRecord.operations?.find((operation) => operation.kind === 'UpdateECSService')?.ecsCheckpoint?.result?.previousService;
+            const recoveryActions = createElement('div', 'row-links');
+            [['rollback', 'Restore previous revision'], ['retry', 'Approve retry of Git intent']].forEach(([action, label]) => {
+              const button = createElement('button', 'toolbar-button', label);
+              button.type = 'button';
+              button.disabled = operatorContextState.context?.ecsExecutionEnabled !== true || typeof applyState?.onRecovery !== 'function' || (action === 'rollback' && !baseline);
+              button.addEventListener('click', () => { if (!button.disabled) applyState.onRecovery(action); });
+              recoveryActions.append(button);
+            });
+            applySection.append(createElement('div', 'detail-state', baseline ? `Restore target: ${baseline.taskDefinitionArn} · ${metricValue(baseline.desiredCount)} tasks · rolling bounds ${metricValue(baseline.minimumHealthyPercent)}/${metricValue(baseline.maximumPercent)}. Recovery preserves this failed deployment record.` : 'No persisted previous service baseline is available for rollback. An explicit retry approves another attempt of the same Git intent.'));
+            applySection.append(recoveryActions);
+          }
           const applyWriteActions = createOperatorWriteAuthRequiredActions(applyState);
           if (applyWriteActions) {
             applySection.append(applyWriteActions);
@@ -13455,6 +13483,24 @@
                     onReloadApply: (applyId) => loadApplyRequestRecord(applyId),
                     onReloadPreflight: (applyId) => loadApplyPreflightRecord(applyId),
                     onReloadExecutionPreview: (applyId) => loadApplyExecutionPreviewRecord(applyId),
+                    onRecovery: async (action) => {
+                      const parentId = applyState.record?.id;
+                      if (!parentId || applyState.status !== 'failed' || !['rollback', 'retry'].includes(action)) return;
+                      applyState = { ...applyState, status: 'loading', request: 'create', recoveryAction: action, error: null };
+                      renderPlanWorkspace();
+                      try {
+                        const record = await createECSRecoveryRequest(parentId, action);
+                        if (record.deploymentName !== workspaceDetail.name) throw requestError('fetch-error', 'Recovery belongs to another deployment.');
+                        applyState = { ...applyState, status: normalizeApplyRecordStatus(record.status), request: 'create', applyId: record.id, record, error: null,
+                          preflight: { status: 'idle', record: null }, executionPreview: { status: 'idle', record: null } };
+                        syncPlanPageURL(record.planId, record.id);
+                        renderPlanWorkspace();
+                        await loadPlanPreviewRecord(record.planId);
+                      } catch (error) {
+                        applyState = { ...applyState, status: error.kind === 'unavailable' ? 'unavailable' : 'fetch-error', error };
+                        renderPlanWorkspace();
+                      }
+                    },
                     onApplyPlan: async () => {
                       const planID = planState.record?.id || planState.planId || '';
                       if (!planID || !planPreviewCanApply(planState)) return;

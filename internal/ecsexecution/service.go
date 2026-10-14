@@ -108,24 +108,32 @@ func (h RollingService) observe(ctx context.Context, request applyrequest.ECSOpe
 	}
 	targetIsFinal := len(request.PriorResults) > 0 || (matchesImage && definition.Status == types.TaskDefinitionStatusActive)
 	if !targetIsFinal || !serviceMatches(service, target, request) {
-		if service.PendingCount > 0 {
-			return nil, nil, nil, fmt.Errorf("service has pending work from a conflicting rollout")
-		}
-		active := 0
-		for _, deployment := range service.Deployments {
-			if deployment.RunningCount > 0 || deployment.PendingCount > 0 {
-				active++
+		if request.Recovery != nil {
+			if err := validateRollbackService(service, request); err != nil {
+				return nil, nil, nil, err
 			}
-		}
-		if active > 1 {
-			return nil, nil, nil, fmt.Errorf("service has multiple active deployment revisions")
-		}
-		for _, deployment := range service.Deployments {
-			if deployment.RolloutState == types.DeploymentRolloutStateInProgress {
-				return nil, nil, nil, fmt.Errorf("service has a conflicting active rollout")
+		} else {
+
+			if service.PendingCount > 0 {
+				return nil, nil, nil, fmt.Errorf("service has pending work from a conflicting rollout")
+			}
+			active := 0
+			for _, deployment := range service.Deployments {
+				if deployment.RunningCount > 0 || deployment.PendingCount > 0 {
+					active++
+				}
+			}
+			if active > 1 {
+				return nil, nil, nil, fmt.Errorf("service has multiple active deployment revisions")
+			}
+			for _, deployment := range service.Deployments {
+				if deployment.RolloutState == types.DeploymentRolloutStateInProgress {
+					return nil, nil, nil, fmt.Errorf("service has a conflicting active rollout")
+				}
 			}
 		}
 	}
+
 	checks := []applyrequest.OperationExecutionCapabilityCheck{
 		{Action: "ecs:DescribeServices", ResourceType: "ecsService", ResourceName: e.ServiceARN, RequiredRole: request.Role.RoleARN},
 		{Action: "ecs:UpdateService", ResourceType: "ecsService", ResourceName: e.ServiceARN, RequiredRole: request.Role.RoleARN},
@@ -255,7 +263,8 @@ func (h RollingService) Execute(ctx context.Context, request applyrequest.ECSOpe
 		return applyrequest.ECSOperationResult{}, beforeMutationError(err)
 	}
 	target := request.PriorResults[0].TaskDefinitionARN
-	if serviceMatches(service, target, request) {
+	forceRetry := isCorrelatedFailedRetry(service, target, request)
+	if serviceMatches(service, target, request) && !forceRetry {
 		result := request.PreparedResult.Clone()
 		result.ServiceDeploymentID = deploymentForTarget(service, target)
 		result.ServiceDeploymentCreatedAt = deploymentCreatedForTarget(service, target)
@@ -277,12 +286,15 @@ func (h RollingService) Execute(ctx context.Context, request applyrequest.ECSOpe
 	if err := authorizeMutation(ctx, request); err != nil {
 		return applyrequest.ECSOperationResult{}, beforeMutationError(err)
 	}
-	output, err := client.UpdateService(ctx, &ecs.UpdateServiceInput{Cluster: aws.String(request.Intent.ClusterARN), Service: aws.String(request.Intent.ServiceARN), TaskDefinition: aws.String(target), DesiredCount: aws.Int32(int32(request.Intent.DesiredCount)), DeploymentConfiguration: &config}, func(options *ecs.Options) { options.Retryer = aws.NopRetryer{}; options.RetryMaxAttempts = 1 })
+	output, err := client.UpdateService(ctx, &ecs.UpdateServiceInput{Cluster: aws.String(request.Intent.ClusterARN), Service: aws.String(request.Intent.ServiceARN), TaskDefinition: aws.String(target), DesiredCount: aws.Int32(int32(request.Intent.DesiredCount)), DeploymentConfiguration: &config, ForceNewDeployment: forceRetry}, func(options *ecs.Options) { options.Retryer = aws.NopRetryer{}; options.RetryMaxAttempts = 1 })
 	if err != nil {
 		return applyrequest.ECSOperationResult{}, ecsMutationError(err)
 	}
 	if output == nil || output.Service == nil || aws.ToString(output.Service.ServiceArn) != request.Intent.ServiceARN || aws.ToString(output.Service.ClusterArn) != request.Intent.ClusterARN || !serviceMatches(output.Service, target, request) {
 		return applyrequest.ECSOperationResult{}, fmt.Errorf("ECS update response does not confirm reviewed acceptance; reconcile before retry")
+	}
+	if forceRetry && (deploymentForTarget(output.Service, target) == "" || deploymentForTarget(output.Service, target) == request.RetryDeploymentID) {
+		return applyrequest.ECSOperationResult{}, fmt.Errorf("retry update accepted without a new deployment identity; reconcile before retry")
 	}
 	result := request.PreparedResult.Clone()
 	result.TaskDefinitionARN = target
@@ -301,6 +313,9 @@ func (h RollingService) Reconcile(ctx context.Context, request applyrequest.ECSO
 		return applyrequest.ECSReconciliation{}, fmt.Errorf("cannot reconcile update without its durable pre-update snapshot")
 	}
 	if serviceMatches(service, request.PriorResults[0].TaskDefinitionARN, request) {
+		if request.RetryDeploymentID != "" && request.PreparedResult.PreviousService.PrimaryDeploymentID == request.RetryDeploymentID && (deploymentForTarget(service, request.PriorResults[0].TaskDefinitionARN) == "" || deploymentForTarget(service, request.PriorResults[0].TaskDefinitionARN) == request.RetryDeploymentID) {
+			return applyrequest.ECSReconciliation{}, nil
+		}
 		result := request.PreparedResult.Clone()
 		result.ServiceDeploymentID = deploymentForTarget(service, request.PriorResults[0].TaskDefinitionARN)
 		result.ServiceDeploymentCreatedAt = deploymentCreatedForTarget(service, request.PriorResults[0].TaskDefinitionARN)
@@ -331,4 +346,38 @@ func deploymentCreatedForTarget(service *types.Service, target string) string {
 		}
 	}
 	return ""
+}
+
+// Only the correlated failed deployment may be replaced. Existing ECS rollback
+// matching the target is handled as a no-op before this fence.
+func validateRollbackService(service *types.Service, request applyrequest.ECSOperationRequest) error {
+	recovery := request.Recovery
+	if recovery == nil || recovery.ForwardDeploymentID == "" || aws.ToString(service.TaskDefinition) != recovery.ForwardTaskDefinitionARN {
+		return fmt.Errorf("rollback cannot overwrite an uncorrelated or intervening deployment")
+	}
+	primary := false
+	for _, deployment := range service.Deployments {
+		if aws.ToString(deployment.Status) == "PRIMARY" {
+			primary = aws.ToString(deployment.Id) == recovery.ForwardDeploymentID && aws.ToString(deployment.TaskDefinition) == recovery.ForwardTaskDefinitionARN
+		}
+		if (deployment.RunningCount > 0 || deployment.PendingCount > 0) && aws.ToString(deployment.TaskDefinition) != recovery.ForwardTaskDefinitionARN && aws.ToString(deployment.TaskDefinition) != recovery.PreviousService.TaskDefinitionARN {
+			return fmt.Errorf("rollback found an intervening active task-definition revision")
+		}
+	}
+	if !primary {
+		return fmt.Errorf("rollback primary deployment no longer matches the failed Apply")
+	}
+	return nil
+}
+
+func isCorrelatedFailedRetry(service *types.Service, target string, request applyrequest.ECSOperationRequest) bool {
+	if request.RetryDeploymentID == "" || request.Recovery != nil {
+		return false
+	}
+	for _, deployment := range service.Deployments {
+		if aws.ToString(deployment.Status) == "PRIMARY" && aws.ToString(deployment.TaskDefinition) == target && aws.ToString(deployment.Id) == request.RetryDeploymentID && deployment.RolloutState == types.DeploymentRolloutStateFailed {
+			return true
+		}
+	}
+	return false
 }

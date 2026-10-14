@@ -97,7 +97,8 @@ precedence over old runtime CodeDeploy step metadata.
 
 This contract does not create clusters/services or build images. Explicitly
 enabled Rolling execution registers Task Definitions and updates existing
-services. Explicit/failure-triggered rollback remains tracked by #1799.
+services. Explicit/approved failure-triggered Rolling recovery is described in the
+[recovery runbook](../runbooks/ecs-rolling-recovery.md).
 
 ## Apply persistence before live execution
 
@@ -377,3 +378,21 @@ base that already contains the reviewed image is reusable without registration,
 and a matching service is observed without UpdateService. Initial service
 preflight does not mistake an unchanged base ARN for the final revision when the
 reviewed image still differs; active conflicting rollout checks still apply.
+
+
+## Rolling recovery and failed-intent holds
+
+`ecs.rollbackOnFailure` is an explicit, default-off Rolling policy included in
+reviewed intent. A separate recovery Apply binds the failed forward Apply,
+registered revision/deployment identity, previous service snapshot and exact
+previous ACTIVE target. The original failed record remains unchanged. Recovery
+uses the same authorization, service lock, durable mutation guard and observer;
+registration is prohibited in this mode. An already matching ECS rollback is
+observed without another update.
+
+Normal Apply creation and mutation gates hold previously failed typed intent even
+when runtime fingerprints/new plan IDs change. An explicitly approved retry gets
+its own `retryOf` identity and a fresh source plan; a new Git intent can instead be
+reviewed normally. Recovery and retry creation share the service execution lock.
+Read [ECS Rolling recovery](../runbooks/ecs-rolling-recovery.md) for API routes,
+policy/failure criteria, concurrency, audit and the gated integration scenario.

@@ -159,6 +159,9 @@ type Transition struct {
 
 // Record is one immutable apply request derived from a persisted ready plan preview.
 type Record struct {
+	RetryDeploymentID  string                 `json:"retryDeploymentId,omitempty"`
+	Recovery           *ECSRecovery           `json:"recovery,omitempty"`
+	RetryOf            string                 `json:"retryOf,omitempty"`
 	Principal          *ExecutionPrincipal    `json:"principal,omitempty"`
 	ECSRuntime         *ECSRolloutObservation `json:"ecsRuntime,omitempty"`
 	ID                 string                 `json:"id"`

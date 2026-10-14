@@ -125,3 +125,18 @@ ecs:
 		t.Fatalf("JSON/YAML differ: %s vs %s", a, b)
 	}
 }
+
+func TestAutomaticECSRecoveryRequiresExplicitRollingOptIn(t *testing.T) {
+	d := ecsContractSpec(t)
+	if d.ECS.RollbackOnFailure {
+		t.Fatal("automatic rollback unexpectedly enabled by default")
+	}
+	d.ECS.RollbackOnFailure = true
+	if err := validateECSDeployment(d); err != nil {
+		t.Fatal(err)
+	}
+	d.Strategy.Type = StrategyTypeCanary
+	if err := validateECSDeployment(d); err == nil {
+		t.Fatal("advanced native strategy accepted Rolling recovery policy")
+	}
+}

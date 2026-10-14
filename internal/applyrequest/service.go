@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
@@ -37,6 +39,8 @@ type DeployerRoleReadinessProvider func(context.Context, DeployerRoleTarget) (De
 // Service derives and persists immutable apply requests from ready plan previews.
 type Service struct {
 	AuthorizeCreate       func(context.Context, Record) (*ExecutionPrincipal, error)
+	RollbackTarget        func(context.Context, Record) (*domain.ECSDeploymentIntent, error)
+	CreateRetryPlan       func(context.Context, string) (planpreview.Record, error)
 	LoadPlan              PlanProvider
 	CurrentFingerprint    CurrentFingerprintProvider
 	DeployerRoleReadiness DeployerRoleReadinessProvider
@@ -54,6 +58,10 @@ type CreateResult struct {
 
 // Create persists one immutable apply request for a ready plan preview.
 func (s Service) Create(ctx context.Context, planID string) (CreateResult, error) {
+	return s.create(ctx, planID, "")
+}
+
+func (s Service) create(ctx context.Context, planID, retryOf string) (CreateResult, error) {
 	if s.LoadPlan == nil {
 		return CreateResult{}, fmt.Errorf("apply request plan provider is required")
 	}
@@ -74,6 +82,7 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 	}
 
 	record := Record{
+		RetryOf:        retryOf,
 		PlanID:         plan.ID,
 		DeploymentName: plan.DeploymentName,
 		Status:         s.initialStatus(),
@@ -99,6 +108,23 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 			return CreateResult{}, ErrExecutionUnauthorized
 		}
 		record.Principal = record.Principal.Clone()
+		record.Details = []string{"Trusted operator approval recorded; the explicitly enabled ECS executor must verify current authorization, intent, ownership and AWS capabilities before mutation."}
+		if retryOf != "" {
+			record.Details = append(record.Details, "Explicit retry of failed Apply "+retryOf+"; a correlated failed primary may be replaced by a fresh deployment.")
+		}
+		if err := s.checkFailedECSIntent(ctx, record); err != nil {
+			return CreateResult{}, err
+		}
+	}
+	if retryOf != "" {
+		parent, err := s.Get(ctx, retryOf)
+		if err != nil {
+			return CreateResult{}, err
+		}
+		if parent.Status != StatusFailed || parent.Recovery != nil || len(parent.Operations) != 3 || len(record.Operations) != 3 || !reflect.DeepEqual(parent.Operations[0].ECS, record.Operations[0].ECS) {
+			return CreateResult{}, ErrSourceFingerprintConflict
+		}
+		record.RetryDeploymentID = failedDeploymentID(parent)
 	}
 	record.Lifecycle = initialLifecycle(record)
 	record.ID, err = stableRecordID(record)
@@ -635,11 +661,16 @@ func stableRecordID(record Record) (string, error) {
 	// churning immutable apply IDs when this duplicated projection evolves without source-intent
 	// changes.
 	payload := struct {
-		Principal      *ExecutionPrincipal `json:"principal,omitempty"`
-		PlanID         string              `json:"planId"`
-		DeploymentName string              `json:"deploymentName"`
-		Source         SourceContext       `json:"source"`
+		RetryDeploymentID string              `json:"retryDeploymentId,omitempty"`
+		Recovery          *ECSRecovery        `json:"recovery,omitempty"`
+		RetryOf           string              `json:"retryOf,omitempty"`
+		Principal         *ExecutionPrincipal `json:"principal,omitempty"`
+		PlanID            string              `json:"planId"`
+		DeploymentName    string              `json:"deploymentName"`
+		Source            SourceContext       `json:"source"`
 	}{
+		RetryDeploymentID: record.RetryDeploymentID,
+		Recovery:          record.Recovery, RetryOf: record.RetryOf,
 		Principal:      record.Principal,
 		PlanID:         record.PlanID,
 		DeploymentName: record.DeploymentName,

@@ -14043,6 +14043,40 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 `
 		runNodeHarness(t, nodeProgram)
 	})
+
+	t.Run("native ECS recovery actions preserve zero baseline and separate outcomes", func(t *testing.T) {
+		program := `const scriptContent=` + string(scriptJSON) + `;
+const detailBody=` + string(detailJSON) + `;
+const planPreview=` + string(planPreviewReadyJSON) + `;
+` + domHarness + `
+const document=new Document();
+['toolbar','summary','accounts'].forEach((id)=>document.byID.set(id,document.createElement('section')));
+const window={location:{pathname:'/',search:'?page=plan&deployment=api-prod',hash:''}};
+const history={replaceState(){}};
+const fetch=()=>new Promise(()=>{});
+const actions=[];
+const failed={id:'failed-forward',deploymentName:'api-prod',planId:planPreview.id,status:'failed',principal:{identity:{id:'operator',authenticated:true}},error:'Forward deployment failed',operations:[{kind:'UpdateECSService',id:'update',status:'failed',ecsCheckpoint:{result:{previousService:{taskDefinitionArn:'arn:aws:ecs:us-west-2:111111111111:task-definition/previous:17',desiredCount:0,minimumHealthyPercent:100,maximumPercent:200}}}}]};
+const main=scriptContent+` + "`" + `;
+operatorContextState.context={ecsExecutionEnabled:true};
+renderDeploymentWorkspace('plan',detailBody,{status:'ready',record:planPreview},{status:'failed',record:failed,onRecovery:(action)=>actions.push(action)});
+` + "`" + `;
+new Function('window','document','fetch','history','HTMLElement','HTMLInputElement','detailBody','planPreview','failed','actions',main)(window,document,fetch,history,Element,InputElement,detailBody,planPreview,failed,actions);
+const root=document.getElementById('accounts');
+const text=collectText(root).join(' | ');
+if(!text.includes('0 tasks') || !text.includes('previous:17'))throw new Error('rollback review lost zero baseline or exact previous revision');
+if(text.includes('failed immutable apply records are expected'))throw new Error('actual native failure was mislabeled as a local-safe disabled result');
+const buttons=collectNodes(root,(node)=>node.tagName==='BUTTON');
+for(const [label,action] of [['Restore previous revision','rollback'],['Approve retry of Git intent','retry']]){
+ const button=buttons.find((node)=>node.textContent===label);
+ if(!button || button.disabled)throw new Error('missing enabled '+label);
+ button.dispatch('click');
+ if(actions.pop()!==action)throw new Error('recovery action mismatch');
+}
+if(!buttons.find((node)=>node.textContent==='Approve & Apply to ECS'))throw new Error('live execution approval was not labeled');
+`
+		runNodeHarness(t, program)
+	})
+
 }
 
 func TestAuditTimelinePageWithNodeHarness(t *testing.T) {
