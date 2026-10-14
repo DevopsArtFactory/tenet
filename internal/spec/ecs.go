@@ -2,6 +2,7 @@ package spec
 
 import (
 	"fmt"
+	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"math"
 	"regexp"
 	"strconv"
@@ -12,15 +13,16 @@ import (
 
 // ECSDeploymentSpec binds reviewed intent to an existing ECS service and base revision.
 type ECSDeploymentSpec struct {
-	SyncPolicy            *ECSSyncPolicy `json:"syncPolicy,omitempty" yaml:"syncPolicy,omitempty"`
-	RollbackOnFailure     bool           `json:"rollbackOnFailure,omitempty" yaml:"rollbackOnFailure,omitempty"`
-	DeploymentController  string         `json:"deploymentController" yaml:"deploymentController"`
-	ClusterARN            string         `json:"clusterArn" yaml:"clusterArn"`
-	ServiceARN            string         `json:"serviceArn" yaml:"serviceArn"`
-	BaseTaskDefinitionARN string         `json:"baseTaskDefinitionArn" yaml:"baseTaskDefinitionArn"`
-	ContainerName         string         `json:"containerName" yaml:"containerName"`
-	MinimumHealthyPercent *int           `json:"minimumHealthyPercent,omitempty" yaml:"minimumHealthyPercent,omitempty"`
-	MaximumPercent        *int           `json:"maximumPercent,omitempty" yaml:"maximumPercent,omitempty"`
+	Advanced              *domain.ECSAdvancedConfiguration `json:"advanced,omitempty" yaml:"advanced,omitempty"`
+	SyncPolicy            *ECSSyncPolicy                   `json:"syncPolicy,omitempty" yaml:"syncPolicy,omitempty"`
+	RollbackOnFailure     bool                             `json:"rollbackOnFailure,omitempty" yaml:"rollbackOnFailure,omitempty"`
+	DeploymentController  string                           `json:"deploymentController" yaml:"deploymentController"`
+	ClusterARN            string                           `json:"clusterArn" yaml:"clusterArn"`
+	ServiceARN            string                           `json:"serviceArn" yaml:"serviceArn"`
+	BaseTaskDefinitionARN string                           `json:"baseTaskDefinitionArn" yaml:"baseTaskDefinitionArn"`
+	ContainerName         string                           `json:"containerName" yaml:"containerName"`
+	MinimumHealthyPercent *int                             `json:"minimumHealthyPercent,omitempty" yaml:"minimumHealthyPercent,omitempty"`
+	MaximumPercent        *int                             `json:"maximumPercent,omitempty" yaml:"maximumPercent,omitempty"`
 }
 
 var ecsClusterPattern = regexp.MustCompile(`^cluster/[a-zA-Z0-9_-]{1,255}$`)
@@ -99,7 +101,7 @@ func validateECSDeployment(d DeploymentSpec) error {
 	if d.Strategy.MinHealthyPercent != 0 && d.Strategy.MinHealthyPercent != min {
 		return fmt.Errorf("strategy.minHealthyPercent conflicts with ecs.minimumHealthyPercent")
 	}
-	return nil
+	return validateECSAdvanced(d)
 }
 
 func validECSARN(ref arn.ARN) bool {

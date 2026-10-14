@@ -307,6 +307,10 @@ func derivePlanRisk(detail catalog.DeploymentOverviewDetail) Risk {
 
 	if detail.ECS != nil {
 		reasons = append(reasons, "native ECS registration/update intent requires review of the existing service and pinned base revision")
+		if detail.ECS.DeploymentStrategy != "ROLLING" {
+			level = "high"
+			reasons = append(reasons, "native advanced strategy changes production traffic through reviewed ECS routing and bake policy")
+		}
 		if !strings.Contains(detail.ECS.Image, "@sha256:") {
 			reasons = append(reasons, "image reference is mutable; pin a digest to commit to reviewed image content")
 		}
