@@ -158,9 +158,6 @@ func (s FileStore) Save(ctx context.Context, record Record) error {
 		return err
 	}
 	defer unlock()
-	if s.Path == "" {
-		return fmt.Errorf("file apply request store path is required")
-	}
 	records, err := Load(s.Path)
 	if err != nil {
 		var pathErr *os.PathError

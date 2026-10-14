@@ -31,6 +31,10 @@ func lockFile(ctx context.Context, path string, wait bool) (func(), error) {
 		return nil, fmt.Errorf("open apply request store lock: %w", err)
 	}
 	for {
+		if err := ctx.Err(); err != nil {
+			_ = file.Close()
+			return nil, err
+		}
 		err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 		if err == nil {
 			return func() { _ = file.Close() }, nil
@@ -38,6 +42,9 @@ func lockFile(ctx context.Context, path string, wait bool) (func(), error) {
 		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EINTR) {
 			_ = file.Close()
 			return nil, fmt.Errorf("lock apply request store: %w", err)
+		}
+		if errors.Is(err, syscall.EINTR) {
+			continue
 		}
 		if !wait {
 			_ = file.Close()

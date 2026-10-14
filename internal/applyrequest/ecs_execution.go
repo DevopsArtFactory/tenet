@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	"reflect"
 	"strings"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/reconcile"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
 )
 
 // ECSCheckpoint is durable evidence for one reviewed operation. In-flight means
@@ -73,8 +73,18 @@ type ECSCallError struct {
 	Rejected  bool
 }
 
-func (e *ECSCallError) Error() string { return e.Err.Error() }
-func (e *ECSCallError) Unwrap() error { return e.Err }
+func (e *ECSCallError) Error() string {
+	if e == nil || e.Err == nil {
+		return "ECS call failed without an underlying error"
+	}
+	return e.Err.Error()
+}
+func (e *ECSCallError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
 
 // ECSExecution is an explicit, fail-closed live boundary. No production handlers
 // are installed by default; supplying handlers alone does not opt into execution.
@@ -271,7 +281,11 @@ func (e Executor) validateECS(ctx context.Context, record Record) (DeployerRoleR
 }
 
 func (e Executor) ecsOwnedChange(ctx context.Context, owner Record, change func(Record) (Record, error)) (Record, error) {
-	return e.Service.Store.(MutationStore).Mutate(ctx, owner.ID, func(current Record) (Record, error) {
+	store, ok := e.Service.Store.(MutationStore)
+	if !ok {
+		return Record{}, fmt.Errorf("ECS execution requires atomic durable storage")
+	}
+	return store.Mutate(ctx, owner.ID, func(current Record) (Record, error) {
 		if current.Status != StatusRunning || current.Claim == nil || owner.Claim == nil || current.Claim.WorkerID != owner.Claim.WorkerID || current.Claim.ClaimedAt != owner.Claim.ClaimedAt {
 			return Record{}, ErrAlreadyClaimed
 		}
@@ -379,7 +393,7 @@ func (e Executor) runECSOperation(ctx context.Context, record Record, role Deplo
 	result, err := handler.Execute(ctx, request)
 	if err != nil {
 		var callErr *ECSCallError
-		if errors.As(err, &callErr) && callErr.Rejected && !callErr.Retryable {
+		if errors.As(err, &callErr) && callErr != nil && callErr.Rejected && !callErr.Retryable {
 			return e.finishECS(ctx, record, StatusFailed, err.Error())
 		}
 		return e.recordECSError(ctx, record, index, err)
@@ -389,6 +403,9 @@ func (e Executor) runECSOperation(ctx context.Context, record Record, role Deplo
 
 func (e Executor) completeECSOperation(ctx context.Context, record Record, index int, result ECSOperationResult) error {
 	updated, err := e.ecsOwnedChange(ctx, record, func(current Record) (Record, error) {
+		if index < 0 || index >= len(current.Operations) || current.Operations[index].ECSCheckpoint == nil {
+			return Record{}, fmt.Errorf("ECS operation checkpoint is missing")
+		}
 		checkpoint := *current.Operations[index].ECSCheckpoint
 		checkpoint.State = "complete"
 		checkpoint.Result = result
@@ -419,9 +436,12 @@ func (e Executor) completeECSOperation(ctx context.Context, record Record, index
 
 func (e Executor) recordECSError(ctx context.Context, record Record, index int, cause error) error {
 	_, err := e.ecsOwnedChange(ctx, record, func(current Record) (Record, error) {
+		if index < 0 || index >= len(current.Operations) || current.Operations[index].ECSCheckpoint == nil {
+			return Record{}, fmt.Errorf("ECS operation checkpoint is missing")
+		}
 		checkpoint := *current.Operations[index].ECSCheckpoint
 		var callErr *ECSCallError
-		if errors.As(cause, &callErr) && callErr.Rejected && callErr.Retryable {
+		if errors.As(cause, &callErr) && callErr != nil && callErr.Rejected && callErr.Retryable {
 			checkpoint.State = "retryable_rejection"
 		}
 		changed := checkpoint.Error != cause.Error()

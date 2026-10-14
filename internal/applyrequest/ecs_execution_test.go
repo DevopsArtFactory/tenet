@@ -414,3 +414,24 @@ func TestECSExecutionRetriesConfirmedTransientRejectionWithoutGuessingAbsence(t 
 		t.Fatal("confirmed rejected calls should retry at most three times")
 	}
 }
+
+func TestECSExecutionRejectsMissingCheckpointAndEmptyHandlerErrors(t *testing.T) {
+	if (&ECSCallError{Rejected: true}).Error() == "" {
+		t.Fatal("empty handler error lost diagnostic")
+	}
+	f := newECSFixture(t)
+	owner, err := f.executor.Service.Claim(context.Background(), f.record.ID, ClaimRequest{WorkerID: f.executor.WorkerID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.executor.completeECSOperation(context.Background(), owner, 0, ECSOperationResult{}); err == nil {
+		t.Fatal("completion accepted a missing checkpoint")
+	}
+	if err := f.executor.recordECSError(context.Background(), owner, 0, errors.New("failed")); err == nil {
+		t.Fatal("error update accepted a missing checkpoint")
+	}
+	f.executor.Service.Store = &memoryStore{}
+	if _, err := f.executor.ecsOwnedChange(context.Background(), owner, func(r Record) (Record, error) { return r, nil }); err == nil {
+		t.Fatal("non-atomic store accepted execution update")
+	}
+}
