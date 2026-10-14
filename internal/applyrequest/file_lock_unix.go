@@ -14,7 +14,9 @@ import (
 
 // Lock a stable sidecar inode: locking the JSON file would stop protecting it
 // as soon as an atomic rename replaces that inode. Never unlink the sidecar.
-func lockStore(ctx context.Context, path string) (func(), error) {
+func lockStore(ctx context.Context, path string) (func(), error) { return lockFile(ctx, path, true) }
+
+func lockFile(ctx context.Context, path string, wait bool) (func(), error) {
 	if path == "" {
 		return nil, fmt.Errorf("file apply request store path is required")
 	}
@@ -29,6 +31,10 @@ func lockStore(ctx context.Context, path string) (func(), error) {
 		return nil, fmt.Errorf("open apply request store lock: %w", err)
 	}
 	for {
+		if err := ctx.Err(); err != nil {
+			_ = file.Close()
+			return nil, err
+		}
 		err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 		if err == nil {
 			return func() { _ = file.Close() }, nil
@@ -36,6 +42,13 @@ func lockStore(ctx context.Context, path string) (func(), error) {
 		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EINTR) {
 			_ = file.Close()
 			return nil, fmt.Errorf("lock apply request store: %w", err)
+		}
+		if errors.Is(err, syscall.EINTR) {
+			continue
+		}
+		if !wait {
+			_ = file.Close()
+			return nil, ErrExecutionBusy
 		}
 		timer := time.NewTimer(10 * time.Millisecond)
 		select {

@@ -115,6 +115,7 @@ type OperationExecutionAttempt struct {
 
 // Operation is one additive operator-facing execution row projected from a ready plan preview.
 type Operation struct {
+	ECSCheckpoint    *ECSCheckpoint              `json:"ecsCheckpoint,omitempty"`
 	Kind             string                      `json:"kind,omitempty"`
 	ECS              *domain.ECSDeploymentIntent `json:"ecs,omitempty"`
 	ID               string                      `json:"id,omitempty"`

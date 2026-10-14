@@ -515,6 +515,11 @@ func (s Service) Transition(ctx context.Context, id string, request TransitionRe
 	}
 
 	change := func(record Record) (Record, error) {
+		for _, operation := range record.Operations {
+			if operation.ECSCheckpoint != nil {
+				return Record{}, fmt.Errorf("%w: live ECS requests are advanced by their owning executor", ErrInvalidState)
+			}
+		}
 		record = NormalizeOperationIDs(record)
 		if err := validateTransition(record, request); err != nil {
 			return Record{}, err
@@ -662,6 +667,10 @@ func normalizeOperationIDs(operations []Operation) []Operation {
 	normalized := append([]Operation(nil), operations...)
 	for i := range normalized {
 		normalized[i].ECS = normalized[i].ECS.Clone()
+		if normalized[i].ECSCheckpoint != nil {
+			checkpoint := *normalized[i].ECSCheckpoint
+			normalized[i].ECSCheckpoint = &checkpoint
+		}
 	}
 	used := make(map[string]struct{}, len(normalized))
 	for _, operation := range normalized {
@@ -832,6 +841,10 @@ func cloneOperations(existing []Operation) []Operation {
 	updated := append([]Operation(nil), existing...)
 	for i := range updated {
 		updated[i].ECS = updated[i].ECS.Clone()
+		if updated[i].ECSCheckpoint != nil {
+			checkpoint := *updated[i].ECSCheckpoint
+			updated[i].ECSCheckpoint = &checkpoint
+		}
 		if updated[i].ExecutionAttempt != nil {
 			attempt := *updated[i].ExecutionAttempt
 			updated[i].ExecutionAttempt = &attempt
