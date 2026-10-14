@@ -123,6 +123,7 @@ func (s Service) Get(ctx context.Context, id string) (Record, error) {
 // It preserves existing non-empty IDs so legacy records can be projected with additive IDs
 // without rewriting the immutable stored payload.
 func NormalizeOperationIDs(record Record) Record {
+	record.Source.Git = record.Source.Git.Clone()
 	record.Operations = normalizeOperationIDs(record.Operations)
 	return record
 }
@@ -140,6 +141,7 @@ func deriveSourceContext(detail catalog.DeploymentOverviewDetail) (SourceContext
 		return SourceContext{}, err
 	}
 	return SourceContext{
+		Git:                detail.Git.Clone(),
 		DeploymentName:     detail.Name,
 		Route:              "/v1/overview/deployments/" + detail.Name,
 		Fingerprint:        fingerprint,

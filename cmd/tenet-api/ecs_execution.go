@@ -16,7 +16,6 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/ecsexecution"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
-	"github.com/DevopsArtFactory/tenet/internal/rbacpolicy"
 	"github.com/DevopsArtFactory/tenet/internal/reconcile"
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -35,13 +34,19 @@ func validateECSExecutionConfiguration(source apiCatalogSource) error {
 	if !ecsExecutionEnabled() {
 		return nil
 	}
-	if !awsApplyEnabled() || source.kind != apiCatalogSourceFilesystem || source.filesystemRoot == "" {
-		return fmt.Errorf("live ECS execution requires TENET_AWS_ENABLE_APPLY=true and a filesystem desired-state repository")
+	if !awsApplyEnabled() || !source.configured() || (source.kind == apiCatalogSourceFilesystem && source.filesystemRoot == "") {
+		return fmt.Errorf("live ECS execution requires TENET_AWS_ENABLE_APPLY=true and a configured desired-state repository")
+	}
+	if source.kind == apiCatalogSourceGitHub && strings.TrimSpace(source.githubRequest.Ref) == "" {
+		return fmt.Errorf("live GitHub ECS execution requires an explicit TENET_CATALOG_GITHUB_REF")
 	}
 	if !trustedAuthenticatedHeadersEnabled() && !authRuntimeDiagnosticFromEnv().TenetManagedLogin.Configured {
 		return fmt.Errorf("live ECS execution requires managed login or an explicitly trusted authenticated front door")
 	}
-	policy, err := rbacpolicy.LoadFromRepository(source.filesystemRoot)
+	if source.loadPolicy == nil {
+		return fmt.Errorf("live ECS execution requires a repository RBAC policy provider")
+	}
+	policy, err := source.loadPolicy(context.Background())
 	if err != nil {
 		return fmt.Errorf("live ECS execution requires repository RBAC policy: %w", err)
 	}

@@ -280,7 +280,7 @@ func (e Executor) validateECS(ctx context.Context, record Record, mutation bool)
 		return DeployerRoleReadiness{}, err
 	}
 	plan = planpreview.NormalizeOperationIDs(plan)
-	if plan.Status != planpreview.StatusReady || plan.ID != record.PlanID || plan.DeploymentName != record.DeploymentName || record.Source.Fingerprint != plan.Source.Fingerprint || record.Source.Fingerprint == "" || len(plan.Operations) != len(record.Operations) || len(record.Operations) != 3 {
+	if plan.Status != planpreview.StatusReady || plan.ID != record.PlanID || plan.DeploymentName != record.DeploymentName || record.Source.Fingerprint != plan.Source.Fingerprint || !reflect.DeepEqual(record.Source.Git, plan.Source.Git) || record.Source.Fingerprint == "" || len(plan.Operations) != len(record.Operations) || len(record.Operations) != 3 {
 		return DeployerRoleReadiness{}, fmt.Errorf("apply does not match its reviewed native ECS plan")
 	}
 	if err := e.Service.validateECSRetry(ctx, record); err != nil {

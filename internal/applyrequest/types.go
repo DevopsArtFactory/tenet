@@ -95,11 +95,12 @@ func (s OperationStatus) IsTerminal() bool {
 
 // SourceContext captures the immutable plan preview that an apply request references.
 type SourceContext struct {
-	PlanID        string `json:"planId"`
-	Route         string `json:"route"`
-	PlanStatus    string `json:"planStatus"`
-	PlanCreatedAt string `json:"planCreatedAt,omitempty"`
-	Fingerprint   string `json:"fingerprint,omitempty"`
+	Git           *domain.GitSource `json:"git,omitempty"`
+	PlanID        string            `json:"planId"`
+	Route         string            `json:"route"`
+	PlanStatus    string            `json:"planStatus"`
+	PlanCreatedAt string            `json:"planCreatedAt,omitempty"`
+	Fingerprint   string            `json:"fingerprint,omitempty"`
 }
 
 // OperationExecutionAttempt captures local-safe executor evidence for one apply operation.

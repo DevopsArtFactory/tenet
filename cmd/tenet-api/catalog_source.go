@@ -13,6 +13,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/manifest"
 	"github.com/DevopsArtFactory/tenet/internal/manifestfs"
 	"github.com/DevopsArtFactory/tenet/internal/manifestgithub"
+	"github.com/DevopsArtFactory/tenet/internal/rbacpolicy"
 )
 
 type apiCatalogSourceKind string
@@ -24,6 +25,7 @@ const (
 )
 
 type apiCatalogSource struct {
+	loadPolicy     func(context.Context) (rbacpolicy.Policy, error)
 	kind           apiCatalogSourceKind
 	filesystemRoot string
 	githubBaseURL  string
@@ -84,6 +86,7 @@ func newFilesystemCatalogSource(root string) apiCatalogSource {
 	return apiCatalogSource{
 		kind:           apiCatalogSourceFilesystem,
 		filesystemRoot: root,
+		loadPolicy:     func(context.Context) (rbacpolicy.Policy, error) { return rbacpolicy.LoadFromRepository(root) },
 		loadCatalog: func(_ context.Context) (manifest.Catalog, error) {
 			return catalog.LoadFromRepository(root)
 		},
@@ -110,14 +113,27 @@ func newGitHubCatalogSource(baseURL string, req githubcontents.Request) (apiCata
 	}
 
 	client := githubcontents.Client{BaseURL: baseURL}
+	pinned := newPinnedGitHubCatalogLoader(client, req)
 	return apiCatalogSource{
 		kind:          apiCatalogSourceGitHub,
 		githubBaseURL: baseURL,
 		githubRequest: req,
+		loadPolicy: func(ctx context.Context) (rbacpolicy.Policy, error) {
+			snapshot, err := pinned(ctx)
+			return snapshot.Policy, err
+		},
 		loadCatalog: func(ctx context.Context) (manifest.Catalog, error) {
+			if ecsExecutionEnabled() {
+				snapshot, err := pinned(ctx)
+				return snapshot.Catalog, err
+			}
 			return catalog.LoadFromGitHub(ctx, client, req)
 		},
 		loadSpec: func(ctx context.Context) (manifest.CatalogSpec, error) {
+			if ecsExecutionEnabled() {
+				snapshot, err := pinned(ctx)
+				return snapshot.Spec, err
+			}
 			return manifestgithub.Load(ctx, client, req)
 		},
 	}, nil
@@ -130,7 +146,7 @@ func validateCatalogSource(source apiCatalogSource, applyEnabled bool) error {
 		}
 		return nil
 	}
-	if applyEnabled && source.kind != apiCatalogSourceFilesystem {
+	if applyEnabled && source.kind != apiCatalogSourceFilesystem && !ecsExecutionEnabled() {
 		return fmt.Errorf("TENET_AWS_ENABLE_APPLY=true requires TENET_REPO_ROOT because the local-safe executor only supports the filesystem catalog source; GitHub catalog mode is read-only")
 	}
 	if _, err := source.loadCatalog(context.Background()); err != nil {

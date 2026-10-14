@@ -14,6 +14,7 @@ import (
 // used by overview detail routes and plan preview optimistic matching.
 func DeriveDeploymentSourceFingerprint(detail DeploymentOverviewDetail) (string, error) {
 	payload := struct {
+		Git                *domain.GitSource               `json:"git,omitempty"`
 		ECS                *domain.ECSDeploymentIntent     `json:"ecs,omitempty"`
 		DeploymentName     string                          `json:"deploymentName"`
 		TargetType         string                          `json:"targetType,omitempty"`
@@ -34,6 +35,7 @@ func DeriveDeploymentSourceFingerprint(detail DeploymentOverviewDetail) (string,
 		RolloutSteps       []domain.RolloutStepSummary     `json:"rolloutSteps,omitempty"`
 		RolloutExecution   []domain.RolloutExecutionDetail `json:"rolloutExecution,omitempty"`
 	}{
+		Git:                detail.Git.Clone(),
 		ECS:                detail.ECS,
 		DeploymentName:     detail.Name,
 		TargetType:         detail.TargetType,

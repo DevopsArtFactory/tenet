@@ -176,10 +176,9 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 		options.AuthorizeWithRepositoryPolicy = true
 	}
 	configureManagedLoginRuntime(&options)
-	if source.kind == apiCatalogSourceFilesystem {
-		root := source.filesystemRoot
-		options.RepositoryPolicy = func(_ context.Context, identity requestactor.AuthenticatedIdentity, groups requestactor.AuthenticatedGroups) (rbacpolicy.Evaluation, error) {
-			policy, err := rbacpolicy.LoadFromRepository(root)
+	if source.loadPolicy != nil && (source.kind == apiCatalogSourceFilesystem || ecsExecutionEnabled()) {
+		options.RepositoryPolicy = func(ctx context.Context, identity requestactor.AuthenticatedIdentity, groups requestactor.AuthenticatedGroups) (rbacpolicy.Evaluation, error) {
+			policy, err := source.loadPolicy(ctx)
 			if err != nil {
 				if errors.Is(err, rbacpolicy.ErrNotConfigured) {
 					return rbacpolicy.Evaluate(rbacpolicy.Policy{}, identity, groups)
