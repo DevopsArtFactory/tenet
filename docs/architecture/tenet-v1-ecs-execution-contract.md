@@ -419,3 +419,21 @@ The default-off polling reconciler creates plans from immutable GitHub commits.
 Automatic approvals require global, per-deployment and RBAC service-subject gates;
 self-heal is separately opt-in. Read [ECS Git reconciliation](../runbooks/ecs-git-reconciliation.md)
 for configuration, concurrency, failed-intent holds and drift semantics.
+
+## Advanced-strategy SDK prerequisite
+
+The ECS SDK is pinned to `v1.66.0`, the first release with native Canary and
+Linear configuration support, plus the minimum compatible shared SDK modules.
+HTTP fixture tests verify all three advanced strategy payloads, fractional traffic
+percentages, explicit zero bake times, routing roles/targets, alarms and Lambda
+hooks. They also verify deployment/revision correlation, traffic/lifecycle
+response decoding and the native `StopServiceDeployment(ROLLBACK)` request.
+
+This dependency prerequisite does not enable advanced execution. The live
+executor and automatic Git reconciler still accept Rolling only. Manifest
+configuration, routing preflight, restartable advanced observation and rollback
+remain tracked by #1801; do not route native advanced plans through Rolling or
+legacy CodeDeploy handlers. The initial hook contract will use Lambda hooks;
+newer Pause/Continue deployment APIs are not covered by this SDK pin.
+
+Reference: [ECS SDK changelog](https://github.com/aws/aws-sdk-go-v2/blob/service/ecs/v1.66.0/service/ecs/CHANGELOG.md).
