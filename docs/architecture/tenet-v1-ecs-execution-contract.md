@@ -176,3 +176,9 @@ runtime observations from its own rollout to change without invalidating the
 Apply. Every new mutation still requires current authorization and deployer-role
 readiness. Completed operation results can be finalized locally after restart
 without issuing another AWS call.
+
+A handler may also classify an explicit AWS response as a confirmed, retryable
+rejection. That evidence is persisted as `retryable_rejection` and permits a
+bounded retry after the same 30-second backoff without guessing whether an
+ambiguous registration is absent. Unclassified network/server failures always
+remain `in_flight` and require reconciliation.

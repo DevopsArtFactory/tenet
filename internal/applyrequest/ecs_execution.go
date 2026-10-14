@@ -225,7 +225,7 @@ func (e Executor) validateECS(ctx context.Context, record Record) (DeployerRoleR
 			return DeployerRoleReadiness{}, fmt.Errorf("unsupported or altered reviewed ECS operation")
 		}
 		if cp := op.ECSCheckpoint; cp != nil {
-			if incomplete || cp.RequestID != ecsRequest(record, i, DeployerRoleReadiness{}).RequestID || cp.Attempts < 1 || cp.Attempts > 3 || (cp.State != "in_flight" && cp.State != "complete") {
+			if incomplete || cp.RequestID != ecsRequest(record, i, DeployerRoleReadiness{}).RequestID || cp.Attempts < 1 || cp.Attempts > 3 || (cp.State != "in_flight" && cp.State != "complete" && cp.State != "retryable_rejection") {
 				return DeployerRoleReadiness{}, fmt.Errorf("invalid ECS execution checkpoint")
 			}
 		}
@@ -320,6 +320,9 @@ func (e Executor) runECSOperation(ctx context.Context, record Record, role Deplo
 		if e.Service.now().Before(retry) {
 			return nil
 		}
+	}
+	if op.ECSCheckpoint != nil && op.ECSCheckpoint.State == "retryable_rejection" && op.ECSCheckpoint.Attempts >= 3 {
+		return e.finishECS(ctx, record, StatusFailed, "ECS execution retries exhausted after confirmed AWS rejections")
 	}
 	if op.ECSCheckpoint != nil && op.ECSCheckpoint.State == "in_flight" {
 		result, err := handler.Reconcile(ctx, request)
@@ -417,16 +420,24 @@ func (e Executor) completeECSOperation(ctx context.Context, record Record, index
 func (e Executor) recordECSError(ctx context.Context, record Record, index int, cause error) error {
 	_, err := e.ecsOwnedChange(ctx, record, func(current Record) (Record, error) {
 		checkpoint := *current.Operations[index].ECSCheckpoint
+		var callErr *ECSCallError
+		if errors.As(cause, &callErr) && callErr.Rejected && callErr.Retryable {
+			checkpoint.State = "retryable_rejection"
+		}
 		changed := checkpoint.Error != cause.Error()
 		checkpoint.Error = cause.Error()
 		checkpoint.UpdatedAt = e.Service.now().UTC().Format(time.RFC3339Nano)
 		checkpoint.RetryAfter = e.Service.now().Add(30 * time.Second).UTC().Format(time.RFC3339Nano)
 		current.Operations[index].ECSCheckpoint = &checkpoint
+		detail := "ECS request " + checkpoint.RequestID + " requires reconciliation before another mutation."
+		if checkpoint.State == "retryable_rejection" {
+			detail = "ECS request " + checkpoint.RequestID + " was explicitly rejected by AWS; a bounded retry may run after backoff."
+		}
 		if changed {
-			current.Transitions = appendTransition(current.Transitions, Transition{TransitionedAt: checkpoint.UpdatedAt, PreviousStatus: StatusRunning, Status: StatusRunning, Step: index + 1, Actor: current.Actor, Error: checkpoint.Error, Details: []string{"ECS request " + checkpoint.RequestID + " requires reconciliation"}, Lifecycle: current.Lifecycle})
+			current.Transitions = appendTransition(current.Transitions, Transition{TransitionedAt: checkpoint.UpdatedAt, PreviousStatus: StatusRunning, Status: StatusRunning, Step: index + 1, Actor: current.Actor, Error: checkpoint.Error, Details: []string{detail}, Lifecycle: current.Lifecycle})
 		}
 		current.Error = checkpoint.Error
-		current.Details = []string{"ECS outcome requires read-only reconciliation before any subsequent mutation."}
+		current.Details = []string{detail}
 		return current, nil
 	})
 	return err

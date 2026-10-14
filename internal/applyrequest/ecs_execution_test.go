@@ -398,3 +398,19 @@ func TestECSExecutionRejectsUnsupportedOperationsAndSerializesDifferentApplies(t
 		t.Fatal("conflicting apply issued another mutation")
 	}
 }
+
+func TestECSExecutionRetriesConfirmedTransientRejectionWithoutGuessingAbsence(t *testing.T) {
+	f := newECSFixture(t)
+	f.handler.execute = func(ECSOperationRequest) (ECSOperationResult, error) {
+		return ECSOperationResult{}, &ECSCallError{Err: errors.New("ThrottlingException"), Rejected: true, Retryable: true}
+	}
+	for i := 0; i < 4; i++ {
+		if err := f.executor.RunOnce(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		f.now = f.now.Add(31 * time.Second)
+	}
+	if f.handler.calls.Load() != 3 || f.handler.reconciles.Load() != 0 || f.stored(t).Status != StatusFailed {
+		t.Fatal("confirmed rejected calls should retry at most three times")
+	}
+}
