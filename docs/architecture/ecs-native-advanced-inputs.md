@@ -66,3 +66,32 @@ AWS references: [deployment configuration](https://docs.aws.amazon.com/AmazonECS
 [Canary](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_CanaryConfiguration.html),
 [Linear](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_LinearConfiguration.html),
 and [ALB infrastructure role](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/AmazonECSInfrastructureRolePolicyForLoadBalancers.html).
+
+## Read-only ALB execution prerequisite
+
+The native executor's ALB readiness helper now reads only the reviewed ALB,
+listeners, rules and target-group ARNs using an assumed deployer role. It checks
+that the ALB is active, both IP target groups use the ALB VPC and reviewed HTTP/S
+port/protocol, and listener rules forward only to the reviewed pair. An optional
+test rule is distinct and shares the ALB. Redirect/fixed-response routing,
+foreign targets/attachments, missing evidence and weighted target-group
+stickiness are rejected in this initial support matrix.
+
+The helper returns configured target weights and a signature of routing,
+listener and target health-check configuration for a later final mutation fence.
+These weights describe ALB configuration, not measured HTTP traffic. This check
+does not infer healthy tasks or network reachability. Native service-deployment
+and task observation must supply convergence evidence.
+
+The interface exposes no ALB mutation operation: ECS will own traffic changes.
+ELB describe actions require `Resource: "*"` in IAM; each actual SDK request still
+selects only reviewed ARNs. Permission denial, incomplete data and cancelled
+contexts fail closed. Source/observer credentials are never reused as execution
+credentials, including same-account preflight.
+
+This helper is a prerequisite and remains unwired to production advanced writes
+until service-update, observation and rollback handlers are complete. The
+existing live flags still enable Rolling only.
+
+References: [ALB prerequisites](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/alb-resources-for-blue-green.html)
+and [ELB IAM action scopes](https://docs.aws.amazon.com/service-authorization/latest/reference/list_elbv2.html).
