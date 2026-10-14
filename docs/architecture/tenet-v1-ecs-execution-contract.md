@@ -404,3 +404,11 @@ its own `retryOf` identity and a fresh source plan; a new Git intent can instead
 reviewed normally. Recovery and retry creation share the service execution lock.
 Read [ECS Rolling recovery](../runbooks/ecs-rolling-recovery.md) for API routes,
 policy/failure criteria, concurrency, audit and the gated integration scenario.
+
+Plan and Apply file stores share the same process-level sidecar-lock primitive.
+Concurrent API/reconciler plan creates load, deduplicate and append while holding
+that lock, then sync the temporary file and containing directory before success.
+A ready source plan must remain available across restarts for its approved Apply;
+a concurrent plan write cannot silently remove it. These locks support cooperating
+Linux/macOS processes on one local filesystem; they do not provide distributed or
+network-filesystem coordination. Keep the stable `.lock` sidecars in place.

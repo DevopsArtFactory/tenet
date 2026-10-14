@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/DevopsArtFactory/tenet/internal/filelock"
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
 
@@ -49,6 +50,14 @@ func Load(path string) ([]Record, error) {
 
 // Save writes the full immutable plan preview set atomically.
 func Save(path string, records []Record) error {
+	unlock, err := filelock.Acquire(context.Background(), path, true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return saveUnlocked(path, records)
+}
+func saveUnlocked(path string, records []Record) error {
 	sorted := list(records)
 	content, err := json.MarshalIndent(sorted, "", "  ")
 	if err != nil {
@@ -84,12 +93,23 @@ func Save(path string, records []Record) error {
 	if _, err := tempFile.Write(content); err != nil {
 		return fmt.Errorf("write temp plan preview store: %w", err)
 	}
+	if err := tempFile.Sync(); err != nil {
+		return fmt.Errorf("sync temp plan preview store: %w", err)
+	}
 	if err := tempFile.Close(); err != nil {
 		return fmt.Errorf("close temp plan preview store: %w", err)
 	}
 	tempFile = nil
 	if err := renameFile(tempPath, path); err != nil {
 		return fmt.Errorf("rename plan preview store: %w", err)
+	}
+	directory, err := os.Open(dir)
+	if err != nil {
+		return fmt.Errorf("open plan preview store directory: %w", err)
+	}
+	defer directory.Close()
+	if err := directory.Sync(); err != nil {
+		return fmt.Errorf("sync plan preview store directory: %w", err)
 	}
 	return nil
 }
@@ -111,10 +131,15 @@ func (s FileStore) Get(_ context.Context, id string) (Record, error) {
 }
 
 // Save persists one immutable plan preview by ID.
-func (s FileStore) Save(_ context.Context, record Record) error {
+func (s FileStore) Save(ctx context.Context, record Record) error {
 	if s.Path == "" {
 		return fmt.Errorf("file plan preview store path is required")
 	}
+	unlock, err := filelock.Acquire(ctx, s.Path, true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	records, err := Load(s.Path)
 	if err != nil {
 		var pathErr *os.PathError
@@ -127,5 +152,5 @@ func (s FileStore) Save(_ context.Context, record Record) error {
 			return nil
 		}
 	}
-	return Save(s.Path, append(records, record))
+	return saveUnlocked(s.Path, append(records, record))
 }
