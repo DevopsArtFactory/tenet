@@ -41,18 +41,38 @@ type ECSServiceSnapshot struct {
 	PrimaryDeploymentID   string `json:"primaryDeploymentId"`
 }
 
+// ECSNativeSourceRevision binds an immutable source identity to its workload.
+type ECSNativeSourceRevision struct {
+	ARN               string `json:"arn"`
+	TaskDefinitionARN string `json:"taskDefinitionArn"`
+}
+
+// ECSNativeServiceSnapshot fences an update and distinguishes later deployment
+// identities from pre-existing history after an ambiguous response.
+type ECSNativeServiceSnapshot struct {
+	SourceRevisions     []ECSNativeSourceRevision `json:"sourceRevisions"`
+	ConfigurationHash   string                    `json:"configurationHash"`
+	RoutingSignature    string                    `json:"routingSignature"`
+	KnownDeploymentARNs []string                  `json:"knownDeploymentArns"`
+	NoOpDeploymentARN   string                    `json:"noOpDeploymentArn,omitempty"`
+	NoOpRevisionARN     string                    `json:"noOpRevisionArn,omitempty"`
+}
+
 // ECSOperationResult contains identifiers and rollback fields, never task bodies or secrets.
 type ECSOperationResult struct {
-	ServiceDeploymentCreatedAt string                 `json:"serviceDeploymentCreatedAt,omitempty"`
-	Observation                *ECSRolloutObservation `json:"observation,omitempty"`
-	PreviousService            *ECSServiceSnapshot    `json:"previousService,omitempty"`
-	ServiceDeploymentID        string                 `json:"serviceDeploymentId,omitempty"`
-	TaskDefinitionRevision     int32                  `json:"taskDefinitionRevision,omitempty"`
-	TaskDefinitionIntent       string                 `json:"taskDefinitionIntent,omitempty"`
-	TaskDefinitionARN          string                 `json:"taskDefinitionArn,omitempty"`
-	PreviousTaskDefinitionARN  string                 `json:"previousTaskDefinitionArn,omitempty"`
-	ServiceDeploymentARN       string                 `json:"serviceDeploymentArn,omitempty"`
-	AWSRequestID               string                 `json:"awsRequestId,omitempty"`
+	NativeService              *ECSNativeServiceSnapshot `json:"nativeService,omitempty"`
+	PreviousServiceRevisionARN string                    `json:"previousServiceRevisionArn,omitempty"`
+	ServiceRevisionARN         string                    `json:"serviceRevisionArn,omitempty"`
+	ServiceDeploymentCreatedAt string                    `json:"serviceDeploymentCreatedAt,omitempty"`
+	Observation                *ECSRolloutObservation    `json:"observation,omitempty"`
+	PreviousService            *ECSServiceSnapshot       `json:"previousService,omitempty"`
+	ServiceDeploymentID        string                    `json:"serviceDeploymentId,omitempty"`
+	TaskDefinitionRevision     int32                     `json:"taskDefinitionRevision,omitempty"`
+	TaskDefinitionIntent       string                    `json:"taskDefinitionIntent,omitempty"`
+	TaskDefinitionARN          string                    `json:"taskDefinitionArn,omitempty"`
+	PreviousTaskDefinitionARN  string                    `json:"previousTaskDefinitionArn,omitempty"`
+	ServiceDeploymentARN       string                    `json:"serviceDeploymentArn,omitempty"`
+	AWSRequestID               string                    `json:"awsRequestId,omitempty"`
 }
 
 // ECSOperationRequest binds an injected handler to reviewed intent and durable identity.
@@ -99,6 +119,12 @@ type ECSOperationPreparer interface {
 
 func (r ECSOperationResult) Clone() ECSOperationResult {
 	r.Observation = r.Observation.Clone()
+	if r.NativeService != nil {
+		copy := *r.NativeService
+		copy.KnownDeploymentARNs = append([]string(nil), r.NativeService.KnownDeploymentARNs...)
+		copy.SourceRevisions = append([]ECSNativeSourceRevision(nil), r.NativeService.SourceRevisions...)
+		r.NativeService = &copy
+	}
 	if r.PreviousService != nil {
 		snapshot := *r.PreviousService
 		r.PreviousService = &snapshot

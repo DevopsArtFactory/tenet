@@ -95,3 +95,44 @@ existing live flags still enable Rolling only.
 
 References: [ALB prerequisites](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/alb-resources-for-blue-green.html)
 and [ELB IAM action scopes](https://docs.aws.amazon.com/service-authorization/latest/reference/list_elbv2.html).
+
+## Native service-update handler prerequisite
+
+The advanced handler now prepares a durable service/configuration/routing
+baseline and known service-deployment IDs before one `UpdateService` request.
+It passes the reviewed native strategy, traffic/bake policy, alarms and Lambda
+hooks to ECS; it never calls CodeDeploy or mutates ALB rules itself. An omitted
+alarm/hook policy explicitly disables/clears it in the SDK payload rather than
+accidentally preserving an old policy. Task/network/runtime settings remain
+inherited from the reviewed task revision and existing service.
+
+The initial handler accepts an existing native service using the same declared
+strategy and one ALB binding. It requires `awsvpc`/IP targets, keeps capacity
+unchanged, and rejects mixed Service Connect/VPC Lattice routing. Strategy
+migration and service resizing are outside this first execution matrix.
+A configuration-only update forces one new native deployment so the changed
+policy has an observable lifecycle; a matching current native deployment can
+instead be adopted for read-only verification without another update.
+
+The returned service-deployment ARN and target service-revision ARN are acceptance
+identities, not convergence. Correlation describes the new target and source
+revisions and checks the reviewed task/configuration against the saved baseline.
+Known source revision/task pairs are captured before sending. This distinguishes
+actual AWS source workload from a failed desired task still present in service
+metadata, and retains the accepted source revision for native recovery.
+Existing IDs cannot satisfy a lost response. Missing or multiple matching
+candidates remain uncertain; reconciliation only reads and never reports absence
+as authority to send again. Current correlation bounds history to 1000 records
+with checked pagination. Final observation must still prove lifecycle/traffic,
+task health and any rollback outcome.
+
+Concrete capability checks include native service/deployment/revision reads,
+service update, inherited task roles, and infrastructure/hook `iam:PassRole` with
+`iam:PassedToService=ecs.amazonaws.com` (task roles retain their task principal).
+Current RBAC, durable ownership and the final mutation callback remain separate
+execution gates. External writers must coordinate on the same service: AWS does
+not expose an UpdateService compare-and-swap token.
+
+Production advanced execution remains disabled until the observation and
+rollback integration is complete. These handlers are verified through fake SDK
+clients and local HTTP serialization fixtures; no real AWS deployment was run.

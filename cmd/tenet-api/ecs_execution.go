@@ -201,7 +201,7 @@ func simulateECSCapabilities(ctx context.Context, client ecsPolicySimulator, rol
 		for _, key := range keys {
 			input.ContextEntries = append(input.ContextEntries, iamtypes.ContextEntry{ContextKeyName: aws.String(key), ContextKeyType: iamtypes.ContextKeyTypeEnumString, ContextKeyValues: []string{check.Context[key]}})
 		}
-		if check.Action == "iam:PassRole" {
+		if check.Action == "iam:PassRole" && check.Context["iam:PassedToService"] == "" {
 			input.ContextEntries = append(input.ContextEntries, iamtypes.ContextEntry{ContextKeyName: aws.String("iam:PassedToService"), ContextKeyType: iamtypes.ContextKeyTypeEnumString, ContextKeyValues: []string{"ecs-tasks.amazonaws.com"}})
 		}
 		if check.Action == "ecs:TagResource" {

@@ -11,7 +11,6 @@ import (
 
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
-	"github.com/DevopsArtFactory/tenet/internal/spec"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	elb "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
@@ -51,19 +50,8 @@ func (p ALBReadiness) Observe(ctx context.Context, intent domain.ECSDeploymentIn
 	if intent.Advanced == nil || p.ClientFor == nil || p.CheckCapabilities == nil {
 		return empty, fmt.Errorf("reviewed advanced routing and deployer ALB providers are required")
 	}
-	// Reuse manifest placement/contract validation for callers of this standalone probe.
-	strategy := map[string]spec.StrategyType{"BLUE_GREEN": spec.StrategyTypeBlueGreen, "CANARY": spec.StrategyTypeCanary, "LINEAR": spec.StrategyTypeLinear}[intent.DeploymentStrategy]
-	if strategy == "" || intent.DeploymentController != "ECS" {
-		return empty, fmt.Errorf("ALB readiness requires reviewed native advanced intent")
-	}
-	contract := spec.DeploymentSpec{Name: "routing-check", EnvironmentRef: "reviewed", Target: spec.TargetSpec{Type: spec.TargetTypeECS}, Strategy: spec.StrategySpec{Type: strategy}, Image: intent.Image, Capacity: spec.CapacitySpec{Desired: intent.DesiredCount, Min: intent.DesiredCount, Max: intent.DesiredCount}, ECS: &spec.ECSDeploymentSpec{DeploymentController: "ECS", ClusterARN: intent.ClusterARN, ServiceARN: intent.ServiceARN, BaseTaskDefinitionARN: intent.BaseTaskDefinitionARN, ContainerName: intent.ContainerName, Advanced: (*spec.ECSAdvancedSpec)(intent.Advanced)}}
-	if err := spec.ValidateDeployment(contract); err != nil {
+	if err := verifiedNativeRole(intent, role); err != nil {
 		return empty, err
-	}
-	placement, err := arn.Parse(intent.ServiceARN)
-	principal, roleErr := arn.Parse(role.RoleARN)
-	if err != nil || roleErr != nil || placement.AccountID != intent.AWSAccountID || placement.Region != intent.Region || principal.Service != "iam" || !strings.HasPrefix(principal.Resource, "role/") || principal.AccountID != intent.AWSAccountID || principal.Partition != placement.Partition || !role.Configured || !role.Ready || !role.CheckedWithAWS || role.AWSAccountID != intent.AWSAccountID || role.Region != intent.Region {
-		return empty, fmt.Errorf("ALB readiness requires verified service placement and deployer role")
 	}
 	routing := intent.Advanced.Routing
 	production, _ := arn.Parse(routing.ProductionListenerRuleARN)

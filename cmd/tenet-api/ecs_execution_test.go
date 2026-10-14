@@ -208,3 +208,16 @@ func TestECSCapabilitySimulationUsesConcreteResourcesAndRejectsIncompleteEvidenc
 		}
 	}
 }
+
+func TestNativeInfrastructurePassRoleContextDoesNotGetTaskPrincipalAdded(t *testing.T) {
+	role := applyrequest.DeployerRoleReadiness{RoleARN: "arn:aws:iam::123456789012:role/deployer"}
+	fake := &fakeECSSimulator{}
+	checks := []applyrequest.OperationExecutionCapabilityCheck{{Action: "iam:PassRole", ResourceName: "arn:aws:iam::123456789012:role/ecs-infrastructure", RequiredRole: role.RoleARN, Context: map[string]string{"iam:PassedToService": "ecs.amazonaws.com"}}}
+	if err := simulateECSCapabilities(context.Background(), fake, role, checks); err != nil {
+		t.Fatal(err)
+	}
+	entries := fake.inputs[0].ContextEntries
+	if len(entries) != 1 || aws.ToString(entries[0].ContextKeyName) != "iam:PassedToService" || len(entries[0].ContextKeyValues) != 1 || entries[0].ContextKeyValues[0] != "ecs.amazonaws.com" {
+		t.Fatal("native infrastructure PassRole was silently checked as an ECS task role")
+	}
+}
