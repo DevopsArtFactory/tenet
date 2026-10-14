@@ -181,6 +181,9 @@ func (h NativeObservation) reconcile(ctx context.Context, r applyrequest.ECSOper
 				return observedFailure(result, "native_rollback_revision_mismatch", "Native recovery immutable workload reference changed."), nil
 			}
 		}
+		if deployment.CreatedAt == nil {
+			return observationUnavailable(result, fmt.Errorf("native recovery deployment creation time unavailable")), nil
+		}
 		history, err := listNativeDeployments(ctx, client, r)
 		if err != nil {
 			return observationUnavailable(result, err), nil
@@ -191,7 +194,7 @@ func (h NativeObservation) reconcile(ctx context.Context, r applyrequest.ECSOper
 				found = true
 				continue
 			}
-			if brief.CreatedAt == nil || deployment.CreatedAt == nil {
+			if brief.CreatedAt == nil {
 				return observationUnavailable(result, fmt.Errorf("native recovery deployment ordering unavailable")), nil
 			}
 			if !brief.CreatedAt.Before(*deployment.CreatedAt) || !nativeTerminal(brief.Status) {

@@ -39,7 +39,11 @@ func nativeRecoveryObserverFixture(t *testing.T, strategy string) (*nativeObserv
 	}
 	r.PriorResults = []applyrequest.ECSOperationResult{rollbackResult(target)}
 	r.PreparedResult = applyrequest.ECSOperationResult{}
-	r.PreparedResult, _ = h.PrepareRollback(context.Background(), r, target)
+	var err error
+	r.PreparedResult, err = h.PrepareRollback(context.Background(), r, target)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return f, h, r, target, now
 }
 func TestNativeRecoveryRequiresActualSourceTrafficAndHealth(t *testing.T) {
@@ -61,7 +65,7 @@ func TestNativeRecoveryRequiresActualSourceTrafficAndHealth(t *testing.T) {
 	}
 }
 func TestNativeRecoveryControlStatusAloneCannotProveRecovery(t *testing.T) {
-	for _, name := range []string{"rollback active", "forward succeeded", "forward tasks remain", "forward pending", "wrong traffic", "missing task", "unhealthy ALB", "ALB read denied", "extra targets", "wrong current workload", "wrong capacity", "missing rollback source", "different rollback source", "different source workload", "newer deployment", "history unavailable", "source inactive"} {
+	for _, name := range []string{"rollback active", "forward succeeded", "forward tasks remain", "forward pending", "wrong traffic", "missing task", "unhealthy ALB", "ALB read denied", "extra targets", "wrong current workload", "wrong capacity", "missing rollback source", "different rollback source", "different source workload", "newer deployment", "history unavailable", "missing creation time", "source inactive"} {
 		t.Run(name, func(t *testing.T) {
 			f, h, r, target, _ := nativeRecoveryObserverFixture(t, "CANARY")
 			deployment := f.deployments[target.DeploymentARN]
@@ -114,6 +118,9 @@ func TestNativeRecoveryControlStatusAloneCannotProveRecovery(t *testing.T) {
 				brief.CreatedAt = &newer
 			case "history unavailable":
 				f.history = nil
+			case "missing creation time":
+				deployment.CreatedAt = nil
+				f.history = f.history[len(f.history)-1:]
 			case "source inactive":
 				f.definitions[target.SourceTaskDefinitionARN].TaskDefinition.Status = types.TaskDefinitionStatusInactive
 			}
@@ -164,5 +171,16 @@ func TestNativeRecoveryFailureAndRestartDeadlineRemainDistinct(t *testing.T) {
 	r.PreparedResult.ServiceRevisionARN = target.ForwardRevisionARN
 	if _, err := h.PrepareRollback(context.Background(), r, target); err == nil {
 		t.Fatal("altered recovery target accepted")
+	}
+}
+
+func TestNativeRecoveryDoesNotInventMissingRequestedSourceWeight(t *testing.T) {
+	f, h, r, target, _ := nativeRecoveryObserverFixture(t, "CANARY")
+	d := f.deployments[target.DeploymentARN]
+	d.SourceServiceRevisions[0].RequestedProductionTrafficWeight = nil
+	f.deployments[target.DeploymentARN] = d
+	outcome, err := h.ReconcileRollback(context.Background(), r, target)
+	if err != nil || !outcome.Complete || outcome.Result.Observation.Native.TargetRequestedPercent != nil || aws.ToFloat64(outcome.Result.Observation.Native.TargetConfiguredPercent) != 100 {
+		t.Fatal("optional requested source weight was invented or substituted for actual traffic proof", outcome, err)
 	}
 }
