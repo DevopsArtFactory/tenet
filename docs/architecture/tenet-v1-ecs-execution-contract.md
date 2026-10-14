@@ -100,3 +100,25 @@ precedence over old runtime CodeDeploy step metadata.
 This contract does not create clusters/services, build images, register Task
 Definitions, update ECS, or execute rollback. The current Apply executor boundary
 continues to prevent live AWS mutation, including when apply is enabled.
+
+## Apply persistence before live execution
+
+Apply records currently use the JSON `FileStore`; Redis backs other controller
+state, not Apply execution. On Linux and macOS all file-store writers share a
+persistent `.lock` sidecar using OS advisory locking. The JSON file is replaced
+atomically after syncing its contents, and the containing directory is synced
+before acknowledging persistence. The sidecar must remain in place while any
+process is using the store. A worker exit releases its lock automatically.
+
+Claims, heartbeats and lifecycle transitions reload and validate the latest
+record inside the same critical section. New execution checkpoints must use
+`MutationStore.Mutate`, not replace an earlier `Store.Update` snapshot. Mutation
+callbacks only change local records and must not make network calls while
+holding the store lock. Lock waits in context-aware methods are cancellable.
+
+This protects cooperating processes sharing one local filesystem. It does not
+provide distributed coordination across independent hosts or network filesystems.
+Other operating systems reject file-store writes until an equivalent locking
+implementation is provided. Per-deployment execution ownership and AWS response
+recovery remain follow-up work in #1795; file locking alone does not enable live
+AWS changes.

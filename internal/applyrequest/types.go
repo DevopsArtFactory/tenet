@@ -254,3 +254,9 @@ type ClaimStore interface {
 type HeartbeatStore interface {
 	Heartbeat(context.Context, string, HeartbeatRequest, func(Record) (Record, error)) (Record, error)
 }
+
+// MutationStore protects the read/check/write boundary for lifecycle changes.
+// Live executors require this atomic boundary rather than Store.Update snapshots.
+type MutationStore interface {
+	Mutate(context.Context, string, func(Record) (Record, error)) (Record, error)
+}
