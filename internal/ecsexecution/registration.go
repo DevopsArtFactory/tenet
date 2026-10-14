@@ -203,6 +203,31 @@ func (r Registration) Reconcile(ctx context.Context, request applyrequest.ECSOpe
 }
 
 func findRevision(ctx context.Context, client RegistrationClient, request applyrequest.ECSOperationRequest, input *ecs.RegisterTaskDefinitionInput, fingerprint string) (*applyrequest.ECSOperationResult, error) {
+	pinned, err := client.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{TaskDefinition: aws.String(request.Intent.BaseTaskDefinitionARN), Include: []types.TaskDefinitionField{types.TaskDefinitionFieldTags}})
+	if err != nil {
+		return nil, err
+	}
+	if pinned == nil || pinned.TaskDefinition == nil || aws.ToString(pinned.TaskDefinition.TaskDefinitionArn) != request.Intent.BaseTaskDefinitionARN {
+		return nil, fmt.Errorf("pinned base evidence is unavailable during revision discovery")
+	}
+	if pinned.TaskDefinition.Status == types.TaskDefinitionStatusActive {
+		candidate, err := registrationInput(pinned.TaskDefinition, pinned.Tags)
+		if err != nil {
+			return nil, err
+		}
+		candidateFingerprint, err := inputFingerprint(candidate)
+		if err != nil {
+			return nil, err
+		}
+		if candidateFingerprint == fingerprint {
+			result, err := revisionResult(pinned.TaskDefinition, request, input, fingerprint)
+			if err != nil {
+				return nil, err
+			}
+			return &result, nil
+		}
+	}
+
 	base, _ := arn.Parse(request.Intent.BaseTaskDefinitionARN)
 	_, baseVersion, _ := strings.Cut(strings.TrimPrefix(base.Resource, "task-definition/"), ":")
 	baseRevision, _ := strconv.ParseInt(baseVersion, 10, 32)

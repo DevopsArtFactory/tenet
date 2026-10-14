@@ -293,3 +293,12 @@ func TestRegistrationHistoryReadWaitIsCancellable(t *testing.T) {
 		t.Fatalf("cancelled history lookup reached registration: %v", err)
 	}
 }
+
+func TestRegistrationReusesActivePinnedBaseThatAlreadyMatches(t *testing.T) {
+	fake, handler, request := registrationFixture()
+	request.Intent.Image = aws.ToString(fake.definitions[request.Intent.BaseTaskDefinitionARN].TaskDefinition.ContainerDefinitions[0].Image)
+	result, err := handler.Execute(context.Background(), request)
+	if err != nil || result.TaskDefinitionARN != request.Intent.BaseTaskDefinitionARN || result.TaskDefinitionRevision != 17 || fake.writes != 0 {
+		t.Fatalf("matching reviewed base created a needless revision: %+v %v", result, err)
+	}
+}

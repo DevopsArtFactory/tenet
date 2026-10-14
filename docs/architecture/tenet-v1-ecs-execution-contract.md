@@ -135,10 +135,9 @@ not authorize execution. The authorization provider must re-evaluate an
 `Record.Actor` or user-supplied actor headers are insufficient evidence.
 
 The API startup still installs no live ECS handlers. `TENET_AWS_ENABLE_APPLY`
-alone continues to use the existing local-safe path. Concrete AWS clients,
-registration, service updates and convergence observation are supplied by the
-following implementation issues; this boundary is currently verified with fake
-handlers. Advanced native strategies and legacy CodeDeploy operations are rejected
+alone continues to use the existing local-safe path. Concrete registration, update and observation handlers are described below.
+Production startup still requires trusted authorization and executor wiring; the
+boundary and handlers are verified with injected fake clients. Advanced native strategies and legacy CodeDeploy operations are rejected
 before any handler mutation.
 
 A cooperating executor holds OS execution locks for both the deployment name and
@@ -262,3 +261,59 @@ production startup remains local-safe until the remaining observation and truste
 authorization wiring is complete. No real AWS updates are used in tests.
 
 Reference: [UpdateService](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_UpdateService.html).
+
+
+## Restartable rollout observation
+
+`RollingObservation` uses a read-only client to verify the registered revision
+and the correlated ECS deployment. It persists its start/deadline before polling
+(default 15 minutes), then backs off from two to 30 seconds. Executor scans during
+backoff do not contact AWS or IAM; they only refresh owned local leases when
+needed. Restarting resumes the same checkpoint and deadline without another
+registration or service update. Read calls also inherit the remaining deadline.
+
+Success requires the intended primary deployment, matching service count and
+rolling configuration, no pending/previous-deployment tasks, and all intended
+RUNNING tasks with their essential containers running. Configured container
+health checks must be healthy. AWS rollout completion supplies load-balancer
+health evidence; absent completion evidence for a load-balanced service remains
+pending. Without configured container/load-balancer health checks, RUNNING task
+and scheduler evidence is the available resource-health signal. Zero requested
+count is observed as converged only after all running/pending tasks drain; the
+current desired-spec validation still requires a positive configured count.
+
+Running-task listing is paginated and descriptions are batched at 100 tasks.
+Missing/incomplete task evidence cannot count as success. A bounded stopped-task
+sample provides correlated startup failure details without treating a recoverable
+individual task failure as a terminal service rollout. Unavailable/throttled reads,
+missing tasks, health checks, startup errors, explicit rollback, supersession,
+ECS circuit-breaker failure and timeout have distinct runtime reasons. Historical
+failures of another deployment using the same revision are ignored.
+
+Old service views can lag an accepted update. They remain pending until there is
+correlated failure or a newer primary deployment, rather than being mislabeled
+as rollback immediately. The update result preserves the AWS deployment creation
+time when available, so supersession can also be recognized before observation
+starts. A newer/unrelated deployment is never accepted as success of the
+requested deployment.
+
+Latest secret-free evidence is stored in `Record.ECSRuntime` and the operation
+checkpoint, projected into the existing Apply monitor and plan/apply workspace.
+Counts appear directly; reviewed intent and detailed evidence use the existing
+disclosures. Unavailable evidence is not rendered as a healthy task count. Audit
+transitions retain meaningful progress/reason changes and terminal proof without
+adding repeated timestamp-only progress entries. This does not overwrite the
+controller-owned global status store. Production live execution still requires
+the trusted approval/authorization startup wiring; the existing Apply flag alone
+remains local-safe.
+
+References: [DescribeServices](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DescribeServices.html),
+[ListTasks](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_ListTasks.html),
+and [DescribeTasks](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DescribeTasks.html).
+
+
+The composed-handler integration also verifies a full no-op: an ACTIVE pinned
+base that already contains the reviewed image is reusable without registration,
+and a matching service is observed without UpdateService. Initial service
+preflight does not mistake an unchanged base ARN for the final revision when the
+reviewed image still differs; active conflicting rollout checks still apply.

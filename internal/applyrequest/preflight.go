@@ -233,6 +233,7 @@ func (s Service) enrichOperationPermissionChecks(ctx context.Context, record Rec
 }
 
 func normalizeExecutionReadiness(record Record) Record {
+	record.ECSRuntime = record.ECSRuntime.Clone()
 	record.Operations = normalizeOperationIDs(record.Operations)
 	readiness := deriveExecutionReadiness(record)
 	record.ExecutionReadiness = &readiness
@@ -247,6 +248,9 @@ func deriveExecutionActionPreview(record Record, readiness ExecutionReadiness) E
 		State:          readiness.State,
 		CheckedAt:      readiness.CheckedAt,
 		Summary:        "Read-only executor action preview derived from immutable apply/preflight evidence; no AWS mutation was attempted.",
+	}
+	if hasECSCheckpoints(record) {
+		preview.Summary = readiness.Summary + " This read-only route does not perform execution calls."
 	}
 	if readiness.DeployerRole != nil {
 		preview.AWSContext = ExecutionActionPreviewAWSContext{
@@ -331,6 +335,9 @@ func deriveExecutionReadiness(record Record) ExecutionReadiness {
 	if checkedAt == "" {
 		checkedAt = record.CreatedAt
 	}
+	if hasECSCheckpoints(record) {
+		return ecsReadiness(record, checkedAt)
+	}
 	state := ExecutionReadinessStateBlocked
 	summary := "Live AWS mutation preflight is blocked because Tenet currently records local-safe apply lifecycle metadata only."
 	evidence := []string{
@@ -372,6 +379,10 @@ func deriveOperationExecutionPreflight(record Record, role *DeployerRoleReadines
 	}
 	rows := make([]OperationExecutionPreflight, 0, len(record.Operations))
 	for _, operation := range record.Operations {
+		if operation.ECS != nil {
+			rows = append(rows, nativeECSPreflight(record, operation, role))
+			continue
+		}
 		resourceName, resourceType := parseOperationTarget(operation.Target)
 		capability := requiredCapability(resourceType)
 		inputsSufficient := strings.TrimSpace(operation.Target) != ""

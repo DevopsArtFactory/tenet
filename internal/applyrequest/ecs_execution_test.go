@@ -497,3 +497,83 @@ func TestECSExecutionFinishesKnownReconciledFailureWithoutMutation(t *testing.T)
 		t.Fatal("known terminal failure remained running or repeated the write")
 	}
 }
+
+func TestECSExecutionPersistsObservationBackoffAndResumesWithoutUpdates(t *testing.T) {
+	f := newECSFixture(t)
+	observer := &fakeECSHandler{}
+	progress := &ECSRolloutObservation{Source: "aws-ecs", State: "progressing", Reason: "missing_tasks", Summary: "1/2 intended tasks running", StartedAt: f.now.Format(time.RFC3339Nano), DeadlineAt: f.now.Add(15 * time.Minute).Format(time.RFC3339Nano), ObservedAt: f.now.Format(time.RFC3339Nano), TaskDefinitionARN: f.intent.BaseTaskDefinitionARN, DesiredCount: 2, RunningCount: 1, HealthyCount: 1, TasksObserved: true}
+	observer.execute = func(ECSOperationRequest) (ECSOperationResult, error) {
+		return ECSOperationResult{}, &ECSObservationPending{Result: ECSOperationResult{Observation: progress}, RetryAfter: 5 * time.Second}
+	}
+	f.executor.ECS.Handlers[f.record.Operations[2].Kind] = observer
+	for i := 0; i < 3; i++ {
+		if err := f.executor.RunOnce(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pending := f.stored(t)
+	if pending.Status != StatusRunning || pending.Error != "" || pending.ECSRuntime == nil || pending.ECSRuntime.RunningCount != 1 || pending.Operations[2].ECSCheckpoint.State != "in_flight" {
+		t.Fatalf("normal progress became an error or was lost: %+v", pending)
+	}
+	f.executor.ECS.Authorize = func(context.Context, Record) error {
+		t.Error("backoff still contacted authorization/AWS providers")
+		return errors.New("should not be called")
+	}
+	f.now = f.now.Add(time.Second)
+	if err := f.executor.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.executor.ECS.Authorize = func(context.Context, Record) error { return nil }
+	observer.recover = func(request ECSOperationRequest) (ECSReconciliation, error) {
+		result := request.PreparedResult.Clone()
+		result.Observation.State = "converged"
+		result.Observation.Reason = "intended_revision_healthy"
+		result.Observation.RunningCount = 2
+		result.Observation.HealthyCount = 2
+		result.Observation.Summary = "2/2 intended tasks verified"
+		return ECSReconciliation{Complete: true, Result: result}, nil
+	}
+	f.now = f.now.Add(6 * time.Minute)
+	f.executor.WorkerID = "restarted-observer"
+	if err := f.executor.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	completed := f.stored(t)
+	if completed.Status != StatusSucceeded || completed.ECSRuntime.State != "converged" || observer.calls.Load() != 1 || observer.reconciles.Load() != 1 || f.handler.calls.Load() != 2 {
+		t.Fatalf("observer restart replayed mutation or lost verified runtime: %+v", completed)
+	}
+	if completed.ExecutionReadiness == nil {
+		completed = NormalizeOperationIDs(completed)
+	}
+	if NormalizeOperationIDs(completed).ExecutionReadiness.State != "completed" {
+		t.Fatal("verified live execution still reported local-safe readiness")
+	}
+	copy := NormalizeOperationIDs(completed)
+	copy.ECSRuntime.HealthyCount = 99
+	copy.Operations[2].ECSCheckpoint.Result.Observation.HealthyCount = 98
+	if completed.ECSRuntime.HealthyCount != 2 || completed.Operations[2].ECSCheckpoint.Result.Observation.HealthyCount != 2 {
+		t.Fatal("runtime evidence aliases read-model copies")
+	}
+}
+
+func TestECSExecutionPersistsTerminalObservationEvidenceAtomically(t *testing.T) {
+	f := newECSFixture(t)
+	observer := &fakeECSHandler{}
+	observer.execute = func(ECSOperationRequest) (ECSOperationResult, error) {
+		return ECSOperationResult{}, &ECSObservationFailure{Result: ECSOperationResult{Observation: &ECSRolloutObservation{Source: "aws-ecs", State: "failed", Reason: "observation_timeout", Summary: "Rollout observation timed out", ObservedAt: f.now.Format(time.RFC3339Nano)}}}
+	}
+	f.executor.ECS.Handlers[f.record.Operations[2].Kind] = observer
+	for i := 0; i < 3; i++ {
+		if err := f.executor.RunOnce(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record := f.stored(t)
+	if record.Status != StatusFailed || record.ECSRuntime == nil || record.ECSRuntime.Reason != "observation_timeout" || record.Operations[2].ECSCheckpoint.State != "failed" || record.Error != "Rollout observation timed out" {
+		t.Fatal("terminal outcome lost its actual observation evidence")
+	}
+	last := record.Transitions[len(record.Transitions)-1]
+	if last.Status != StatusFailed || len(last.Details) == 0 || last.Details[0] != "Runtime reason: observation_timeout" {
+		t.Fatal("terminal runtime reason missing from audit evidence")
+	}
+}

@@ -298,3 +298,15 @@ func TestRollingServiceDoesNotOverwriteRotatedPrimaryAfterSnapshot(t *testing.T)
 		t.Fatal("overwrote a changed primary deployment")
 	}
 }
+
+func TestRollingPreflightDoesNotTreatBaseAsFinalWhileImageStillChanges(t *testing.T) {
+	fake, handler, request := serviceFixture(t)
+	request.PriorResults = nil
+	fake.service.DesiredCount = int32(request.Intent.DesiredCount)
+	fake.service.DeploymentConfiguration.MinimumHealthyPercent = aws.Int32(int32(request.Intent.MinimumHealthyPercent))
+	fake.service.DeploymentConfiguration.MaximumPercent = aws.Int32(int32(request.Intent.MaximumPercent))
+	fake.service.Deployments[0].RolloutState = types.DeploymentRolloutStateInProgress
+	if err := handler.Preflight(context.Background(), request); err == nil || fake.writes != 0 {
+		t.Fatal("base revision was mistaken for the final reviewed image during active rollout")
+	}
+}
