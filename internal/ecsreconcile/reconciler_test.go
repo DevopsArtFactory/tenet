@@ -386,3 +386,15 @@ func TestVerifiedOrderingUsesTimeRatherThanLexicalFractionalSeconds(t *testing.T
 		t.Fatal("same-second verification ordering reversed")
 	}
 }
+
+func TestMalformedHistoricalSuccessCannotCrashOrSuppressGitReconciliation(t *testing.T) {
+	f := setup(t)
+	malformed := applyrequest.Record{ID: "legacy-incomplete", DeploymentName: "worker", Status: applyrequest.StatusSucceeded, ECSRuntime: &applyrequest.ECSRolloutObservation{State: "converged"}}
+	if err := f.store.Save(context.Background(), malformed); err != nil {
+		t.Fatal(err)
+	}
+	f.tick(t)
+	if len(f.records(t)) != 2 {
+		t.Fatal("incomplete historical projection suppressed current Git")
+	}
+}

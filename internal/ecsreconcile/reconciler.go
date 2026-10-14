@@ -169,7 +169,7 @@ func (r Reconciler) reconcileDeployment(ctx context.Context, compiled manifest.C
 			}
 			superseded = append(superseded, record)
 		}
-		if record.Status == applyrequest.StatusSucceeded && record.ECSRuntime != nil && record.ECSRuntime.State == "converged" {
+		if len(record.Operations) == 3 && record.Operations[0].ECS != nil && record.Status == applyrequest.StatusSucceeded && record.ECSRuntime != nil && record.ECSRuntime.State == "converged" {
 			successes = append(successes, record)
 			if record.Source.LastVerifiedApplyID != "" {
 				parentVerified[record.Source.LastVerifiedApplyID] = true
