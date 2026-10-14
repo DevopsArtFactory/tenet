@@ -28,6 +28,8 @@ func nativeSDKFixture(t *testing.T, response func(string) string) (*ecs.Client, 
 		var body map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
+			http.Error(w, "invalid SDK JSON", http.StatusBadRequest)
+			return
 		}
 		requests <- nativeSDKRequest{action: action, body: body}
 		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
@@ -108,6 +110,9 @@ func TestNativeSDKPreservesDeploymentRevisionTrafficAndRollbackEvidence(t *testi
 		t.Fatal(err)
 	}
 	wire := <-requests
+	if len(described.ServiceDeployments) != 1 {
+		t.Fatalf("expected one described service deployment, got %d", len(described.ServiceDeployments))
+	}
 	d := described.ServiceDeployments[0]
 	if wire.action != "DescribeServiceDeployments" || wire.body["serviceDeploymentArns"].([]any)[0] != deploymentARN || d.Status != types.ServiceDeploymentStatusInProgress || d.LifecycleStage != types.ServiceDeploymentLifecycleStageProductionTrafficShift || aws.ToString(d.TargetServiceRevision.Arn) != revisionARN || aws.ToFloat64(d.TargetServiceRevision.RequestedProductionTrafficWeight) != 5.5 || aws.ToFloat64(d.SourceServiceRevisions[0].RequestedProductionTrafficWeight) != 94.5 || len(d.Alarms.TriggeredAlarmNames) != 1 || aws.ToInt32(d.DeploymentConfiguration.CanaryConfiguration.CanaryBakeTimeInMinutes) != 0 {
 		t.Fatal("native phase/traffic/failure evidence lost")
@@ -116,7 +121,7 @@ func TestNativeSDKPreservesDeploymentRevisionTrafficAndRollbackEvidence(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if wire := <-requests; wire.action != "DescribeServiceRevisions" || aws.ToString(revisions.ServiceRevisions[0].ServiceRevisionArn) != revisionARN || aws.ToString(revisions.ServiceRevisions[0].TaskDefinition) == "" {
+	if wire := <-requests; wire.action != "DescribeServiceRevisions" || len(revisions.ServiceRevisions) != 1 || aws.ToString(revisions.ServiceRevisions[0].ServiceRevisionArn) != revisionARN || aws.ToString(revisions.ServiceRevisions[0].TaskDefinition) == "" {
 		t.Fatal("service revision did not resolve workload identity")
 	}
 	stopped, err := client.StopServiceDeployment(ctx, &ecs.StopServiceDeploymentInput{ServiceDeploymentArn: aws.String(deploymentARN), StopType: types.StopServiceDeploymentStopTypeRollback})
