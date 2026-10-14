@@ -95,12 +95,13 @@ func (s OperationStatus) IsTerminal() bool {
 
 // SourceContext captures the immutable plan preview that an apply request references.
 type SourceContext struct {
-	Git           *domain.GitSource `json:"git,omitempty"`
-	PlanID        string            `json:"planId"`
-	Route         string            `json:"route"`
-	PlanStatus    string            `json:"planStatus"`
-	PlanCreatedAt string            `json:"planCreatedAt,omitempty"`
-	Fingerprint   string            `json:"fingerprint,omitempty"`
+	LastVerifiedApplyID string            `json:"lastVerifiedApplyId,omitempty"`
+	Git                 *domain.GitSource `json:"git,omitempty"`
+	PlanID              string            `json:"planId"`
+	Route               string            `json:"route"`
+	PlanStatus          string            `json:"planStatus"`
+	PlanCreatedAt       string            `json:"planCreatedAt,omitempty"`
+	Fingerprint         string            `json:"fingerprint,omitempty"`
 }
 
 // OperationExecutionAttempt captures local-safe executor evidence for one apply operation.
@@ -272,8 +273,9 @@ type MutationStore interface {
 // ExecutionPrincipal is trusted approval evidence, separate from actor attribution.
 // It contains no credentials. Workers must evaluate it against current repository policy.
 type ExecutionPrincipal struct {
-	Identity requestactor.AuthenticatedIdentity `json:"identity"`
-	Groups   requestactor.AuthenticatedGroups   `json:"groups"`
+	Automatic bool                               `json:"automatic,omitempty"`
+	Identity  requestactor.AuthenticatedIdentity `json:"identity"`
+	Groups    requestactor.AuthenticatedGroups   `json:"groups"`
 }
 
 func (p *ExecutionPrincipal) Clone() *ExecutionPrincipal {

@@ -13,6 +13,22 @@ import (
 // DeriveDeploymentSourceFingerprint returns the deterministic deployment-detail fingerprint
 // used by overview detail routes and plan preview optimistic matching.
 func DeriveDeploymentSourceFingerprint(detail DeploymentOverviewDetail) (string, error) {
+	if detail.Git != nil && detail.ECS != nil {
+		// Git review commits to desired inputs. Live preflight/snapshots fence actual
+		// service changes; observation timestamps must not continually stale approval.
+		payload := struct {
+			Git                                     *domain.GitSource
+			ECS                                     *domain.ECSDeploymentIntent
+			Name, App, Environment, Account, Region string
+		}{detail.Git, detail.ECS, detail.Name, detail.AppRef, detail.EnvironmentRef, detail.AWSAccountID, detail.Region}
+		content, err := json.Marshal(payload)
+		if err != nil {
+			return "", fmt.Errorf("encode Git ECS source fingerprint: %w", err)
+		}
+		sum := sha256.Sum256(content)
+		return "plan_" + hex.EncodeToString(sum[:8]), nil
+	}
+
 	payload := struct {
 		Git                *domain.GitSource               `json:"git,omitempty"`
 		ECS                *domain.ECSDeploymentIntent     `json:"ecs,omitempty"`

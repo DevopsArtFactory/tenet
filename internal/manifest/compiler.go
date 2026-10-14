@@ -137,6 +137,13 @@ func Compile(input CatalogSpec) (Catalog, error) {
 				MinimumHealthyPercent: min,
 				MaximumPercent:        max,
 			}
+			if e.SyncPolicy != nil {
+				compiledDeployment.ECS.SyncMode = strings.TrimSpace(e.SyncPolicy.Mode)
+				if compiledDeployment.ECS.SyncMode == "" {
+					compiledDeployment.ECS.SyncMode = "manual"
+				}
+				compiledDeployment.ECS.SelfHeal = e.SyncPolicy.SelfHeal
+			}
 			compiledDeployment.ExecutionMode = "ecsNative"
 			compiledDeployment.RolloutConfig.Strategy.MinHealthyPercent = min
 		}

@@ -231,6 +231,11 @@ func (e Executor) automaticECSRecovery(ctx context.Context, parent Record) error
 	if !reflect.DeepEqual(current, parent.Operations[0].ECS) {
 		return nil
 	}
+	if e.ECS.AuthorizeMutation != nil {
+		if err := e.ECS.AuthorizeMutation(ctx, parent); err != nil {
+			return err
+		}
+	}
 	_, err = e.Service.createRollback(ctx, parent, parent.Principal, true)
 	return err
 }

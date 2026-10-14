@@ -3,6 +3,8 @@ package domain
 // ECSDeploymentIntent is the reviewed, secret-free input for future ECS execution.
 // Runtime/role/network settings are inherited from the pinned base task definition.
 type ECSDeploymentIntent struct {
+	SyncMode              string `json:"syncMode,omitempty"`
+	SelfHeal              bool   `json:"selfHeal,omitempty"`
 	RollbackOnFailure     bool   `json:"rollbackOnFailure,omitempty"`
 	AWSAccountID          string `json:"awsAccountId"`
 	Region                string `json:"region"`

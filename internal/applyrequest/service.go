@@ -100,6 +100,9 @@ func (s Service) create(ctx context.Context, planID, retryOf string) (CreateResu
 			Fingerprint:   plan.Source.Fingerprint,
 		},
 	}
+	if plan.Source.ManagedDrift != nil {
+		record.Source.LastVerifiedApplyID = plan.Source.ManagedDrift.LastVerifiedApplyID
+	}
 	if s.AuthorizeCreate != nil {
 		record.Principal, err = s.AuthorizeCreate(ctx, record)
 		if err != nil {
@@ -110,6 +113,9 @@ func (s Service) create(ctx context.Context, planID, retryOf string) (CreateResu
 		}
 		record.Principal = record.Principal.Clone()
 		record.Details = []string{"Trusted operator approval recorded; the explicitly enabled ECS executor must verify current authorization, intent, ownership and AWS capabilities before mutation."}
+		if record.Principal.Automatic {
+			record.Details = []string{"Automatic approval recorded by the explicitly configured ECS Git reconciler subject; the executor must recheck current policy and AWS capabilities before mutation."}
+		}
 		if retryOf != "" {
 			record.Details = append(record.Details, "Explicit retry of failed Apply "+retryOf+"; a correlated failed primary may be replaced by a fresh deployment.")
 		}

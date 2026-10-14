@@ -21,7 +21,8 @@ const (
 
 // CreateRequest captures optional optimistic-staleness guards for plan creation.
 type CreateRequest struct {
-	IfMatch string `json:"ifMatch,omitempty"`
+	ManagedDrift *ManagedDriftTrigger `json:"-"`
+	IfMatch      string               `json:"ifMatch,omitempty"`
 }
 
 // Operation is one server-authored plan preview row.
@@ -52,20 +53,21 @@ type Approval struct {
 
 // SourceContext captures the deployment-detail inputs used to derive a preview.
 type SourceContext struct {
-	Git                *domain.GitSource `json:"git,omitempty"`
-	DeploymentName     string            `json:"deploymentName"`
-	Route              string            `json:"route"`
-	Fingerprint        string            `json:"fingerprint"`
-	TargetType         string            `json:"targetType,omitempty"`
-	Strategy           string            `json:"strategy,omitempty"`
-	ExecutionMode      string            `json:"executionMode,omitempty"`
-	RuntimeTimestamp   string            `json:"runtimeTimestamp,omitempty"`
-	RuntimeSource      string            `json:"runtimeSource,omitempty"`
-	CurrentStep        string            `json:"currentStep,omitempty"`
-	DesiredGeneration  int64             `json:"desiredGeneration,omitempty"`
-	ObservedGeneration int64             `json:"observedGeneration,omitempty"`
-	Sync               domain.Sync       `json:"sync"`
-	Health             domain.Health     `json:"health"`
+	ManagedDrift       *ManagedDriftTrigger `json:"managedDrift,omitempty"`
+	Git                *domain.GitSource    `json:"git,omitempty"`
+	DeploymentName     string               `json:"deploymentName"`
+	Route              string               `json:"route"`
+	Fingerprint        string               `json:"fingerprint"`
+	TargetType         string               `json:"targetType,omitempty"`
+	Strategy           string               `json:"strategy,omitempty"`
+	ExecutionMode      string               `json:"executionMode,omitempty"`
+	RuntimeTimestamp   string               `json:"runtimeTimestamp,omitempty"`
+	RuntimeSource      string               `json:"runtimeSource,omitempty"`
+	CurrentStep        string               `json:"currentStep,omitempty"`
+	DesiredGeneration  int64                `json:"desiredGeneration,omitempty"`
+	ObservedGeneration int64                `json:"observedGeneration,omitempty"`
+	Sync               domain.Sync          `json:"sync"`
+	Health             domain.Health        `json:"health"`
 }
 
 // Record is an immutable, deployment-scoped plan preview snapshot.
@@ -86,4 +88,18 @@ type Record struct {
 type Store interface {
 	Get(context.Context, string) (Record, error)
 	Save(context.Context, Record) error
+}
+
+// ManagedDriftTrigger is authored only by the configured Git reconciler.
+type ManagedDriftTrigger struct {
+	Signature           string `json:"signature"`
+	LastVerifiedApplyID string `json:"lastVerifiedApplyId"`
+}
+
+func (d *ManagedDriftTrigger) Clone() *ManagedDriftTrigger {
+	if d == nil {
+		return nil
+	}
+	copy := *d
+	return &copy
 }
