@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
@@ -259,5 +260,36 @@ func TestRegistrationReadFailureBeforeMutationIsSafeToRetry(t *testing.T) {
 		if !errors.As(err, &classified) || !classified.Rejected || classified.Retryable == denied || fake.writes != 0 {
 			t.Fatalf("incorrect pre-mutation failure classification: %v", err)
 		}
+	}
+}
+
+func TestRegistrationDoesNotDescribeRevisionsOlderThanPinnedBase(t *testing.T) {
+	fake, handler, request := registrationFixture()
+	fake.revisions = []string{request.Intent.BaseTaskDefinitionARN, "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/worker:16"}
+	// Revision 16 intentionally has no fake Describe response. It predates the
+	// pinned base, so it cannot belong to this request and must never be read.
+	if _, err := handler.Execute(context.Background(), request); err != nil || fake.writes != 1 {
+		t.Fatalf("scanned irrelevant historical revisions: %v", err)
+	}
+}
+
+func TestRegistrationHistoryReadWaitIsCancellable(t *testing.T) {
+	fake, handler, request := registrationFixture()
+	result, err := handler.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := fake.definitions[result.TaskDefinitionARN]
+	copied := *original.TaskDefinition
+	copied.TaskDefinitionArn = aws.String("arn:aws:ecs:ap-northeast-2:123456789012:task-definition/worker:19")
+	copied.Revision = 19
+	fake.definitions[*copied.TaskDefinitionArn] = &ecs.DescribeTaskDefinitionOutput{TaskDefinition: &copied, Tags: original.Tags}
+	fake.revisions = append([]string{*copied.TaskDefinitionArn}, fake.revisions...)
+	request.RequestID = "different-request"
+	request.Intent.Image = "registry.example.com/worker:different"
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if _, err := handler.Execute(ctx, request); !errors.Is(err, context.DeadlineExceeded) || fake.writes != 1 {
+		t.Fatalf("cancelled history lookup reached registration: %v", err)
 	}
 }

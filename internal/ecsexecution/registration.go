@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -209,6 +210,10 @@ func (r Registration) Reconcile(ctx context.Context, request applyrequest.ECSOpe
 }
 
 func findRevision(ctx context.Context, client RegistrationClient, request applyrequest.ECSOperationRequest, input *ecs.RegisterTaskDefinitionInput, fingerprint string) (*applyrequest.ECSOperationResult, error) {
+	base, _ := arn.Parse(request.Intent.BaseTaskDefinitionARN)
+	_, baseVersion, _ := strings.Cut(strings.TrimPrefix(base.Resource, "task-definition/"), ":")
+	baseRevision, _ := strconv.ParseInt(baseVersion, 10, 32)
+	readPreviously := false
 	var token *string
 	seen := map[string]bool{}
 	for {
@@ -223,6 +228,24 @@ func findRevision(ctx context.Context, client RegistrationClient, request applyr
 			if !sameFamily(candidate, request, aws.ToString(input.Family)) {
 				continue
 			}
+			parsed, _ := arn.Parse(candidate)
+			_, version, _ := strings.Cut(strings.TrimPrefix(parsed.Resource, "task-definition/"), ":")
+			revision, _ := strconv.ParseInt(version, 10, 32)
+			// Our registration cannot predate its pinned base. With DESC ordering,
+			// reaching the base ends the relevant history without describing it.
+			if revision <= baseRevision {
+				return nil, nil
+			}
+			if readPreviously {
+				timer := time.NewTimer(200 * time.Millisecond)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return nil, ctx.Err()
+				case <-timer.C:
+				}
+			}
+			readPreviously = true
 			observed, err := client.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{TaskDefinition: aws.String(candidate), Include: []types.TaskDefinitionField{types.TaskDefinitionFieldTags}})
 			if err != nil {
 				return nil, err

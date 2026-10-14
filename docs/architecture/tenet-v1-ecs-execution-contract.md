@@ -222,3 +222,10 @@ References: [RegisterTaskDefinition](https://docs.aws.amazon.com/AmazonECS/lates
 [ListTaskDefinitions](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_ListTaskDefinitions.html),
 [create-time tagging permissions](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/supported-iam-actions-tagging.html),
 and [ECS IAM action reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html).
+
+Discovery scans newest-first and stops at the pinned base revision: a registration
+for that request cannot predate its base. Remaining candidate descriptions are
+paced to five per second per lookup, with cancellable waits and normal SDK
+read retries. Very old pinned bases can still require a long history scan;
+no absence is inferred from a truncated scan. Known failures before the mutation
+are classified as safe, bounded retries rather than ambiguous registration.
