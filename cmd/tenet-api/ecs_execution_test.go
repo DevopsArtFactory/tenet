@@ -181,7 +181,7 @@ func TestECSCapabilitySimulationUsesConcreteResourcesAndRejectsIncompleteEvidenc
 	role := applyrequest.DeployerRoleReadiness{RoleARN: "arn:aws:iam::123456789012:role/deployer"}
 	checks := []applyrequest.OperationExecutionCapabilityCheck{
 		{Context: map[string]string{"ecs:cluster": "arn:aws:ecs:ap-northeast-2:123456789012:cluster/production"}, Action: "ecs:UpdateService", ResourceName: "arn:aws:ecs:ap-northeast-2:123456789012:service/production/worker", RequiredRole: role.RoleARN},
-		{Action: "iam:PassRole", ResourceName: "arn:aws:iam::123456789012:role/task", RequiredRole: role.RoleARN},
+		{Context: map[string]string{"aws:RequestedRegion": "ap-northeast-2"}, Action: "iam:PassRole", ResourceName: "arn:aws:iam::123456789012:role/task", RequiredRole: role.RoleARN},
 		{Action: "ecs:TagResource", ResourceName: "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/worker:*", RequiredRole: role.RoleARN},
 		{Action: "ecs:DescribeTaskDefinition", ResourceName: "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/worker:17", RequiredRole: role.RoleARN},
 	}
@@ -189,7 +189,7 @@ func TestECSCapabilitySimulationUsesConcreteResourcesAndRejectsIncompleteEvidenc
 	if err := simulateECSCapabilities(context.Background(), fake, role, checks); err != nil {
 		t.Fatal(err)
 	}
-	if aws.ToString(fake.inputs[0].ContextEntries[0].ContextKeyName) != "ecs:cluster" || fake.inputs[0].ResourceArns[0] != checks[0].ResourceName || fake.inputs[1].ResourceArns[0] != checks[1].ResourceName || aws.ToString(fake.inputs[1].ContextEntries[0].ContextKeyName) != "iam:PassedToService" || aws.ToString(fake.inputs[2].ContextEntries[0].ContextKeyName) != "ecs:CreateAction" || fake.inputs[3].ResourceArns[0] != "*" {
+	if aws.ToString(fake.inputs[0].ContextEntries[0].ContextKeyName) != "ecs:cluster" || fake.inputs[0].ResourceArns[0] != checks[0].ResourceName || fake.inputs[1].ResourceArns[0] != checks[1].ResourceName || len(fake.inputs[1].ContextEntries) != 2 || aws.ToString(fake.inputs[1].ContextEntries[0].ContextKeyName) != "aws:RequestedRegion" || aws.ToString(fake.inputs[1].ContextEntries[1].ContextKeyName) != "iam:PassedToService" || aws.ToString(fake.inputs[2].ContextEntries[0].ContextKeyName) != "ecs:CreateAction" || fake.inputs[3].ResourceArns[0] != "*" {
 		t.Fatal("simulation lost concrete resource/action context")
 	}
 	for _, mutate := range []func(*iam.SimulatePrincipalPolicyOutput){

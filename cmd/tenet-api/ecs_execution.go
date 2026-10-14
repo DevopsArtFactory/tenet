@@ -169,10 +169,10 @@ func simulateECSCapabilities(ctx context.Context, client ecsPolicySimulator, rol
 			input.ContextEntries = append(input.ContextEntries, iamtypes.ContextEntry{ContextKeyName: aws.String(key), ContextKeyType: iamtypes.ContextKeyTypeEnumString, ContextKeyValues: []string{check.Context[key]}})
 		}
 		if check.Action == "iam:PassRole" {
-			input.ContextEntries = []iamtypes.ContextEntry{{ContextKeyName: aws.String("iam:PassedToService"), ContextKeyType: iamtypes.ContextKeyTypeEnumString, ContextKeyValues: []string{"ecs-tasks.amazonaws.com"}}}
+			input.ContextEntries = append(input.ContextEntries, iamtypes.ContextEntry{ContextKeyName: aws.String("iam:PassedToService"), ContextKeyType: iamtypes.ContextKeyTypeEnumString, ContextKeyValues: []string{"ecs-tasks.amazonaws.com"}})
 		}
 		if check.Action == "ecs:TagResource" {
-			input.ContextEntries = []iamtypes.ContextEntry{{ContextKeyName: aws.String("ecs:CreateAction"), ContextKeyType: iamtypes.ContextKeyTypeEnumString, ContextKeyValues: []string{"RegisterTaskDefinition"}}}
+			input.ContextEntries = append(input.ContextEntries, iamtypes.ContextEntry{ContextKeyName: aws.String("ecs:CreateAction"), ContextKeyType: iamtypes.ContextKeyTypeEnumString, ContextKeyValues: []string{"RegisterTaskDefinition"}})
 		}
 		output, err := client.SimulatePrincipalPolicy(ctx, input)
 		if err != nil {
