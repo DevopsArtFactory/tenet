@@ -310,3 +310,21 @@ func TestRollingPreflightDoesNotTreatBaseAsFinalWhileImageStillChanges(t *testin
 		t.Fatal("base revision was mistaken for the final reviewed image during active rollout")
 	}
 }
+
+func TestRollingServiceRequiresFinalMutationGuardAfterSnapshotValidation(t *testing.T) {
+	for _, missing := range []bool{true, false} {
+		fake, handler, request := serviceFixture(t)
+		prepared, err := handler.Prepare(context.Background(), request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.PreparedResult = prepared
+		request.BeforeMutation = nil
+		if !missing {
+			request.BeforeMutation = func(context.Context) error { return errors.New("ownership revoked") }
+		}
+		if _, err := handler.Execute(context.Background(), request); err == nil || fake.writes != 0 {
+			t.Fatalf("unguarded service update: writes=%d err=%v", fake.writes, err)
+		}
+	}
+}

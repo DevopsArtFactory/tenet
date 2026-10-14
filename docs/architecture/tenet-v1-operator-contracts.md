@@ -1,5 +1,11 @@
 # Tenet v1 operator contracts
 
+> Execution mode: the local-safe behavior below applies when
+> `TENET_AWS_ENABLE_ECS_EXECUTION` is unset/false. Explicitly enabled native ECS
+> Rolling execution can change AWS after trusted approval; see the
+> [ECS execution guide](tenet-v1-ecs-execution-contract.md#enabling-reviewed-rolling-execution).
+
+
 This document preserves the detailed operator-facing endpoint, read-model, auth, resource, and smoke-verification contracts that used to live in the root README. The root README is intentionally slim; keep detailed string-contract coverage here or in the narrower feature and architecture docs.
 
 Tenet is a repository-driven deployment control plane for multi-account environments.

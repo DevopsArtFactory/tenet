@@ -71,15 +71,17 @@ type OperationExecutionPreflightHandoffs struct {
 // OperationExecutionCapabilityCheck captures one deterministic, non-mutating capability item
 // that a future live executor would need to satisfy before mutating AWS resources.
 type OperationExecutionCapabilityCheck struct {
-	Action         string `json:"action"`
-	ResourceType   string `json:"resourceType,omitempty"`
-	ResourceName   string `json:"resourceName,omitempty"`
-	RequiredRole   string `json:"requiredRole"`
-	State          string `json:"state"`
-	Reason         string `json:"reason,omitempty"`
-	Summary        string `json:"summary"`
-	CheckedWithAWS bool   `json:"checkedWithAws,omitempty"`
-	Allowed        *bool  `json:"allowed,omitempty"`
+	// Context is runtime-only IAM simulation evidence, never an operator-supplied grant.
+	Context        map[string]string `json:"-"`
+	Action         string            `json:"action"`
+	ResourceType   string            `json:"resourceType,omitempty"`
+	ResourceName   string            `json:"resourceName,omitempty"`
+	RequiredRole   string            `json:"requiredRole"`
+	State          string            `json:"state"`
+	Reason         string            `json:"reason,omitempty"`
+	Summary        string            `json:"summary"`
+	CheckedWithAWS bool              `json:"checkedWithAws,omitempty"`
+	Allowed        *bool             `json:"allowed,omitempty"`
 }
 
 // OperationExecutionPreflight captures one non-mutating readiness row for an apply operation.
@@ -233,6 +235,7 @@ func (s Service) enrichOperationPermissionChecks(ctx context.Context, record Rec
 }
 
 func normalizeExecutionReadiness(record Record) Record {
+	record.Principal = record.Principal.Clone()
 	record.ECSRuntime = record.ECSRuntime.Clone()
 	record.Operations = normalizeOperationIDs(record.Operations)
 	readiness := deriveExecutionReadiness(record)
@@ -335,7 +338,7 @@ func deriveExecutionReadiness(record Record) ExecutionReadiness {
 	if checkedAt == "" {
 		checkedAt = record.CreatedAt
 	}
-	if hasECSCheckpoints(record) {
+	if hasECSCheckpoints(record) || record.Principal != nil {
 		return ecsReadiness(record, checkedAt)
 	}
 	state := ExecutionReadinessStateBlocked

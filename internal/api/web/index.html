@@ -10281,7 +10281,7 @@
         const hasClaim = hasApplyClaimCoreMetadata(record);
         const active = isActiveApplyRecord(record);
         if (!hasClaim && active) {
-          return 'Pending executor claim — no local-safe executor has claimed this apply request yet.';
+          return hasNativeECSExecution(record) ? 'Approved ECS Apply is awaiting executor validation and ownership.' : 'Pending executor claim — no local-safe executor has claimed this apply request yet.';
         }
         if (!hasClaim) return 'No executor claim metadata is attached to this apply request.';
         const staleStates = ['stale', 'expired', 'lease_expired', 'lease-expired', 'heartbeat_stale', 'heartbeat-stale'];
@@ -10422,7 +10422,7 @@
         ];
         return candidates.find((candidate) => candidate && typeof candidate === 'object') || null;
       };
-      const hasNativeECSExecution = (record) => Array.isArray(record?.operations) && record.operations.some((operation) => Boolean(operation?.ecsCheckpoint));
+      const hasNativeECSExecution = (record) => Boolean(record?.principal) || (Array.isArray(record?.operations) && record.operations.some((operation) => Boolean(operation?.ecsCheckpoint)));
       const ecsRuntimeProgressText = (runtime) => {
         if (!runtime) return 'No ECS observation';
         if (!runtime.tasksObserved) {
@@ -10458,6 +10458,7 @@
       };
       const applyExecutionReadinessLabel = (record, readinessOverride = null) => {
         if (hasNativeECSExecution(record)) {
+          if (record.status === 'queued') return 'Approved · awaiting executor';
           if (record.status === 'succeeded') return record.ecsRuntime?.state === 'converged' ? 'Deployment verified' : 'Execution completed';
           if (record.status === 'failed') return 'Execution failed';
           return 'ECS execution active';
@@ -10682,7 +10683,7 @@
         if ((status === 'queued' || status === 'running') && claimSignal === 'pending') {
           return {
             action: 'Wait for executor claim',
-            detail: 'No local-safe executor has claimed this active apply request yet. Refresh applies or the apply workspace before escalating.',
+            detail: hasNativeECSExecution(record) ? 'Approved ECS execution awaits current authorization, intent, capabilities and ownership checks. Refresh to inspect progress.' : 'No local-safe executor has claimed this active apply request yet. Refresh applies or the apply workspace before escalating.',
             tone: 'pending',
           };
         }
@@ -12238,7 +12239,7 @@
               planState.onCreatePlan();
             });
           }
-          const applyPlanButton = createElement('button', 'toolbar-button', 'Apply Plan');
+          const applyPlanButton = createElement('button', 'toolbar-button', operatorContextState.context?.ecsExecutionEnabled ? 'Approve & Apply to ECS' : 'Apply Plan');
           applyPlanButton.type = 'button';
           applyPlanButton.disabled = planState?.status === 'loading' || applyState?.status === 'loading' || !canApplyPlan;
           if (typeof applyState?.onApplyPlan === 'function') {
@@ -12280,7 +12281,7 @@
           const planActionHint = createElement(
             'div',
             'detail-condition-meta',
-            'Create Plan reviews the current deployment detail immediately; Apply Plan and record refresh controls activate only after a persisted ready preview or apply request is loaded.',
+            operatorContextState.context?.ecsExecutionEnabled ? 'Live ECS execution is enabled. Approve & Apply authorizes the reviewed task-definition and service update under your current deployment permissions.' : 'Create Plan reviews the current deployment detail immediately; Apply Plan and record refresh controls activate only after a persisted ready preview or apply request is loaded. Apply records approval; the configured executor may change AWS resources when live ECS execution is enabled.',
           );
           const planStateCallout = createElement('div', 'detail-state', planPreviewStateMessage(planState, detail));
           const planStateClassName = planPreviewStateClassName(planState);
@@ -12420,7 +12421,7 @@
               });
             } else if (hasPendingApplyClaim(activeApplyRecord)) {
               [
-                ['Executor claim', 'Pending local-safe executor claim; no worker has claimed this active apply request yet.', 'summary'],
+                ['Executor claim', hasNativeECSExecution(activeApplyRecord) ? 'Awaiting ECS executor validation and ownership.' : 'Pending local-safe executor claim; no worker has claimed this active apply request yet.', 'summary'],
                 ['Executor worker', '—'],
                 ['Claimed at', '—'],
               ].forEach(([label, value, className]) => {

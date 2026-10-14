@@ -36,6 +36,7 @@ type DeployerRoleReadinessProvider func(context.Context, DeployerRoleTarget) (De
 
 // Service derives and persists immutable apply requests from ready plan previews.
 type Service struct {
+	AuthorizeCreate       func(context.Context, Record) (*ExecutionPrincipal, error)
 	LoadPlan              PlanProvider
 	CurrentFingerprint    CurrentFingerprintProvider
 	DeployerRoleReadiness DeployerRoleReadinessProvider
@@ -88,6 +89,16 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 			PlanCreatedAt: plan.CreatedAt,
 			Fingerprint:   plan.Source.Fingerprint,
 		},
+	}
+	if s.AuthorizeCreate != nil {
+		record.Principal, err = s.AuthorizeCreate(ctx, record)
+		if err != nil {
+			return CreateResult{}, err
+		}
+		if record.Principal == nil || !record.Principal.Identity.Authenticated || (record.Principal.Identity.ID == "" && record.Principal.Identity.Email == "") {
+			return CreateResult{}, ErrExecutionUnauthorized
+		}
+		record.Principal = record.Principal.Clone()
 	}
 	record.Lifecycle = initialLifecycle(record)
 	record.ID, err = stableRecordID(record)
@@ -624,10 +635,12 @@ func stableRecordID(record Record) (string, error) {
 	// churning immutable apply IDs when this duplicated projection evolves without source-intent
 	// changes.
 	payload := struct {
-		PlanID         string        `json:"planId"`
-		DeploymentName string        `json:"deploymentName"`
-		Source         SourceContext `json:"source"`
+		Principal      *ExecutionPrincipal `json:"principal,omitempty"`
+		PlanID         string              `json:"planId"`
+		DeploymentName string              `json:"deploymentName"`
+		Source         SourceContext       `json:"source"`
 	}{
+		Principal:      record.Principal,
 		PlanID:         record.PlanID,
 		DeploymentName: record.DeploymentName,
 		Source:         record.Source,

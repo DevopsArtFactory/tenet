@@ -1,6 +1,7 @@
 package ecsexecution
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -26,4 +27,14 @@ func passRoleChecks(taskRole, executionRole *string, request applyrequest.ECSOpe
 		checks = append(checks, applyrequest.OperationExecutionCapabilityCheck{Action: "iam:PassRole", ResourceType: "iamRole", ResourceName: value, RequiredRole: request.Role.RoleARN})
 	}
 	return checks, nil
+}
+
+func authorizeMutation(ctx context.Context, request applyrequest.ECSOperationRequest) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if request.BeforeMutation == nil {
+		return fmt.Errorf("executor mutation ownership guard is required")
+	}
+	return request.BeforeMutation(ctx)
 }

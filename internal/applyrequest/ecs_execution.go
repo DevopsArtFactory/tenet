@@ -17,16 +17,19 @@ import (
 )
 
 // ECSCheckpoint is durable evidence for one reviewed operation. In-flight means
-// the call may have reached AWS; recovery must reconcile before any retry.
+// the call may have reached AWS after mutation authorization; ambiguous outcomes
+// must be reconciled before any retry.
 type ECSCheckpoint struct {
-	RoleARN    string             `json:"roleArn,omitempty"`
-	RequestID  string             `json:"requestId"`
-	State      string             `json:"state"`
-	Attempts   int                `json:"attempts"`
-	UpdatedAt  string             `json:"updatedAt"`
-	RetryAfter string             `json:"retryAfter,omitempty"`
-	Error      string             `json:"error,omitempty"`
-	Result     ECSOperationResult `json:"result,omitempty"`
+	MutationGuarded      bool               `json:"mutationGuarded,omitempty"`
+	MutationAuthorizedAt string             `json:"mutationAuthorizedAt,omitempty"`
+	RoleARN              string             `json:"roleArn,omitempty"`
+	RequestID            string             `json:"requestId"`
+	State                string             `json:"state"`
+	Attempts             int                `json:"attempts"`
+	UpdatedAt            string             `json:"updatedAt"`
+	RetryAfter           string             `json:"retryAfter,omitempty"`
+	Error                string             `json:"error,omitempty"`
+	Result               ECSOperationResult `json:"result,omitempty"`
 }
 
 // ECSServiceSnapshot records fields changed by a Rolling update before AWS mutation.
@@ -54,6 +57,8 @@ type ECSOperationResult struct {
 
 // ECSOperationRequest binds an injected handler to reviewed intent and durable identity.
 type ECSOperationRequest struct {
+	// BeforeMutation must succeed immediately before a concrete SDK write.
+	BeforeMutation func(context.Context) error
 	ApplyID        string
 	OperationID    string
 	RequestID      string
@@ -181,7 +186,7 @@ func (e Executor) advanceECS(ctx context.Context, snapshot Record) error {
 	}
 
 	// Validate every operation/handler before claiming or mutating anything.
-	role, err := e.validateECS(ctx, record)
+	role, err := e.validateECS(ctx, record, ecsNeedsMutation(record))
 	if err != nil {
 		return err
 	}
@@ -261,7 +266,7 @@ func ecsRequest(record Record, index int, role DeployerRoleReadiness) ECSOperati
 	return request
 }
 
-func (e Executor) validateECS(ctx context.Context, record Record) (DeployerRoleReadiness, error) {
+func (e Executor) validateECS(ctx context.Context, record Record, mutation bool) (DeployerRoleReadiness, error) {
 	if e.ECS == nil || !e.ECS.Enabled || !e.Service.EnableAWSApply {
 		return DeployerRoleReadiness{}, fmt.Errorf("live ECS execution is disabled")
 	}
@@ -307,12 +312,14 @@ func (e Executor) validateECS(ctx context.Context, record Record) (DeployerRoleR
 	if err := e.ECS.Authorize(ctx, record); err != nil {
 		return DeployerRoleReadiness{}, err
 	}
-	current, err := e.ECS.CurrentIntent(ctx, record.DeploymentName)
-	if err != nil {
-		return DeployerRoleReadiness{}, err
-	}
-	if !reflect.DeepEqual(current, record.Operations[0].ECS) {
-		return DeployerRoleReadiness{}, ErrSourceFingerprintConflict
+	if mutation {
+		current, err := e.ECS.CurrentIntent(ctx, record.DeploymentName)
+		if err != nil {
+			return DeployerRoleReadiness{}, err
+		}
+		if !reflect.DeepEqual(current, record.Operations[0].ECS) {
+			return DeployerRoleReadiness{}, ErrSourceFingerprintConflict
+		}
 	}
 	// The full preview fingerprint includes observed runtime state; once execution
 	// starts, compare desired intent above so our own rollout does not invalidate it.
@@ -401,7 +408,7 @@ func (e Executor) runECSOperation(ctx context.Context, record Record, role Deplo
 	if op.ECSCheckpoint != nil && op.ECSCheckpoint.State == "retryable_rejection" && op.ECSCheckpoint.Attempts >= 3 {
 		return e.finishECS(ctx, record, StatusFailed, "ECS execution retries exhausted after confirmed AWS rejections", nil)
 	}
-	if op.ECSCheckpoint != nil && op.ECSCheckpoint.State == "in_flight" {
+	if op.ECSCheckpoint != nil && op.ECSCheckpoint.State == "in_flight" && (!op.ECSCheckpoint.MutationGuarded || op.ECSCheckpoint.MutationAuthorizedAt != "" || index == 2) {
 		result, err := handler.Reconcile(ctx, request)
 		if err != nil {
 			return e.recordECSError(ctx, record, index, err)
@@ -427,7 +434,7 @@ func (e Executor) runECSOperation(ctx context.Context, record Record, role Deplo
 	}
 	// Refresh authorization/intent/role and concrete capabilities immediately before
 	// a write, then persist in-flight intent before allowing the handler to call AWS.
-	refreshedRole, err := e.validateECS(ctx, record)
+	refreshedRole, err := e.validateECS(ctx, record, index < 2)
 	if err != nil {
 		return err
 	}
@@ -447,8 +454,11 @@ func (e Executor) runECSOperation(ctx context.Context, record Record, role Deplo
 		attempts := 0
 		if cp := current.Operations[index].ECSCheckpoint; cp != nil {
 			attempts = cp.Attempts
+			if cp.State == "in_flight" && cp.MutationGuarded && cp.MutationAuthorizedAt == "" {
+				attempts--
+			}
 		}
-		current.Operations[index].ECSCheckpoint = &ECSCheckpoint{RequestID: request.RequestID, RoleARN: request.Role.RoleARN, State: "in_flight", Attempts: attempts + 1, UpdatedAt: now, Result: request.PreparedResult.Clone()}
+		current.Operations[index].ECSCheckpoint = &ECSCheckpoint{MutationGuarded: true, RequestID: request.RequestID, RoleARN: request.Role.RoleARN, State: "in_flight", Attempts: attempts + 1, UpdatedAt: now, Result: request.PreparedResult.Clone()}
 		current.Error = ""
 		current.Details = []string{"Live ECS operation started with durable request identity " + request.RequestID + "; AWS outcome must be reconciled after interruption."}
 		current.Operations = transitionOperations(current.Operations, StatusRunning, index+1)
@@ -464,6 +474,27 @@ func (e Executor) runECSOperation(ctx context.Context, record Record, role Deplo
 		return err
 	}
 	if _, err = e.ecsOwnedChange(ctx, record, func(current Record) (Record, error) { return current, nil }); err != nil {
+		return err
+	}
+	request.BeforeMutation = func(writeCtx context.Context) error {
+		if err := writeCtx.Err(); err != nil {
+			return err
+		}
+		verifiedRole, err := e.validateECS(writeCtx, record, true)
+		if err != nil {
+			return err
+		}
+		if verifiedRole.RoleARN != request.Role.RoleARN {
+			return fmt.Errorf("deployer role changed before mutation")
+		}
+		_, err = e.ecsOwnedChange(writeCtx, record, func(current Record) (Record, error) {
+			cp := current.Operations[index].ECSCheckpoint
+			if cp == nil || cp.RequestID != request.RequestID || cp.State != "in_flight" {
+				return Record{}, ErrInvalidState
+			}
+			cp.MutationAuthorizedAt = e.Service.now().UTC().Format(time.RFC3339Nano)
+			return current, nil
+		})
 		return err
 	}
 	result, err := handler.Execute(ctx, request)
@@ -631,4 +662,18 @@ func ecsAllComplete(record Record) bool {
 		}
 	}
 	return true
+}
+
+func ecsNeedsMutation(record Record) bool {
+	for i, op := range record.Operations {
+		cp := op.ECSCheckpoint
+		if cp != nil && cp.State == "complete" {
+			continue
+		}
+		if i == 2 {
+			return false
+		}
+		return cp == nil || cp.State != "in_flight" || (cp.MutationGuarded && cp.MutationAuthorizedAt == "")
+	}
+	return false
 }

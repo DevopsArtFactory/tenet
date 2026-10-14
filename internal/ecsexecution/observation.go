@@ -51,10 +51,10 @@ func (h RollingObservation) Preflight(ctx context.Context, request applyrequest.
 		target = request.PriorResults[0].TaskDefinitionARN
 	}
 	return h.CheckCapabilities(ctx, role, []applyrequest.OperationExecutionCapabilityCheck{
-		{Action: "ecs:DescribeServices", ResourceType: "ecsService", ResourceName: e.ServiceARN, RequiredRole: role.RoleARN},
+		{Context: map[string]string{"ecs:cluster": e.ClusterARN}, Action: "ecs:DescribeServices", ResourceType: "ecsService", ResourceName: e.ServiceARN, RequiredRole: role.RoleARN},
 		{Action: "ecs:DescribeTaskDefinition", ResourceType: "taskDefinition", ResourceName: target, RequiredRole: role.RoleARN},
-		{Action: "ecs:ListTasks", ResourceName: "*", RequiredRole: role.RoleARN},
-		{Action: "ecs:DescribeTasks", ResourceType: "ecsTask", ResourceName: fmt.Sprintf("arn:%s:ecs:%s:%s:task/*", service.Partition, e.Region, e.AWSAccountID), RequiredRole: role.RoleARN},
+		{Context: map[string]string{"ecs:cluster": e.ClusterARN}, Action: "ecs:ListTasks", ResourceName: "*", RequiredRole: role.RoleARN},
+		{Context: map[string]string{"ecs:cluster": e.ClusterARN}, Action: "ecs:DescribeTasks", ResourceType: "ecsTask", ResourceName: fmt.Sprintf("arn:%s:ecs:%s:%s:task/*", service.Partition, e.Region, e.AWSAccountID), RequiredRole: role.RoleARN},
 	})
 }
 

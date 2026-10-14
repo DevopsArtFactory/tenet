@@ -89,7 +89,8 @@ func TestReadmeStaysProductOverview(t *testing.T) {
 		"## Documentation",
 		"docs/architecture/tenet-v1-operator-reference.md",
 		"docs/architecture/tenet-v1-operator-contracts.md",
-		"Live AWS deployment mutation\nis not implemented",
+		"native ECS Rolling",
+		"separate live-execution opt-in",
 	} {
 		if !strings.Contains(strings.Join(strings.Fields(readme), " "), strings.Join(strings.Fields(fragment), " ")) {
 			t.Fatalf("expected README product overview to include %q", fragment)

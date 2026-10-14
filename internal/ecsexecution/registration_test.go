@@ -79,7 +79,7 @@ func (f *registrationFake) RegisterTaskDefinition(_ context.Context, in *ecs.Reg
 func registrationFixture() (*registrationFake, Registration, applyrequest.ECSOperationRequest) {
 	base := "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/worker:17"
 	role := applyrequest.DeployerRoleReadiness{Configured: true, Ready: true, CheckedWithAWS: true, AWSAccountID: "123456789012", Region: "ap-northeast-2", RoleARN: "arn:aws:iam::123456789012:role/tenet-deployer"}
-	request := applyrequest.ECSOperationRequest{ApplyID: "apply-a", OperationID: "register", RequestID: "tenet-request-a", Role: role, Intent: domain.ECSDeploymentIntent{AWSAccountID: role.AWSAccountID, Region: role.Region, DeploymentController: "ECS", DeploymentStrategy: "ROLLING", BaseTaskDefinitionARN: base, ContainerName: "worker", Image: "registry.example.com/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}
+	request := applyrequest.ECSOperationRequest{BeforeMutation: func(context.Context) error { return nil }, ApplyID: "apply-a", OperationID: "register", RequestID: "tenet-request-a", Role: role, Intent: domain.ECSDeploymentIntent{AWSAccountID: role.AWSAccountID, Region: role.Region, DeploymentController: "ECS", DeploymentStrategy: "ROLLING", BaseTaskDefinitionARN: base, ContainerName: "worker", Image: "registry.example.com/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}
 	definition := &types.TaskDefinition{TaskDefinitionArn: aws.String(base), Family: aws.String("worker"), Revision: 17, Status: types.TaskDefinitionStatusActive, Cpu: aws.String("256"), Memory: aws.String("512"), NetworkMode: types.NetworkModeAwsvpc, RequiresCompatibilities: []types.Compatibility{types.CompatibilityFargate}, TaskRoleArn: aws.String("arn:aws:iam::123456789012:role/task"), ExecutionRoleArn: aws.String("arn:aws:iam::123456789012:role/execution"), RuntimePlatform: &types.RuntimePlatform{CpuArchitecture: types.CPUArchitectureX8664, OperatingSystemFamily: types.OSFamilyLinux}, EphemeralStorage: &types.EphemeralStorage{SizeInGiB: 30}, ContainerDefinitions: []types.ContainerDefinition{
 		{Name: aws.String("worker"), Image: aws.String("registry.example.com/worker:old"), Essential: aws.Bool(true), Environment: []types.KeyValuePair{{Name: aws.String("UNCHANGED"), Value: aws.String("fixture-value")}}, Secrets: []types.Secret{{Name: aws.String("DB_PASSWORD"), ValueFrom: aws.String("arn:aws:ssm:ap-northeast-2:123456789012:parameter/password")}}, LogConfiguration: &types.LogConfiguration{LogDriver: types.LogDriverAwslogs, Options: map[string]string{"awslogs-group": "worker", "awslogs-region": "ap-northeast-2"}}},
 		{Name: aws.String("sidecar"), Image: aws.String("registry.example.com/sidecar:1"), Essential: aws.Bool(false)},
@@ -300,5 +300,18 @@ func TestRegistrationReusesActivePinnedBaseThatAlreadyMatches(t *testing.T) {
 	result, err := handler.Execute(context.Background(), request)
 	if err != nil || result.TaskDefinitionARN != request.Intent.BaseTaskDefinitionARN || result.TaskDefinitionRevision != 17 || fake.writes != 0 {
 		t.Fatalf("matching reviewed base created a needless revision: %+v %v", result, err)
+	}
+}
+
+func TestRegistrationRequiresFinalMutationGuardAfterDiscovery(t *testing.T) {
+	for _, missing := range []bool{true, false} {
+		fake, handler, request := registrationFixture()
+		request.BeforeMutation = nil
+		if !missing {
+			request.BeforeMutation = func(context.Context) error { return errors.New("ownership revoked") }
+		}
+		if _, err := handler.Execute(context.Background(), request); err == nil || fake.writes != 0 {
+			t.Fatalf("unguarded registration: writes=%d err=%v", fake.writes, err)
+		}
 	}
 }

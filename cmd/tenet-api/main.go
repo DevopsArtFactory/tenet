@@ -82,6 +82,9 @@ func main() {
 	if err := validateCatalogSource(catalogSource, applyEnabled); err != nil {
 		log.Fatal(err)
 	}
+	if err := validateECSExecutionConfiguration(catalogSource); err != nil {
+		log.Fatal(err)
+	}
 	requestTimeout, err := requestTimeoutFromEnv()
 	if err != nil {
 		log.Fatal(err)
@@ -102,7 +105,21 @@ func main() {
 	options.Logger = logger
 	options.RequestTimeout = requestTimeout
 
-	stopApplyExecutor, applyExecutorStarted := startApplyRequestExecutor(logger, repoRoot, applyEnabled, applyStorePath, 0)
+	var stopApplyExecutor context.CancelFunc
+	var applyExecutorStarted bool
+	if ecsExecutionEnabled() {
+		executor := newNativeECSExecutor(catalogSource, options, planStorePath, applyStorePath, logger)
+		executorCtx, cancel := context.WithCancel(context.Background())
+		stopApplyExecutor, applyExecutorStarted = cancel, true
+		logger.Info("starting explicitly enabled native ECS executor", "apply_store_path", applyStorePath)
+		go func() {
+			if err := executor.Run(executorCtx); err != nil && !errors.Is(err, context.Canceled) {
+				logger.Warn("native ECS executor stopped", "error", err)
+			}
+		}()
+	} else {
+		stopApplyExecutor, applyExecutorStarted = startApplyRequestExecutor(logger, repoRoot, applyEnabled, applyStorePath, 0)
+	}
 	if applyExecutorStarted {
 		defer stopApplyExecutor()
 	}
@@ -149,6 +166,14 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 		AuthRuntime:                        authRuntimeDiagnosticFromEnv(),
 		GitHubWebhookDesiredStateSource:    source.webhookDesiredStateSource(),
 		GitHubWebhookRefreshPublisher:      newGitHubWebhookRefreshPublisher(store),
+	}
+	if ecsExecutionEnabled() {
+		options.ECSExecutionEnabled = true
+		options.RequireAuthenticatedIdentity = true
+		options.RequireOperatorRoleForRead = true
+		options.RequireOperatorRoleForWrite = true
+		options.RequireDeploymentReadAuthorization = true
+		options.AuthorizeWithRepositoryPolicy = true
 	}
 	configureManagedLoginRuntime(&options)
 	if source.kind == apiCatalogSourceFilesystem {
@@ -330,14 +355,7 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 			LoadDetail: options.OverviewDeployment,
 			Store:      planpreview.NewFileStore(planStorePath),
 		}
-		applyService := applyrequest.Service{
-			LoadPlan:              planService.Get,
-			CurrentFingerprint:    newApplyRequestFingerprintProvider(options.OverviewDeployment),
-			Store:                 applyrequest.NewFileStore(applyStorePath),
-			EnableAWSApply:        awsApplyEnabled(),
-			DeployerRoleReadiness: newApplyRequestDeployerRoleReadinessProvider(source, probeDeployerRoleIdentity),
-			PermissionSimulation:  newApplyRequestPermissionSimulationProvider(probeApplyPermissionSimulation),
-		}
+		applyService := newApplyService(source, options, planStorePath, applyStorePath)
 		options.CreateDeploymentPlanPreview = planService.Create
 		options.PlanPreview = planService.Get
 		options.CreateApplyRequest = applyService.Create

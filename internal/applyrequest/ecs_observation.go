@@ -157,6 +157,10 @@ func hasECSCheckpoints(record Record) bool {
 func ecsReadiness(record Record, checkedAt string) ExecutionReadiness {
 	state := "executing"
 	summary := "Native ECS executor owns this Apply; inspect operation checkpoints for execution evidence."
+	if record.Status == StatusQueued {
+		state = "queued"
+		summary = "Approved native ECS Apply awaits executor validation of current authorization, intent and AWS capabilities."
+	}
 	if record.Status == StatusSucceeded {
 		state = "completed"
 		summary = "Native ECS execution completed with persisted operation results."
@@ -191,6 +195,10 @@ func nativeECSPreflight(record Record, operation Operation, role *DeployerRoleRe
 	}
 	reason := "live_executor_not_configured"
 	summary := "Reviewed native ECS intent awaits an explicitly configured live executor."
+	if record.Principal != nil {
+		reason = "executor_validation_pending"
+		summary = "Trusted approval recorded; executor must validate current authorization, intent and AWS capabilities before execution."
+	}
 	if record.Status == StatusFailed && record.Error == disabledError {
 		reason = "execution_disabled"
 		summary = "Live execution is disabled; reviewed ECS intent is preserved."

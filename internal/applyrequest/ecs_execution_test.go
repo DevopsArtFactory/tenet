@@ -13,9 +13,11 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/manifest"
 	"github.com/DevopsArtFactory/tenet/internal/manifestfs"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
+	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
 
 type fakeECSHandler struct {
+	before     func(ECSOperationRequest) error
 	calls      atomic.Int32
 	reconciles atomic.Int32
 	preflight  func(ECSOperationRequest) error
@@ -29,7 +31,17 @@ func (f *fakeECSHandler) Preflight(_ context.Context, r ECSOperationRequest) err
 	}
 	return nil
 }
-func (f *fakeECSHandler) Execute(_ context.Context, r ECSOperationRequest) (ECSOperationResult, error) {
+func (f *fakeECSHandler) Execute(ctx context.Context, r ECSOperationRequest) (ECSOperationResult, error) {
+	if f.before != nil {
+		if err := f.before(r); err != nil {
+			return ECSOperationResult{}, err
+		}
+	}
+	if len(r.PriorResults) < 2 {
+		if err := r.BeforeMutation(ctx); err != nil {
+			return ECSOperationResult{}, err
+		}
+	}
 	f.calls.Add(1)
 	if f.execute != nil {
 		return f.execute(r)
@@ -575,5 +587,95 @@ func TestECSExecutionPersistsTerminalObservationEvidenceAtomically(t *testing.T)
 	last := record.Transitions[len(record.Transitions)-1]
 	if last.Status != StatusFailed || len(last.Details) == 0 || last.Details[0] != "Runtime reason: observation_timeout" {
 		t.Fatal("terminal runtime reason missing from audit evidence")
+	}
+}
+
+func TestECSMutationGuardStopsLeaseLossAndChangedIntentDuringDiscovery(t *testing.T) {
+	for _, lost := range []bool{true, false} {
+		t.Run(map[bool]string{true: "lease lost", false: "source changed"}[lost], func(t *testing.T) {
+			f := newECSFixture(t)
+			f.handler.before = func(ECSOperationRequest) error {
+				if lost {
+					_, err := f.executor.Service.Store.(MutationStore).Mutate(context.Background(), f.record.ID, func(r Record) (Record, error) { r.Claim.WorkerID = "replacement"; return r, nil })
+					return err
+				}
+				f.intent.Image = "registry.example.com/worker:changed"
+				return nil
+			}
+			_ = f.executor.RunOnce(context.Background())
+			if f.handler.calls.Load() != 0 || f.stored(t).Operations[0].ECSCheckpoint.MutationAuthorizedAt != "" {
+				t.Fatal("write escaped the final mutation guard")
+			}
+		})
+	}
+}
+
+func TestECSGuardedUnsentCheckpointCanResumeWithoutAssumingAWSAbsence(t *testing.T) {
+	f := newECSFixture(t)
+	stopped := errors.New("process stopped during discovery")
+	f.handler.before = func(ECSOperationRequest) error { return stopped }
+	if err := f.executor.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	cp := f.stored(t).Operations[0].ECSCheckpoint
+	if !cp.MutationGuarded || cp.MutationAuthorizedAt != "" || f.handler.calls.Load() != 0 {
+		t.Fatal("invalid no-send checkpoint")
+	}
+	f.now = f.now.Add(31 * time.Second)
+	f.handler.before = nil
+	if err := f.executor.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	cp = f.stored(t).Operations[0].ECSCheckpoint
+	if cp.State != "complete" || cp.MutationAuthorizedAt == "" || cp.Attempts != 1 || f.handler.calls.Load() != 1 || f.handler.reconciles.Load() != 0 {
+		t.Fatalf("no-send recovery lost write evidence: %+v", cp)
+	}
+}
+
+func TestECSObservationCanFinishApprovedIntentAfterGitChanges(t *testing.T) {
+	f := newECSFixture(t)
+	for i := 0; i < 2; i++ {
+		if err := f.executor.RunOnce(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.intent.Image = "registry.example.com/worker:next"
+	if err := f.executor.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if f.stored(t).Status != StatusSucceeded {
+		t.Fatal("new Git intent blocked read-only convergence of the approved rollout")
+	}
+}
+
+func TestECSApprovalPrincipalCannotBeChangedWithoutChangingApplyIdentity(t *testing.T) {
+	f := newECSFixture(t)
+	_, err := f.executor.Service.Store.(MutationStore).Mutate(context.Background(), f.record.ID, func(record Record) (Record, error) {
+		record.Principal = &ExecutionPrincipal{Identity: requestactor.AuthenticatedIdentity{Authenticated: true, ID: "another-user"}}
+		return record, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.executor.RunOnce(context.Background()); err == nil || f.handler.calls.Load() != 0 {
+		t.Fatalf("altered approval executed: %v", err)
+	}
+}
+
+func TestDisablingNativeExecutionPreservesApprovedQueuedRequests(t *testing.T) {
+	f := newECSFixture(t)
+	_, err := f.executor.Service.Store.(MutationStore).Mutate(context.Background(), f.record.ID, func(record Record) (Record, error) {
+		record.Principal = &ExecutionPrincipal{Identity: requestactor.AuthenticatedIdentity{Authenticated: true, ID: "operator"}}
+		return record, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.executor.ECS = nil
+	if err := f.executor.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if f.stored(t).Status != StatusQueued || f.stored(t).Claim != nil {
+		t.Fatal("local-safe fallback changed a queued live approval")
 	}
 }

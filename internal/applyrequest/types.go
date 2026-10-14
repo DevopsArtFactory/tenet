@@ -2,6 +2,7 @@ package applyrequest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -158,6 +159,7 @@ type Transition struct {
 
 // Record is one immutable apply request derived from a persisted ready plan preview.
 type Record struct {
+	Principal          *ExecutionPrincipal    `json:"principal,omitempty"`
 	ECSRuntime         *ECSRolloutObservation `json:"ecsRuntime,omitempty"`
 	ID                 string                 `json:"id"`
 	PlanID             string                 `json:"planId"`
@@ -262,3 +264,21 @@ type HeartbeatStore interface {
 type MutationStore interface {
 	Mutate(context.Context, string, func(Record) (Record, error)) (Record, error)
 }
+
+// ExecutionPrincipal is trusted approval evidence, separate from actor attribution.
+// It contains no credentials. Workers must evaluate it against current repository policy.
+type ExecutionPrincipal struct {
+	Identity requestactor.AuthenticatedIdentity `json:"identity"`
+	Groups   requestactor.AuthenticatedGroups   `json:"groups"`
+}
+
+func (p *ExecutionPrincipal) Clone() *ExecutionPrincipal {
+	if p == nil {
+		return nil
+	}
+	copied := *p
+	copied.Groups.Names = append([]string(nil), p.Groups.Names...)
+	return &copied
+}
+
+var ErrExecutionUnauthorized = errors.New("ECS execution requires an authenticated operator with deployment access")
