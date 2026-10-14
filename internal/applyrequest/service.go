@@ -669,6 +669,7 @@ func normalizeOperationIDs(operations []Operation) []Operation {
 		normalized[i].ECS = normalized[i].ECS.Clone()
 		if normalized[i].ECSCheckpoint != nil {
 			checkpoint := *normalized[i].ECSCheckpoint
+			checkpoint.Result = checkpoint.Result.Clone()
 			normalized[i].ECSCheckpoint = &checkpoint
 		}
 	}
@@ -843,6 +844,7 @@ func cloneOperations(existing []Operation) []Operation {
 		updated[i].ECS = updated[i].ECS.Clone()
 		if updated[i].ECSCheckpoint != nil {
 			checkpoint := *updated[i].ECSCheckpoint
+			checkpoint.Result = checkpoint.Result.Clone()
 			updated[i].ECSCheckpoint = &checkpoint
 		}
 		if updated[i].ExecutionAttempt != nil {

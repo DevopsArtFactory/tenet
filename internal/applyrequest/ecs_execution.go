@@ -28,29 +28,42 @@ type ECSCheckpoint struct {
 	Result     ECSOperationResult `json:"result,omitempty"`
 }
 
-// ECSOperationResult contains identifiers only, never task-definition bodies or secrets.
+// ECSServiceSnapshot records fields changed by a Rolling update before AWS mutation.
+type ECSServiceSnapshot struct {
+	TaskDefinitionARN     string `json:"taskDefinitionArn"`
+	DesiredCount          int32  `json:"desiredCount"`
+	MinimumHealthyPercent int32  `json:"minimumHealthyPercent"`
+	MaximumPercent        int32  `json:"maximumPercent"`
+	PrimaryDeploymentID   string `json:"primaryDeploymentId"`
+}
+
+// ECSOperationResult contains identifiers and rollback fields, never task bodies or secrets.
 type ECSOperationResult struct {
-	TaskDefinitionRevision    int32  `json:"taskDefinitionRevision,omitempty"`
-	TaskDefinitionIntent      string `json:"taskDefinitionIntent,omitempty"`
-	TaskDefinitionARN         string `json:"taskDefinitionArn,omitempty"`
-	PreviousTaskDefinitionARN string `json:"previousTaskDefinitionArn,omitempty"`
-	ServiceDeploymentARN      string `json:"serviceDeploymentArn,omitempty"`
-	AWSRequestID              string `json:"awsRequestId,omitempty"`
+	PreviousService           *ECSServiceSnapshot `json:"previousService,omitempty"`
+	ServiceDeploymentID       string              `json:"serviceDeploymentId,omitempty"`
+	TaskDefinitionRevision    int32               `json:"taskDefinitionRevision,omitempty"`
+	TaskDefinitionIntent      string              `json:"taskDefinitionIntent,omitempty"`
+	TaskDefinitionARN         string              `json:"taskDefinitionArn,omitempty"`
+	PreviousTaskDefinitionARN string              `json:"previousTaskDefinitionArn,omitempty"`
+	ServiceDeploymentARN      string              `json:"serviceDeploymentArn,omitempty"`
+	AWSRequestID              string              `json:"awsRequestId,omitempty"`
 }
 
 // ECSOperationRequest binds an injected handler to reviewed intent and durable identity.
 type ECSOperationRequest struct {
-	ApplyID      string
-	OperationID  string
-	RequestID    string
-	Intent       domain.ECSDeploymentIntent
-	Role         DeployerRoleReadiness
-	PriorResults []ECSOperationResult
+	ApplyID        string
+	OperationID    string
+	RequestID      string
+	Intent         domain.ECSDeploymentIntent
+	Role           DeployerRoleReadiness
+	PriorResults   []ECSOperationResult
+	PreparedResult ECSOperationResult
 }
 
 // ECSReconciliation reports confirmed completion, confirmed absence (safe to
 // retry), or uncertainty (keep ownership and reconcile again without writing).
 type ECSReconciliation struct {
+	Failure  string
 	Complete bool
 	Absent   bool
 	Result   ECSOperationResult
@@ -65,6 +78,20 @@ type ECSOperationHandler interface {
 	Preflight(context.Context, ECSOperationRequest) error
 	Execute(context.Context, ECSOperationRequest) (ECSOperationResult, error)
 	Reconcile(context.Context, ECSOperationRequest) (ECSReconciliation, error)
+}
+
+// ECSOperationPreparer captures read-only rollback/correlation evidence before
+// the executor persists an in-flight checkpoint and permits the AWS mutation.
+type ECSOperationPreparer interface {
+	Prepare(context.Context, ECSOperationRequest) (ECSOperationResult, error)
+}
+
+func (r ECSOperationResult) Clone() ECSOperationResult {
+	if r.PreviousService != nil {
+		snapshot := *r.PreviousService
+		r.PreviousService = &snapshot
+	}
+	return r
 }
 
 // ECSCallError distinguishes confirmed rejection from an ambiguous AWS outcome.
@@ -202,9 +229,12 @@ func ecsRequest(record Record, index int, role DeployerRoleReadiness) ECSOperati
 	sum := sha256.Sum256([]byte(record.ID + "/" + op.ID))
 	request := ECSOperationRequest{ApplyID: record.ID, OperationID: op.ID, RequestID: "tenet-" + hex.EncodeToString(sum[:16]), Intent: *op.ECS, Role: role}
 	for _, previous := range record.Operations[:index] {
-		if previous.ECSCheckpoint != nil {
-			request.PriorResults = append(request.PriorResults, previous.ECSCheckpoint.Result)
+		if previous.ECSCheckpoint != nil && previous.ECSCheckpoint.State == "complete" {
+			request.PriorResults = append(request.PriorResults, previous.ECSCheckpoint.Result.Clone())
 		}
+	}
+	if op.ECSCheckpoint != nil {
+		request.PreparedResult = op.ECSCheckpoint.Result.Clone()
 	}
 	return request
 }
@@ -345,8 +375,11 @@ func (e Executor) runECSOperation(ctx context.Context, record Record, role Deplo
 		if err != nil {
 			return e.recordECSError(ctx, record, index, err)
 		}
-		if result.Complete && result.Absent {
+		if (result.Complete && result.Absent) || (result.Failure != "" && (result.Complete || result.Absent)) {
 			return fmt.Errorf("invalid ECS reconciliation result")
+		}
+		if result.Failure != "" {
+			return e.finishECS(ctx, record, StatusFailed, result.Failure)
 		}
 		if result.Complete {
 			return e.completeECSOperation(ctx, record, index, result.Result)
@@ -368,13 +401,20 @@ func (e Executor) runECSOperation(ctx context.Context, record Record, role Deplo
 	if err := handler.Preflight(ctx, request); err != nil {
 		return err
 	}
+	if preparer, ok := handler.(ECSOperationPreparer); ok {
+		prepared, prepareErr := preparer.Prepare(ctx, request)
+		if prepareErr != nil {
+			return prepareErr
+		}
+		request.PreparedResult = prepared.Clone()
+	}
 	record, err = e.ecsOwnedChange(ctx, record, func(current Record) (Record, error) {
 		now := e.Service.now().UTC().Format(time.RFC3339Nano)
 		attempts := 0
 		if cp := current.Operations[index].ECSCheckpoint; cp != nil {
 			attempts = cp.Attempts
 		}
-		current.Operations[index].ECSCheckpoint = &ECSCheckpoint{RequestID: request.RequestID, State: "in_flight", Attempts: attempts + 1, UpdatedAt: now}
+		current.Operations[index].ECSCheckpoint = &ECSCheckpoint{RequestID: request.RequestID, State: "in_flight", Attempts: attempts + 1, UpdatedAt: now, Result: request.PreparedResult.Clone()}
 		current.Error = ""
 		current.Details = []string{"Live ECS operation started with durable request identity " + request.RequestID + "; AWS outcome must be reconciled after interruption."}
 		current.Operations = transitionOperations(current.Operations, StatusRunning, index+1)
@@ -410,7 +450,7 @@ func (e Executor) completeECSOperation(ctx context.Context, record Record, index
 		}
 		checkpoint := *current.Operations[index].ECSCheckpoint
 		checkpoint.State = "complete"
-		checkpoint.Result = result
+		checkpoint.Result = result.Clone()
 		checkpoint.Error = ""
 		checkpoint.RetryAfter = ""
 		checkpoint.UpdatedAt = e.Service.now().UTC().Format(time.RFC3339Nano)
@@ -473,6 +513,13 @@ func (e Executor) finishECS(ctx context.Context, record Record, status Status, m
 			request.Step = len(current.Operations)
 		}
 		current.Status = status
+		if status == StatusFailed && request.Step > 0 && request.Step <= len(current.Operations) && current.Operations[request.Step-1].ECSCheckpoint != nil {
+			checkpoint := *current.Operations[request.Step-1].ECSCheckpoint
+			checkpoint.State = "failed"
+			checkpoint.Error = message
+			checkpoint.UpdatedAt = e.Service.now().UTC().Format(time.RFC3339Nano)
+			current.Operations[request.Step-1].ECSCheckpoint = &checkpoint
+		}
 		current.Error = message
 		current.Operations = transitionOperations(current.Operations, status, request.Step)
 		if status != StatusSucceeded {

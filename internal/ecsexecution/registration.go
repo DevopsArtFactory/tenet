@@ -97,19 +97,12 @@ func (r Registration) prepare(ctx context.Context, request applyrequest.ECSOpera
 		{Action: "ecs:RegisterTaskDefinition", ResourceType: "taskDefinition", ResourceName: familyARN, RequiredRole: request.Role.RoleARN},
 		{Action: "ecs:TagResource", ResourceType: "taskDefinition", ResourceName: familyARN, RequiredRole: request.Role.RoleARN},
 	}
-	seenRoles := map[string]bool{}
-	for _, taskRole := range []*string{input.TaskRoleArn, input.ExecutionRoleArn} {
-		value := aws.ToString(taskRole)
-		if value == "" || seenRoles[value] {
-			continue
-		}
-		parsed, err := arn.Parse(value)
-		if err != nil || parsed.Service != "iam" || parsed.AccountID != e.AWSAccountID || parsed.Partition != baseARN.Partition || !strings.HasPrefix(parsed.Resource, "role/") {
-			return nil, nil, "", fmt.Errorf("inherited task roles must be concrete IAM role ARNs in the reviewed account")
-		}
-		seenRoles[value] = true
-		checks = append(checks, applyrequest.OperationExecutionCapabilityCheck{Action: "iam:PassRole", ResourceType: "iamRole", ResourceName: value, RequiredRole: request.Role.RoleARN})
+	roleChecks, err := passRoleChecks(input.TaskRoleArn, input.ExecutionRoleArn, request)
+	if err != nil {
+		return nil, nil, "", err
 	}
+	checks = append(checks, roleChecks...)
+
 	if err := r.CheckCapabilities(ctx, request.Role, checks); err != nil {
 		return nil, nil, "", err
 	}
@@ -167,11 +160,11 @@ func inputFingerprint(input *ecs.RegisterTaskDefinitionInput) (string, error) {
 func (r Registration) Execute(ctx context.Context, request applyrequest.ECSOperationRequest) (applyrequest.ECSOperationResult, error) {
 	client, input, fingerprint, err := r.prepare(ctx, request)
 	if err != nil {
-		return applyrequest.ECSOperationResult{}, beforeRegistrationError(err)
+		return applyrequest.ECSOperationResult{}, beforeMutationError(err)
 	}
 	found, err := findRevision(ctx, client, request, input, fingerprint)
 	if err != nil {
-		return applyrequest.ECSOperationResult{}, beforeRegistrationError(err)
+		return applyrequest.ECSOperationResult{}, beforeMutationError(err)
 	}
 	if found != nil {
 		return *found, nil
@@ -179,7 +172,7 @@ func (r Registration) Execute(ctx context.Context, request applyrequest.ECSOpera
 	input.Tags = append(input.Tags, types.Tag{Key: aws.String(intentTag), Value: aws.String(fingerprint)}, types.Tag{Key: aws.String(requestTag), Value: aws.String(request.RequestID)})
 	output, err := client.RegisterTaskDefinition(ctx, input, func(options *ecs.Options) { options.Retryer = aws.NopRetryer{}; options.RetryMaxAttempts = 1 })
 	if err != nil {
-		return applyrequest.ECSOperationResult{}, registrationError(err)
+		return applyrequest.ECSOperationResult{}, ecsMutationError(err)
 	}
 	if output == nil || output.TaskDefinition == nil {
 		return applyrequest.ECSOperationResult{}, fmt.Errorf("registration response omitted task-definition identity; reconcile before retry")
@@ -315,7 +308,7 @@ func revisionResult(definition *types.TaskDefinition, request applyrequest.ECSOp
 	return applyrequest.ECSOperationResult{TaskDefinitionARN: value, TaskDefinitionRevision: definition.Revision, TaskDefinitionIntent: fingerprint}, nil
 }
 
-func registrationError(err error) error {
+func ecsMutationError(err error) error {
 	var api smithy.APIError
 	if errors.As(err, &api) {
 		switch api.ErrorCode() {
@@ -328,10 +321,10 @@ func registrationError(err error) error {
 	return err
 }
 
-// Reads failed before RegisterTaskDefinition was sent, so retrying them cannot
-// duplicate a revision. Known authorization/validation rejections remain terminal.
-func beforeRegistrationError(err error) error {
-	classified := registrationError(err)
+// Reads failed before the mutation was sent, so retrying them cannot duplicate
+// the mutation. Known authorization/validation rejections remain terminal.
+func beforeMutationError(err error) error {
+	classified := ecsMutationError(err)
 	var known *applyrequest.ECSCallError
 	if errors.As(classified, &known) {
 		return classified
