@@ -141,7 +141,7 @@ func (s Service) requestNativeRollback(ctx context.Context, parent Record) (Crea
 	if err := s.PrepareNativeRollback(ctx, parent, *target); err != nil {
 		return CreateResult{}, fmt.Errorf("%w: %v", ErrRecoveryUnavailable, err)
 	}
-	child := Record{PlanID: parent.PlanID, DeploymentName: parent.DeploymentName, Source: parent.Source, Status: StatusQueued, CreatedAt: s.now().UTC().Format(time.RFC3339Nano), Actor: requestactor.FromContext(ctx), Principal: principal.Clone(), NativeRollback: target.Clone()}
+	child := Record{PlanID: parent.PlanID, DeploymentName: parent.DeploymentName, Source: parent.Source, Status: StatusQueued, CreatedAt: s.now().UTC().Format(time.RFC3339), Actor: requestactor.FromContext(ctx), Principal: principal.Clone(), NativeRollback: target.Clone()}
 	child.Operations = cloneOperations(parent.Operations[1:])
 	for i := range child.Operations {
 		op := &child.Operations[i]

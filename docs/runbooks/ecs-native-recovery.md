@@ -71,7 +71,9 @@ The stop operation issues one `StopServiceDeployment(ROLLBACK)` with SDK retries
 disabled, immediately after a fresh authorization/role/claim check. A lost or
 mismatched response enters read-only reconciliation against that fixed ARN.
 An unchanged active deployment never proves the request was unsent and never
-authorizes blind replay. Existing ECS rollback states can be observed without
+authorizes blind replay. If the forward deployment finishes before an unsent stop
+can execute, recovery fails explicitly without sending Stop or retaining a stuck
+queued owner. Existing ECS rollback states can be observed without
 another stop. Fixed-ARN recovery can continue after the Git intent changes;
 it still requires current repository policy, a matching verified deployer role
 and no intervening AWS deployment.

@@ -284,3 +284,36 @@ func TestNativeRecoveryConcurrentRequestsCreateOnePhysicalServiceOwner(t *testin
 		t.Fatal("concurrent recovery approvals created multiple owners")
 	}
 }
+
+func TestNativeRecoveryHoldsHandedOffIntentUntilExplicitRetry(t *testing.T) {
+	f, ctx := nativeRecoveryFixture(t)
+	child, err := f.executor.Service.RequestRollback(ctx, f.record.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.executor.Service.Create(ctx, f.record.PlanID); !errors.Is(err, ErrFailedIntentHeld) {
+		t.Fatal("handed-off Git intent redeployed without explicit retry", err)
+	}
+	f.executor.Service.CreateRetryPlan = func(ctx context.Context, _ string) (planpreview.Record, error) {
+		return f.executor.Service.LoadPlan(ctx, f.record.PlanID)
+	}
+	if _, err := f.executor.Service.Retry(ctx, f.record.ID); !errors.Is(err, ErrRecoveryUnavailable) {
+		t.Fatal("forward retry bypassed active recovery", err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := f.executor.RunOnce(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	done, err := f.executor.Service.Get(ctx, child.Record.ID)
+	if err != nil || done.Status != StatusSucceeded {
+		t.Fatal(done, err)
+	}
+	if _, err := f.executor.Service.Create(ctx, f.record.PlanID); !errors.Is(err, ErrFailedIntentHeld) {
+		t.Fatal("source recovery implicitly reapproved forward Git intent", err)
+	}
+	retried, err := f.executor.Service.Retry(ctx, f.record.ID)
+	if err != nil || !retried.Created || retried.Record.RetryOf != f.record.ID || retried.Record.RetryDeploymentID != child.Record.NativeRollback.DeploymentARN {
+		t.Fatal("explicit retry did not bind original native deployment", retried, err)
+	}
+}

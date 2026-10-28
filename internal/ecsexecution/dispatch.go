@@ -69,7 +69,19 @@ func (h NativeRollbackOperation) Prepare(ctx context.Context, r applyrequest.ECS
 	if r.NativeRollback == nil {
 		return applyrequest.ECSOperationResult{}, fmt.Errorf("fixed native recovery approval required")
 	}
-	return h.NativeRollback.Prepare(ctx, r, *r.NativeRollback)
+	// Only the fixed identities need preparation. Execute rechecks AWS and all
+	// capabilities before its mutation guard; pre-send rejections then use the
+	// durable retry/failure protocol instead of leaving an unclaimed queue stuck.
+	if err := ctx.Err(); err != nil {
+		return applyrequest.ECSOperationResult{}, err
+	}
+	if err := verifiedNativeRole(r.Intent, r.Role); err != nil {
+		return applyrequest.ECSOperationResult{}, err
+	}
+	if err := r.NativeRollback.Validate(r.Intent); err != nil {
+		return applyrequest.ECSOperationResult{}, err
+	}
+	return rollbackResult(*r.NativeRollback), nil
 }
 func (h NativeRollbackOperation) Execute(ctx context.Context, r applyrequest.ECSOperationRequest) (applyrequest.ECSOperationResult, error) {
 	if r.NativeRollback == nil {

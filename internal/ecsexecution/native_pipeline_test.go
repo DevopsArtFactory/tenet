@@ -24,7 +24,7 @@ import (
 
 func TestNativeAPIExecutorPipelineHandsOffAndRecoversAllStrategies(t *testing.T) {
 	for _, strategy := range []string{"BLUE_GREEN", "CANARY", "LINEAR"} {
-		for _, mode := range []string{"accepted", "lost-response", "ecs-already-rolling-back"} {
+		for _, mode := range []string{"accepted", "lost-response", "ecs-already-rolling-back", "finished-before-stop"} {
 			lostResponse := mode == "lost-response"
 			expectedStops := 1
 			if mode == "ecs-already-rolling-back" {
@@ -152,6 +152,19 @@ func TestNativeAPIExecutorPipelineHandsOffAndRecoversAllStrategies(t *testing.T)
 				parent, _ = service.Get(ctx, parent.ID)
 				if parent.Status != applyrequest.StatusCancelled || parent.NativeRollbackRequestID != child.ID {
 					t.Fatal("forward ownership did not transfer")
+				}
+				if mode == "finished-before-stop" {
+					d := backend.deployments[before.ServiceDeploymentARN]
+					d.Status = types.ServiceDeploymentStatusSuccessful
+					backend.deployments[before.ServiceDeploymentARN] = d
+					if err := executor.RunOnce(ctx); err != nil {
+						t.Fatal(err)
+					}
+					failed, err := service.Get(ctx, child.ID)
+					if err != nil || failed.Status != applyrequest.StatusFailed || stopped.stops != 0 || !strings.Contains(failed.Error, "no stop was sent") {
+						t.Fatal("finished forward rollout left a stuck recovery owner", failed, err)
+					}
+					return
 				}
 				if lostResponse {
 					stopped.stopError = errors.New("accepted but response lost")

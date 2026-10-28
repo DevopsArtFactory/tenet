@@ -76,7 +76,7 @@ func (h NativeRollback) Execute(ctx context.Context, r applyrequest.ECSOperation
 		return result, nil
 	}
 	if deployment.Status != types.ServiceDeploymentStatusPending && deployment.Status != types.ServiceDeploymentStatusInProgress {
-		return applyrequest.ECSOperationResult{}, beforeMutationError(fmt.Errorf("native deployment is not eligible for a new rollback request"))
+		return applyrequest.ECSOperationResult{}, &applyrequest.ECSCallError{Err: fmt.Errorf("native deployment is no longer eligible for rollback; no stop was sent"), Rejected: true}
 	}
 	checks := nativeStopChecks(r, target)
 	if err := h.CheckCapabilities(ctx, r.Role, checks); err != nil {
