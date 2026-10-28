@@ -69,6 +69,7 @@ Use `make smoke-docker` when changing the Compose stack or its runtime behavior.
 - [ECS Rolling recovery](docs/runbooks/ecs-rolling-recovery.md) — explicit/approved automatic rollback, failed-intent holds, and retries.
 - [Native advanced traffic inputs](docs/architecture/ecs-native-advanced-inputs.md) — reviewed ALB, Canary/Linear, bake, alarm and Lambda-hook settings.
 - [Native ECS Apply and recovery](docs/runbooks/ecs-native-recovery.md) — advanced execution opt-in, durable ownership handoff and operator rollback.
+- [AWS ECS integration preparation](docs/runbooks/ecs-native-integration.md) — sandbox IaC and E2E scenarios; CI uses a mocked AWS provider without creating resources.
 - [ECS native execution input contract](docs/architecture/tenet-v1-ecs-execution-contract.md) — explicit targets, pinned task definitions, native strategies, and reviewed plan inputs.
 
 | Guide | Covers |

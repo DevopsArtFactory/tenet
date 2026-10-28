@@ -221,3 +221,10 @@ Do not use example production-looking ARNs as real targets.
 Local fake-SDK/API tests cover all three strategies, interrupted handoff,
 duplicate requests, lost responses, role/RBAC gates and recovery observation.
 They do not prove real-account IAM, ALB wiring or application readiness.
+
+## Sandbox integration preparation
+
+Use the [AWS integration scenarios](ecs-native-integration.md) and
+[standalone IaC fixture](../../deploy/terraform/ecs-native-integration/README.md)
+for future live validation. Normal CI validates this fixture with a mocked AWS
+provider only; it never provisions resources or runs these live scenarios.

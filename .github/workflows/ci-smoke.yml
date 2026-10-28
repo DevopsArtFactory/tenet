@@ -40,6 +40,31 @@ jobs:
       - name: Run local smoke test
         run: make smoke-local
 
+  ecs-fixture-validation:
+    name: ECS fixture validation (no AWS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+
+      - name: Validate sandbox fixture with mocked AWS provider
+        working-directory: deploy/terraform/ecs-native-integration
+        run: |
+          terraform init -backend=false -input=false -lockfile=readonly
+          terraform fmt -check -recursive
+          terraform validate -no-color
+          terraform test -no-color
+
+      - name: Test offline export, evidence collector and test app
+        run: python3 -m unittest discover -s tests/ecs-native-integration -v
+
   docker-smoke-scope:
     name: Docker smoke scope
     runs-on: ubuntu-latest
