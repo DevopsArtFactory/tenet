@@ -46,8 +46,11 @@ func validateECSDeployment(d DeploymentSpec) error {
 		if mode != "" && mode != "manual" && mode != "automatic" {
 			return fmt.Errorf("ecs.syncPolicy.mode must be manual or automatic")
 		}
-		if (mode == "automatic" || e.SyncPolicy.SelfHeal) && d.NormalizedStrategy() != StrategyTypeRolling {
-			return fmt.Errorf("automatic ECS sync currently supports Rolling only")
+		if e.SyncPolicy.SelfHeal && d.NormalizedStrategy() != StrategyTypeRolling {
+			return fmt.Errorf("ECS self-heal currently supports Rolling only")
+		}
+		if mode == "automatic" && d.NormalizedStrategy() != StrategyTypeRolling && e.Advanced == nil {
+			return fmt.Errorf("automatic advanced ECS sync requires reviewed ecs.advanced configuration")
 		}
 		if e.SyncPolicy.SelfHeal && mode != "automatic" {
 			return fmt.Errorf("ecs.syncPolicy.selfHeal requires automatic mode")

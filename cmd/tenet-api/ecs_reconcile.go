@@ -54,7 +54,7 @@ func newECSGitReconciler(source apiCatalogSource, options api.Options, statuses 
 	service := newApplyService(source, options, planPath, applyPath)
 	subject := strings.TrimSpace(os.Getenv("TENET_ECS_AUTO_SYNC_SUBJECT"))
 	return ecsreconcile.Reconciler{
-		Enabled: ecsReconcileEnabled(), Automatic: ecsAutoSyncEnabled(), LiveECS: ecsExecutionEnabled(), SubjectID: subject, Interval: interval, Logger: logger,
+		Enabled: ecsReconcileEnabled(), Automatic: ecsAutoSyncEnabled(), LiveECS: ecsExecutionEnabled(), AllowAdvanced: ecsAdvancedExecutionEnabled(), SubjectID: subject, Interval: interval, Logger: logger,
 		LoadCatalog: source.loadCatalog, Plans: planpreview.NewFileStore(planPath),
 		ListPlans: func(ctx context.Context) ([]planpreview.Record, error) {
 			if err := ctx.Err(); err != nil {

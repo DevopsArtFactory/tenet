@@ -14,11 +14,38 @@ import (
 // CanSupersedeECS proves that no service update can have been sent. Registration
 // may have left a reusable/orphan revision; it cannot have changed service traffic.
 func CanSupersedeECS(record Record) bool {
-	if record.Status.IsTerminal() || len(record.Operations) != 3 || record.Operations[0].ECS == nil || record.Operations[0].ECS.DeploymentStrategy != "ROLLING" {
+	if record.Status.IsTerminal() || record.Recovery != nil || record.NativeRollback != nil || record.NativeRollbackRequestID != "" || !nativeForwardOperations(record) {
 		return false
 	}
 	cp := record.Operations[1].ECSCheckpoint
 	return cp == nil || cp.State == "retryable_rejection" || (cp.State == "in_flight" && cp.MutationGuarded && cp.MutationAuthorizedAt == "")
+}
+
+// Recovery approvals and partial/unknown operation contracts are never superseded.
+func nativeForwardOperations(record Record) bool {
+	kinds := []string{"RegisterECSTaskDefinition", "UpdateECSService", "VerifyServiceStability"}
+	if len(record.Operations) != len(kinds) || record.Operations[0].ECS == nil {
+		return false
+	}
+	intent := record.Operations[0].ECS
+	if intent.DeploymentController != "ECS" {
+		return false
+	}
+	switch intent.DeploymentStrategy {
+	case "ROLLING":
+	case "BLUE_GREEN", "CANARY", "LINEAR":
+		if intent.Advanced == nil {
+			return false
+		}
+	default:
+		return false
+	}
+	for i, op := range record.Operations {
+		if op.Kind != kinds[i] || !reflect.DeepEqual(op.ECS, intent) {
+			return false
+		}
+	}
+	return true
 }
 
 func expectedECSIntent(record Record) *domain.ECSDeploymentIntent {
@@ -49,7 +76,7 @@ func (s Service) SupersedeECS(ctx context.Context, previousID, replacementID str
 	if err != nil {
 		return Record{}, err
 	}
-	if replacement.Principal == nil || (replacement.Status.IsTerminal() && (replacement.Status != StatusSucceeded || replacement.ECSRuntime == nil || replacement.ECSRuntime.State != "converged")) || len(replacement.Operations) != 3 || replacement.Operations[0].ECS == nil || replacement.Operations[0].ECS.DeploymentStrategy != "ROLLING" {
+	if replacement.Principal == nil || (replacement.Status.IsTerminal() && (replacement.Status != StatusSucceeded || replacement.ECSRuntime == nil || replacement.ECSRuntime.State != "converged")) || replacement.Recovery != nil || replacement.NativeRollback != nil || replacement.NativeRollbackRequestID != "" || !nativeForwardOperations(replacement) {
 		return Record{}, ErrInvalidState
 	}
 	expected, err := stableRecordID(replacement)
@@ -88,7 +115,9 @@ func (s Service) SupersedeECS(ctx context.Context, previousID, replacementID str
 	if previous.DeploymentName != replacement.DeploymentName && (len(previous.Operations) == 0 || previous.Operations[0].ECS == nil || len(replacement.Operations) == 0 || replacement.Operations[0].ECS == nil || previous.Operations[0].ECS.ServiceARN != replacement.Operations[0].ECS.ServiceARN) {
 		return Record{}, ErrInvalidState
 	}
-	if _, err := s.AuthorizeCreate(ctx, previous); err != nil {
+	// Cancelling a positively unsent previous approval requires current operator
+	// scope, not permission to automatically execute its old manual sync policy.
+	if _, err := s.AuthorizeCreate(context.WithValue(ctx, automaticApprovalKey{}, false), previous); err != nil {
 		return Record{}, err
 	}
 	store, ok := s.Store.(MutationStore)
@@ -117,6 +146,7 @@ func principalContext(ctx context.Context, principal *ExecutionPrincipal) contex
 	if principal == nil {
 		return ctx
 	}
+	ctx = context.WithValue(ctx, automaticApprovalKey{}, principal.Automatic)
 	ctx = requestactor.WithAuthenticatedIdentityContext(ctx, principal.Identity)
 	ctx = requestactor.WithAuthenticatedGroupsContext(ctx, principal.Groups)
 	return requestactor.WithContext(ctx, requestactor.Actor{Available: true, ID: principal.Identity.ID, Name: principal.Identity.Name, Email: principal.Identity.Email})

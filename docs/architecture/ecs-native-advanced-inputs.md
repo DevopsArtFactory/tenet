@@ -2,10 +2,11 @@
 
 This is the input/plan prerequisite for #1801. Blue-Green, Canary and Linear can
 now carry a validated `ecs.advanced` policy through compilation, desired
-identity, plan persistence and Apply projection. Manual execution, monitoring and
+identity, plan persistence and Apply projection. Execution, monitoring and
 operator rollback are connected behind the additional advanced-execution opt-in.
-Automatic reconciliation remains Rolling-only. See the [runtime and recovery
-runbook](../runbooks/ecs-native-recovery.md) for enablement and ownership semantics.
+Git-change automatic sync also requires the global automation gates and a
+per-deployment automatic policy; self-heal is Rolling-only. See the
+[runtime and recovery runbook](../runbooks/ecs-native-recovery.md) for enablement and ownership semantics.
 
 Use the complete [advanced example repository](../../examples/ecs-native-advanced-repo)
 for all three strategies. Its account, role and resource identifiers are fixtures;
@@ -26,7 +27,7 @@ use. No resource is provisioned by reading or planning these examples.
 | Time bounds | Each bake value is 0–1440 minutes; total configured traffic/bake schedule is at most 24 hours |
 | Alarms | Optional enabled block with 1–10 unique CloudWatch alarm names and explicit ECS rollback choice |
 | Hooks | Same-placement Lambda function pinned to a positive numeric version, explicit IAM role and supported stages |
-| Automatic sync | Rolling-only; advanced strategies require explicit operator approval |
+| Automatic sync | All native strategies with global opt-ins, scoped automation subject and explicit automatic mode; self-heal Rolling-only |
 
 Omit alarms/hooks to review no alarms/hooks. Zero bake times are explicit values,
 not missing settings. A Canary block is invalid on Blue-Green/Linear and vice

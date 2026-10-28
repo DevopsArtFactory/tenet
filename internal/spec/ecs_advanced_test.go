@@ -142,3 +142,24 @@ func TestAdvancedDecoderRejectsUnsupportedFieldsInJSONAndYAML(t *testing.T) {
 		t.Fatal("unsupported YAML traffic policy silently ignored")
 	}
 }
+
+func TestAdvancedAutomaticSyncRequiresReviewedTrafficButNotSelfHeal(t *testing.T) {
+	for _, strategy := range []StrategyType{StrategyTypeBlueGreen, StrategyTypeCanary, StrategyTypeLinear} {
+		t.Run(string(strategy), func(t *testing.T) {
+			d := advancedContract(t, strategy)
+			d.ECS.SyncPolicy = &ECSSyncPolicy{Mode: "automatic"}
+			if err := ValidateDeployment(d); err != nil {
+				t.Fatal("reviewed advanced automatic sync rejected", err)
+			}
+			d.ECS.SyncPolicy.SelfHeal = true
+			if err := ValidateDeployment(d); err == nil {
+				t.Fatal("advanced drift self-heal unexpectedly enabled")
+			}
+			d.ECS.SyncPolicy.SelfHeal = false
+			d.ECS.Advanced = nil
+			if err := ValidateDeployment(d); err == nil {
+				t.Fatal("intent-only legacy preview authorized automatic traffic changes")
+			}
+		})
+	}
+}
