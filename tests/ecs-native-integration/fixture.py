@@ -64,8 +64,11 @@ def collect(bindings, strategy, destination, profile):
         deployments = save(f'deployments-{offset}', read('ecs', 'describe-service-deployments',
                                                        service_deployment_arns=arns[offset:offset + 20]))
         for deployment in deployments.get('serviceDeployments', []):
-            for revision in deployment.get('sourceServiceRevisions', []) + [deployment['targetServiceRevision']]:
-                revisions.add(revision['arn'])
+            target = deployment.get('targetServiceRevision')
+            sources = deployment.get('sourceServiceRevisions', [])
+            for revision in sources + ([target] if target else []):
+                if revision.get('arn'):
+                    revisions.add(revision['arn'])
     revisions = sorted(revisions)
     for offset in range(0, len(revisions), 20):
         save(f'revisions-{offset}', read('ecs', 'describe-service-revisions',

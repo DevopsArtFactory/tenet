@@ -43,8 +43,9 @@ class FixtureTest(unittest.TestCase):
         seen = set()
 
         def run(command, **kwargs):
-            action = command[9]
-            self.assertIn(action, allowed)
+            actions = [arg for arg in command if arg in allowed]
+            self.assertEqual(len(actions), 1, command)
+            action = actions[0]
             seen.add(action)
             return type('Result', (), {'stdout': json.dumps(responses.get(action, {}))})()
 
@@ -53,6 +54,10 @@ class FixtureTest(unittest.TestCase):
             fixture.collect(bindings, 'canary', destination, 'sandbox')
             self.assertTrue((destination / 'complete.json').exists())
             self.assertEqual(seen, allowed)
+            responses['describe-service-deployments'] = {'serviceDeployments': [
+                {'sourceServiceRevisions': [{'arn': 'source'}, {}]}]}
+            fixture.collect(bindings, 'canary', Path(root) / 'transitional', 'sandbox')
+            self.assertTrue((Path(root) / 'transitional/complete.json').exists())
             responses['describe-tasks'] = {'failures': [{'reason': 'MISSING'}]}
             with self.assertRaises(ValueError):
                 fixture.collect(bindings, 'canary', Path(root) / 'partial', 'sandbox')

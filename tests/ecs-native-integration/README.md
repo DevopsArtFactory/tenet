@@ -48,7 +48,9 @@ Use a profile with read permissions for the fixture (and STS caller identity);
 prefer the output observer role. Do not archive credentials or authenticated
 headers. Store snapshots outside Git. The `complete.json` marker means collection
 finished, **not** that a deployment passed. Snapshots are sequential, not atomic;
-collect again after quiescence if they disagree. CLI errors and account mismatch
+collect again after quiescence if they disagree. A transitional deployment may
+lack a target revision; its raw response is retained and only identified revisions
+are described. Missing revision evidence remains unknown, never a passing result. CLI errors and account mismatch
 exit unsuccessfully; partial directories must not be treated as passing evidence.
 Save Tenet's immutable plan, Git SHA, forward/child Applies and audit separately
 using the authenticated UI/API; these are required to interpret AWS evidence.

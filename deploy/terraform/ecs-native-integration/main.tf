@@ -36,22 +36,12 @@ resource "aws_route_table_association" "test" {
 resource "aws_security_group" "alb" {
   name_prefix = "${var.name}-alb-"
   vpc_id      = aws_vpc.test.id
-  egress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = [aws_vpc.test.cidr_block]
-  }
+
 }
 resource "aws_security_group" "tasks" {
   name_prefix = "${var.name}-tasks-"
   vpc_id      = aws_vpc.test.id
-  egress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+
 }
 resource "aws_lb" "test" {
   name               = var.name
@@ -243,4 +233,19 @@ resource "aws_vpc_security_group_ingress_rule" "alb_to_tasks" {
   from_port                    = 8080
   to_port                      = 8080
   ip_protocol                  = "tcp"
+}
+
+resource "aws_vpc_security_group_egress_rule" "alb_to_tasks" {
+  security_group_id            = aws_security_group.alb.id
+  referenced_security_group_id = aws_security_group.tasks.id
+  from_port                    = 8080
+  to_port                      = 8080
+  ip_protocol                  = "tcp"
+}
+resource "aws_vpc_security_group_egress_rule" "task_https" {
+  security_group_id = aws_security_group.tasks.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
 }
