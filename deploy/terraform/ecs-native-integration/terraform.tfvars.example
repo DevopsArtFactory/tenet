@@ -1,0 +1,6 @@
+account_id         = "123456789012"
+region             = "ap-northeast-2"
+availability_zones = ["ap-northeast-2a", "ap-northeast-2c"]
+operator_cidr      = "192.0.2.10/32" # Replace with the operator's actual public IPv4.
+runner_role_arn    = "arn:aws:iam::123456789012:role/isolated-tenet-runner"
+image              = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/tenet-e2e@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
