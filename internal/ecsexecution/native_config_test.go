@@ -57,3 +57,13 @@ func TestNativeConfigNormalizationOwnsSlicesAndIgnoresAWSOrdering(t *testing.T) 
 		t.Fatal("config normalization mutated reviewed/current policy")
 	}
 }
+
+func TestNativeConfigRejectsCountsOutsideTheECSIntegerRange(t *testing.T) {
+	_, _, r := nativeFixture(t, "CANARY")
+	for _, count := range []int{-1, 0, 1 << 31, 1<<32 + 2} {
+		r.Intent.DesiredCount = count
+		if _, err := advancedAWSConfig(r.Intent); err == nil {
+			t.Fatal("invalid or wrapping count accepted", count)
+		}
+	}
+}

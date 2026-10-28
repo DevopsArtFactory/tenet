@@ -35,9 +35,9 @@ and recovery/observation for these strategies; disabling live execution pauses
 Tenet's processing and does not stop a deployment already running in AWS.
 
 The initial support matrix is existing ECS REPLICA services already using the
-same declared strategy, fixed capacity, a pinned task-definition family, IPv4
+same declared strategy, a pinned task-definition family, IPv4
 `awsvpc` tasks, and one ALB binding with two reviewed IP target groups. Strategy
-migration, Git capacity changes, NLB, Service Connect, VPC Lattice and Pause/Continue hooks
+migration, NLB, Service Connect, VPC Lattice and Pause/Continue hooks
 are unsupported. Use the [input contract](../architecture/ecs-native-advanced-inputs.md)
 and replace example account/region/role/resource identifiers before live use.
 
@@ -102,13 +102,15 @@ requests a fresh plan and explicit approval of the current Git intent. Active
 recovery blocks retries; the original failed/handed-off intent remains held
 until explicit retry or a different reviewed intent.
 
-A native self-heal may restore externally changed capacity to the last verified
-Git count. The current operator rollback endpoint requires equal pre-update and
-reviewed capacity, so a count-restoring repair with different source capacity
-cannot use that endpoint. ECS owns alarm/hook rollback; inspect its actual
+Native Git sync supports reviewed `capacity.desired` changes, and self-heal may
+restore external drift to the last verified Git count. The current operator
+rollback endpoint requires equal pre-update and reviewed capacity, so a Git count
+change or count-restoring repair with different source capacity cannot use that
+endpoint. ECS owns alarm/hook rollback; inspect its actual
 capacity and outcome before further action. A failed repair stays held until an
-explicit retry or different reviewed intent. Retry preserves the original
-verified capacity scope and cannot grant arbitrary service resizing.
+explicit retry or different reviewed intent. A separately reviewed Git count
+correction can run after the current deployment/rollback releases ownership;
+Tenet does not assume StopServiceDeployment restores the old task count.
 
 ## Gated isolated AWS verification
 

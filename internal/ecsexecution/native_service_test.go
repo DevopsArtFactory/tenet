@@ -112,7 +112,7 @@ func (f *nativeFake) addDeployment(id string, input *ecs.UpdateServiceInput) {
 		oldRevision = f.sourceOverride
 	}
 	f.history = append(f.history, types.ServiceDeploymentBrief{ServiceDeploymentArn: aws.String(deploymentARN), TargetServiceRevisionArn: aws.String(revisionARN), ServiceArn: aws.String(f.request.Intent.ServiceARN), ClusterArn: aws.String(f.request.Intent.ClusterARN), Status: types.ServiceDeploymentStatusInProgress, CreatedAt: &created})
-	f.deployments[deploymentARN] = types.ServiceDeployment{ServiceDeploymentArn: aws.String(deploymentARN), ServiceArn: aws.String(f.request.Intent.ServiceARN), ClusterArn: aws.String(f.request.Intent.ClusterARN), Status: types.ServiceDeploymentStatusInProgress, CreatedAt: &created, TargetServiceRevision: &types.ServiceRevisionSummary{Arn: aws.String(revisionARN), RequestedTaskCount: 2}, SourceServiceRevisions: []types.ServiceRevisionSummary{{Arn: aws.String(oldRevision), RequestedTaskCount: 2}}, DeploymentConfiguration: input.DeploymentConfiguration}
+	f.deployments[deploymentARN] = types.ServiceDeployment{ServiceDeploymentArn: aws.String(deploymentARN), ServiceArn: aws.String(f.request.Intent.ServiceARN), ClusterArn: aws.String(f.request.Intent.ClusterARN), Status: types.ServiceDeploymentStatusInProgress, CreatedAt: &created, TargetServiceRevision: &types.ServiceRevisionSummary{Arn: aws.String(revisionARN), RequestedTaskCount: f.service.DesiredCount}, SourceServiceRevisions: []types.ServiceRevisionSummary{{Arn: aws.String(oldRevision), RequestedTaskCount: 2}}, DeploymentConfiguration: input.DeploymentConfiguration}
 	f.revisions[revisionARN] = types.ServiceRevision{ServiceRevisionArn: aws.String(revisionARN), ServiceArn: aws.String(f.request.Intent.ServiceARN), ClusterArn: aws.String(f.request.Intent.ClusterARN), TaskDefinition: input.TaskDefinition}
 }
 func nativeFixture(t *testing.T, strategy string) (*nativeFake, AdvancedService, applyrequest.ECSOperationRequest) {
@@ -432,5 +432,32 @@ func TestNativeCorrelationDoesNotAdoptAnUnknownSourceRevision(t *testing.T) {
 	result, err := h.Reconcile(context.Background(), r)
 	if err != nil || result.Complete || result.Absent || f.writes != 1 {
 		t.Fatal("unknown native source was accepted or replayed")
+	}
+}
+
+func TestNativeServiceCapacityCorrelationRequiresReviewedRequestedCount(t *testing.T) {
+	f, h, r := nativeFixture(t, "CANARY")
+	r.Intent.DesiredCount = 4
+	var err error
+	r.PreparedResult, err = h.Prepare(context.Background(), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	accepted, err := h.Execute(context.Background(), r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deployment := f.deployments[accepted.ServiceDeploymentARN]
+	deployment.TargetServiceRevision.RequestedTaskCount = 3
+	f.deployments[accepted.ServiceDeploymentARN] = deployment
+	outcome, err := h.Reconcile(context.Background(), r)
+	if err != nil || outcome.Complete || f.writes != 1 {
+		t.Fatal("wrong capacity was correlated or mutation replayed", outcome, err)
+	}
+	deployment.TargetServiceRevision.RequestedTaskCount = 4
+	f.deployments[accepted.ServiceDeploymentARN] = deployment
+	outcome, err = h.Reconcile(context.Background(), r)
+	if err != nil || !outcome.Complete || f.writes != 1 {
+		t.Fatal("matching capacity did not reconcile read-only", outcome, err)
 	}
 }

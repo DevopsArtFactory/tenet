@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -18,6 +19,9 @@ import (
 )
 
 func validateAdvancedIntent(intent domain.ECSDeploymentIntent) error {
+	if int64(intent.DesiredCount) > math.MaxInt32 {
+		return fmt.Errorf("native desired count exceeds the ECS integer range")
+	}
 	if intent.Advanced == nil || intent.DeploymentController != "ECS" {
 		return fmt.Errorf("reviewed native advanced intent is required")
 	}

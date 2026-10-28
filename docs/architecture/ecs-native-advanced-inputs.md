@@ -28,6 +28,7 @@ use. No resource is provisioned by reading or planning these examples.
 | Time bounds | Each bake value is 0–1440 minutes; total configured traffic/bake schedule is at most 24 hours |
 | Alarms | Optional enabled block with 1–10 unique CloudWatch alarm names and explicit ECS rollback choice |
 | Hooks | Same-placement Lambda function pinned to a positive numeric version, explicit IAM role and supported stages |
+| Capacity | Positive `capacity.desired` within reviewed min/max; native Git count changes and explicit self-heal supported |
 | Automatic sync | All native strategies with global opt-ins, scoped automation subject and explicit automatic mode; separate self-heal opt-in after verified forward execution |
 
 Omit alarms/hooks to review no alarms/hooks. Zero bake times are explicit values,
@@ -110,9 +111,11 @@ accidentally preserving an old policy. Task/network/runtime settings remain
 inherited from the reviewed task revision and existing service.
 
 The initial handler accepts an existing native service using the same declared
-strategy and one ALB binding. It requires `awsvpc`/IP targets, keeps capacity
-unchanged, and rejects mixed Service Connect/VPC Lattice routing. Strategy
-migration and Git capacity changes are outside this execution matrix.
+strategy and one ALB binding. It requires `awsvpc`/IP targets and rejects mixed
+Service Connect/VPC Lattice routing. Strategy migration is outside this execution
+matrix. Reviewed Git capacity changes send the new desired count together with
+the native policy/workload. Count-only changes force one new native deployment;
+correlation requires its target requested count to match the reviewed intent.
 Separately enabled self-heal can restore external capacity drift to the same
 Git count verified by a preceding forward Apply on this service/strategy. That
 proof is derived from persisted server-created plans and complete checkpoints,

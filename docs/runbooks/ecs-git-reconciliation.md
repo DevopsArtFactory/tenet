@@ -56,8 +56,8 @@ For native Blue-Green, Canary and Linear, additionally set
 `ecs.advanced` routing/traffic configuration, and grant the configured subject
 operator scope on the exact advanced deployment names. The
 [native support matrix and recovery guide](ecs-native-recovery.md) applies to
-automatic execution as well: existing same-strategy, fixed-capacity IPv4/ALB
-services only. Turning on global sync does not opt a manual deployment into it.
+automatic execution as well: existing same-strategy IPv4/ALB services only.
+Turning on global sync does not opt a manual deployment into it.
 Advanced sync with missing traffic inputs is rejected. Set `selfHeal: true` only
 when automatic restoration of the managed fields below is intended.
 
@@ -76,10 +76,16 @@ while automatic writes are paused, provided current RBAC still authorizes it.
 A successful Apply requires registered revision, service acceptance and verified
 runtime convergence. Repeated polls, restart and duplicate/out-of-order webhooks
 do not reapply the same verified intent. A subsequent Git image or reviewed traffic-policy change creates new work.
-Rolling also supports Git desired-count changes. Advanced Git capacity changes
-remain outside the initial support matrix and fail preflight; self-heal may
-restore the same capacity recorded in the last verified native Apply. Returning the branch to a previously applied commit after an
-intervening successful deployment also creates fresh execution evidence.
+All four native strategies support Git desired-count changes. The manifest field
+is `capacity.desired`, compiled to the ECS intent's `desiredCount`; it must stay
+positive and within `capacity.min`/`capacity.max`. For Blue-Green, Canary and
+Linear, a count-only change sends the reviewed count with `ForceNewDeployment` so it has a fresh native deployment and
+revision to correlate and observe. An image/count change sends both together.
+The declared strategy and traffic policy remain in effect. Request acceptance
+is not success: current service count, exact healthy task set, drained sources
+and configured target traffic must all converge to the approved goal.
+Returning the branch to a previously applied commit after an intervening
+successful deployment also creates fresh execution evidence.
 
 Only a positively unsent service update can be superseded by a newly approved
 plan. A registered task revision may remain as reusable history. Once an update
@@ -105,7 +111,9 @@ colors may rotate between deployments; an old color is not the recovery goal.
 
 Advanced repair requires the same service, strategy and previously verified Git
 capacity. A new image/policy commit or enabling self-heal can retain that capacity
-proof; changing Git capacity or moving to a different service cannot. A count or
+proof. A Git capacity change uses ordinary reviewed execution even with
+`selfHeal: false`; its successful verification establishes a new self-heal epoch.
+Moving to a different service cannot inherit the old repair scope. A count or
 traffic-only repair starts a fresh native ECS deployment, using the declared
 strategy and health verification. Tenet never edits ALB weights directly. A
 repair whose drift disappears before execution can verify the matching current
@@ -198,6 +206,35 @@ Disable the flags and use the native runbook cleanup steps after testing.
 
 Fake-SDK tests cover this integration; no actual AWS rollout was run for this
 change.
+
+## Isolated advanced capacity-change verification
+
+Use the disposable native fixture and automatic Git settings above. For each of
+Blue-Green, Canary and Linear:
+
+1. Keep `selfHeal: false`. Commit `capacity.desired: 4` from a baseline of two,
+   then one, within the reviewed min/max. Verify each SHA creates one Apply with
+   the correct count, declared native strategy and fresh deployment/revision IDs.
+2. Repeat polls and restart after acceptance/lost response. Confirm there is one
+   service update; read-only correlation must match the requested count and
+   verification must prove the approved count, task/ALB health and source drain.
+3. Commit another count during active traffic/bake. Confirm it waits for accepted
+   work, which verifies its own pinned count before the newer goal starts.
+   Test an image/count change together and reverting to the prior count.
+4. Pause sync, revoke scope or change Git before a queued update starts. Verify
+   no stale/unauthorized count write occurs. A rejected/failed count goal stays
+   held across documentation-only commits; uncertain writes never blindly resend.
+5. Enable self-heal after success, introduce external count drift and verify it
+   restores the new verified Git count. Coordinate Service Auto Scaling and other
+   writers rather than letting multiple controllers fight over desired count.
+6. The [operator rollback capacity limitation](ecs-native-recovery.md#recovery-outcome-and-retry)
+   also applies to Git count changes. Verify the endpoint rejects mismatched
+   source/target capacity; use a separately reviewed Git correction after the
+   current native deployment/rollback finishes. Preserve the failed forward
+   outcome. Disable flags and clean up using the native runbook.
+
+These are manual, separately authorized AWS checks. Normal tests/CI use fake SDK
+clients; this implementation did not execute an AWS rollout.
 
 ## Isolated advanced self-heal verification
 

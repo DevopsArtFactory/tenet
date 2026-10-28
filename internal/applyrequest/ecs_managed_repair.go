@@ -57,8 +57,8 @@ func (s Service) nativeManagedRepair(ctx context.Context, record Record) (bool, 
 			if err != nil {
 				return false, err
 			}
-			// A new image/policy may carry the same repair scope. Changing service,
-			// strategy or Git capacity is not permission to resize an unverified target.
+			// A new image/policy may retain the repair epoch. Git capacity changes
+			// use ordinary reviewed execution and start their own verified epoch.
 			if len(previous.Operations) == 0 || previous.Operations[0].ECS == nil || !sameNativeRepairScope(*previous.Operations[0].ECS, *intent) {
 				return false, nil
 			}

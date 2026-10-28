@@ -32,6 +32,7 @@ type nativeHealPipeline struct {
 	executor            applyrequest.Executor
 	loop                ecsreconcile.Reconciler
 	catalog             manifest.Catalog
+	raw                 manifest.CatalogSpec
 	now                 time.Time
 	enabled, authorized bool
 	parent              string
@@ -59,7 +60,7 @@ func setupNativeHealPipeline(t *testing.T, strategy string, heal bool) *nativeHe
 	if !reflect.DeepEqual(compiled.Deployments[0].ECS, &req.Intent) {
 		t.Fatalf("fixture/catalog intents differ: %+v %+v", compiled.Deployments[0].ECS, req.Intent)
 	}
-	p := &nativeHealPipeline{f: f, probe: probe, req: req, catalog: compiled, now: time.Date(2026, 10, 28, 1, 0, 0, 0, time.UTC), enabled: true, authorized: true}
+	p := &nativeHealPipeline{f: f, probe: probe, req: req, catalog: compiled, raw: raw, now: time.Date(2026, 10, 28, 1, 0, 0, 0, time.UTC), enabled: true, authorized: true}
 	dir := t.TempDir()
 	planPath := filepath.Join(dir, "plans.json")
 	plans := planpreview.NewFileStore(planPath)
@@ -177,7 +178,7 @@ func (p *nativeHealPipeline) healthy(t *testing.T, id string) {
 	result := r.Operations[1].ECSCheckpoint.Result
 	d := p.f.deployments[result.ServiceDeploymentARN]
 	d.Status = types.ServiceDeploymentStatusSuccessful
-	d.TargetServiceRevision.RunningTaskCount = int32(p.req.Intent.DesiredCount)
+	d.TargetServiceRevision.RunningTaskCount = int32(r.Operations[0].ECS.DesiredCount)
 	for i := range d.SourceServiceRevisions {
 		d.SourceServiceRevisions[i].RunningTaskCount = 0
 		d.SourceServiceRevisions[i].PendingTaskCount = 0
@@ -199,11 +200,11 @@ func (p *nativeHealPipeline) healthy(t *testing.T, id string) {
 	if group == p.req.Intent.Advanced.Routing.AlternateTargetGroupARN {
 		p.f.routing.Production = ALBWeightPair{Alternate: 100}
 	}
-	p.f.service.RunningCount = int32(p.req.Intent.DesiredCount)
+	p.f.service.RunningCount = int32(r.Operations[0].ECS.DesiredCount)
 	p.f.service.PendingCount = 0
 	p.f.sampler.running = nil
 	p.f.sampler.tasks = map[string]types.Task{}
-	for i := 0; i < p.req.Intent.DesiredCount; i++ {
+	for i := 0; i < r.Operations[0].ECS.DesiredCount; i++ {
 		key := fmt.Sprintf("arn:aws:ecs:ap-northeast-2:123456789012:task/production/heal-%d-%d", p.f.writes, i)
 		p.f.sampler.running = append(p.f.sampler.running, key)
 		p.f.sampler.tasks[key] = types.Task{TaskArn: aws.String(key), ClusterArn: aws.String(p.req.Intent.ClusterARN), Group: aws.String("service:worker"), TaskDefinitionArn: aws.String(result.TaskDefinitionARN), LastStatus: aws.String("RUNNING"), Containers: []types.Container{{Name: aws.String("worker"), LastStatus: aws.String("RUNNING")}}}
@@ -313,32 +314,21 @@ func TestNativeSelfHealOffUnavailableAndRevokedCannotWrite(t *testing.T) {
 	}
 }
 
-func TestNativeRepairAuthorityRejectsUnverifiedPredecessorsAndKeepsNormalGitResizeBlocked(t *testing.T) {
-	for _, name := range []string{"unverified predecessor", "Git resize"} {
-		t.Run(name, func(t *testing.T) {
-			p := setupNativeHealPipeline(t, "CANARY", true)
-			if name == "unverified predecessor" {
-				p.f.service.DesiredCount = 3
-				p.tick(t)
-				if _, err := p.service.Store.(applyrequest.MutationStore).Mutate(context.Background(), p.parent, func(r applyrequest.Record) (applyrequest.Record, error) {
-					r.ECSRuntime.TasksObserved = false
-					return r, nil
-				}); err != nil {
-					t.Fatal(err)
-				}
-			} else {
-				// The last-verification link on an ordinary Git change is not a repair grant.
-				p.catalog.Git.Revision = strings.Repeat("b", 40)
-				p.catalog.Deployments[0].ECS.DesiredCount = 3
-				p.tick(t)
-			}
-			err := p.executor.RunOnce(context.Background())
-			if err == nil || p.f.writes != 1 {
-				t.Fatal("unreviewed repair authority changed capacity", err)
-			}
-		})
+func TestNativeRepairAuthorityRejectsUnverifiedPredecessors(t *testing.T) {
+	p := setupNativeHealPipeline(t, "CANARY", true)
+	p.f.service.DesiredCount = 3
+	p.tick(t)
+	if _, err := p.service.Store.(applyrequest.MutationStore).Mutate(context.Background(), p.parent, func(r applyrequest.Record) (applyrequest.Record, error) {
+		r.ECSRuntime.TasksObserved = false
+		return r, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.executor.RunOnce(context.Background()); err == nil || p.f.writes != 1 {
+		t.Fatal("unverified predecessor authorized repair", err)
 	}
 }
+
 func TestNativeRepairExplicitRetryRetainsDriftAuthorityAndFailureHold(t *testing.T) {
 	p := setupNativeHealPipeline(t, "LINEAR", true)
 	p.f.service.DesiredCount = 3

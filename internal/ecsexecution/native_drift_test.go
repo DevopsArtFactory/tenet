@@ -201,7 +201,7 @@ func TestNativeManagedRepairForcesOnlyNecessaryDeploymentAndRestoresCount(t *tes
 	}
 }
 
-func TestNativeRepairDoesNotResizeOrdinaryApprovalsOrFightResolvedDrift(t *testing.T) {
+func TestNativeRepairDoesNotFightResolvedDrift(t *testing.T) {
 	f, _, r, v := nativeDriftFixture(t, "CANARY")
 	r.PriorResults = r.PriorResults[:1]
 	r.PreparedResult = applyrequest.ECSOperationResult{}
@@ -213,8 +213,8 @@ func TestNativeRepairDoesNotResizeOrdinaryApprovalsOrFightResolvedDrift(t *testi
 	}, ObserveRouting: func(context.Context, domain.ECSDeploymentIntent, applyrequest.DeployerRoleReadiness) (ALBRoutingSnapshot, error) {
 		return f.routing, nil
 	}}
-	if err := h.Preflight(context.Background(), r); err == nil {
-		t.Fatal("ordinary approval resized service")
+	if err := h.Preflight(context.Background(), r); err != nil {
+		t.Fatal("reviewed capacity change was rejected", err)
 	}
 	r.ManagedRepair = true
 	var err error
