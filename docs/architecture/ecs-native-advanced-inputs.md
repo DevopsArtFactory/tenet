@@ -122,7 +122,7 @@ proof is derived from persisted server-created plans and complete checkpoints,
 not an API request field. Count/traffic repairs start a fresh native deployment;
 active/uncorrelated native work blocks repair. See the
 [drift contract](../runbooks/ecs-git-reconciliation.md#execution-and-drift) and
-[capacity-repair recovery limitation](../runbooks/ecs-native-recovery.md#recovery-outcome-and-retry).
+[capacity-repair recovery sequence](../runbooks/ecs-native-recovery.md#recovery-outcome-and-retry).
 A configuration-only update forces one new native deployment so the changed
 policy has an observable lifecycle; a matching current native deployment can
 instead be adopted for read-only verification without another update.
@@ -194,7 +194,8 @@ supply ownership for stopping someone else's rollout. The source revision is
 not guessed from the service's desired task-definition field.
 
 Immediately before a stop, the handler checks the exact current service,
-capacity, routing binding, deployment/configuration, immutable forward/source
+capacity (captured source or reviewed forward count), routing binding,
+deployment/configuration, immutable forward/source
 workloads and deployment history. Newer, concurrent or ambiguously ordered
 work blocks the stop. Concrete IAM checks include both the service and exact
 service-deployment resources for `ecs:StopServiceDeployment`. Current operator
@@ -232,6 +233,10 @@ A recovered result requires AWS `ROLLBACK_SUCCESSFUL` naming the captured source
 100% current configured source traffic, drained forward revision counts, the
 current service pointing to the exact source workload at the reviewed capacity,
 and the complete source task set healthy in both container and ALB evidence.
+For capacity-changing forwards, a separate durable count-only operation waits
+for source rollback/traffic completion, restores the captured pre-update count,
+and hands its unchanged observation deadline to final verification. No fresh
+native deployment is forced and ALB rules remain ECS-owned.
 Historical rollback success alone cannot pass. Missing ALB data, remaining
 forward tasks, partial traffic, mismatched immutable revision/task references,
 or newer/concurrent deployment history prevent completion. A stopped rollout,

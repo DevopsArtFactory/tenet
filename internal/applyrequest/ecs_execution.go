@@ -344,7 +344,7 @@ func (e Executor) validateECS(ctx context.Context, record Record, mutation bool)
 		return DeployerRoleReadiness{}, err
 	}
 	plan = planpreview.NormalizeOperationIDs(plan)
-	if plan.Status != planpreview.StatusReady || plan.ID != record.PlanID || plan.DeploymentName != record.DeploymentName || !reviewedDriftLink(record, plan) || record.Source.Fingerprint != plan.Source.Fingerprint || !reflect.DeepEqual(record.Source.Git, plan.Source.Git) || record.Source.Fingerprint == "" || len(plan.Operations) != 3 || (record.NativeRollback == nil && len(record.Operations) != 3) || (record.NativeRollback != nil && len(record.Operations) != 2) {
+	if plan.Status != planpreview.StatusReady || plan.ID != record.PlanID || plan.DeploymentName != record.DeploymentName || !reviewedDriftLink(record, plan) || record.Source.Fingerprint != plan.Source.Fingerprint || !reflect.DeepEqual(record.Source.Git, plan.Source.Git) || record.Source.Fingerprint == "" || len(plan.Operations) != 3 || (record.NativeRollback == nil && len(record.Operations) != 3) || (record.NativeRollback != nil && len(record.Operations) != len(nativeRollbackKinds(record))) {
 		return DeployerRoleReadiness{}, fmt.Errorf("apply does not match its reviewed native ECS plan")
 	}
 	if err := e.Service.validateECSRetry(ctx, record); err != nil {
@@ -358,7 +358,7 @@ func (e Executor) validateECS(ctx context.Context, record Record, mutation bool)
 	}
 	kinds := []string{string(reconcile.StepRegisterECSTaskDefinition), string(reconcile.StepUpdateECSService), string(reconcile.StepVerifyServiceStability)}
 	if record.NativeRollback != nil {
-		kinds = []string{NativeRollbackOperationKind, string(reconcile.StepVerifyServiceStability)}
+		kinds = nativeRollbackKinds(record)
 	}
 	expectedID, idErr := stableRecordID(record)
 	if idErr != nil || expectedID != record.ID {
@@ -369,10 +369,17 @@ func (e Executor) validateECS(ctx context.Context, record Record, mutation bool)
 	for i, op := range record.Operations {
 		reviewIndex := i
 		if record.NativeRollback != nil {
-			reviewIndex++
+			reviewIndex = 1
+			if i == len(record.Operations)-1 {
+				reviewIndex = 2
+			}
 		}
 		reviewed := plan.Operations[reviewIndex]
-		if op.ECS == nil || op.ECS.DeploymentController != "ECS" || (op.ECS.DeploymentStrategy != "ROLLING" && !e.ECS.AllowAdvanced) || op.Kind != kinds[i] || e.ECS.Handlers[op.Kind] == nil || op.ID != reviewed.ID || (record.NativeRollback == nil && op.Kind != reviewed.Kind) || !reviewedECSOperationMatches(record, op, reviewed) || !reflect.DeepEqual(op.ECS, record.Operations[0].ECS) {
+		expectedOpID := reviewed.ID
+		if op.Kind == NativeCapacityRestoreOperationKind {
+			expectedOpID += ":restore-capacity"
+		}
+		if op.ECS == nil || op.ECS.DeploymentController != "ECS" || (op.ECS.DeploymentStrategy != "ROLLING" && !e.ECS.AllowAdvanced) || op.Kind != kinds[i] || e.ECS.Handlers[op.Kind] == nil || op.ID != expectedOpID || (record.NativeRollback == nil && op.Kind != reviewed.Kind) || !reviewedECSOperationMatches(record, op, reviewed) || !reflect.DeepEqual(op.ECS, record.Operations[0].ECS) {
 			return DeployerRoleReadiness{}, fmt.Errorf("unsupported or altered reviewed ECS operation")
 		}
 		if cp := op.ECSCheckpoint; cp != nil {
@@ -752,7 +759,7 @@ func (e Executor) ecsRefreshHeartbeat(current Record) (Record, error) {
 }
 
 func ecsAllComplete(record Record) bool {
-	if (record.NativeRollback == nil && len(record.Operations) != 3) || (record.NativeRollback != nil && len(record.Operations) != 2) {
+	if (record.NativeRollback == nil && len(record.Operations) != 3) || (record.NativeRollback != nil && len(record.Operations) != len(nativeRollbackKinds(record))) {
 		return false
 	}
 	for _, op := range record.Operations {

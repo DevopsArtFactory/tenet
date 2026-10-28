@@ -80,7 +80,7 @@ func TestAdvancedManualExecutionRequiresExplicitFlagAndCurrentOperatorPolicy(t *
 			t.Fatal("manual advanced approval did not queue", created, err)
 		}
 		executor := newNativeECSExecutor(source, options, planPath, applyPath, nil)
-		if !executor.ECS.AllowAdvanced || executor.Service.PrepareNativeRollback == nil || executor.ECS.Handlers[applyrequest.NativeRollbackOperationKind] == nil {
+		if !executor.ECS.AllowAdvanced || executor.Service.PrepareNativeRollback == nil || executor.ECS.Handlers[applyrequest.NativeRollbackOperationKind] == nil || executor.ECS.Handlers[applyrequest.NativeCapacityRestoreOperationKind] == nil {
 			t.Fatal("advanced runtime missing recovery wiring")
 		}
 		allowed = false

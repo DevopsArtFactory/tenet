@@ -214,8 +214,9 @@ func TestNativeGitCapacityAndImageChangeAreSubmittedTogether(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := applyrequest.NativeRollbackEvidence(running); err == nil {
-				t.Fatal("capacity-changing Apply bypassed the existing fixed-capacity rollback contract")
+			recovery, err := applyrequest.NativeRollbackEvidence(running)
+			if err != nil || recovery.DesiredCount != 2 {
+				t.Fatal("capacity rollback did not retain captured count", recovery, err)
 			}
 			p.healthy(t, queued.ID)
 			p.run(t, 1)

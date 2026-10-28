@@ -230,11 +230,12 @@ Blue-Green, Canary and Linear:
 5. Enable self-heal after success, introduce external count drift and verify it
    restores the new verified Git count. Coordinate Service Auto Scaling and other
    writers rather than letting multiple controllers fight over desired count.
-6. The [operator rollback capacity limitation](ecs-native-recovery.md#recovery-outcome-and-retry)
-   also applies to Git count changes. Verify the endpoint rejects mismatched
-   source/target capacity; use a separately reviewed Git correction after the
-   current native deployment/rollback finishes. Preserve the failed forward
-   outcome. Disable flags and clean up using the native runbook.
+6. Request [operator rollback](ecs-native-recovery.md#recovery-outcome-and-retry)
+   during both scale-out and scale-in. Verify the captured source revision and
+   pre-update count are restored through separate durable stop/count operations,
+   then current task/ALB health verification. Preserve the forward outcome and
+   confirm polls do not reapply the failed Git count. Disable flags and clean up
+   using the native runbook.
 
 These are manual, separately authorized AWS checks. Normal tests/CI use fake SDK
 clients; this implementation did not execute an AWS rollout.
@@ -257,7 +258,7 @@ each strategy, then enable `syncPolicy.selfHeal: true` with automatic mode.
    Health-only degradation must not force deployment.
 5. Exercise a rejected/failed repair: subsequent polls hold it. Explicit retry
    retains the verified repair scope; a documentation-only commit cannot retry.
-   Review the [capacity-repair recovery limitation](ecs-native-recovery.md#recovery-outcome-and-retry)
+   Review the [capacity-repair recovery sequence](ecs-native-recovery.md#recovery-outcome-and-retry)
    before testing rollback. Clean up with the native runbook procedure.
 
 These are separately authorized manual AWS checks, not steps run by normal CI.

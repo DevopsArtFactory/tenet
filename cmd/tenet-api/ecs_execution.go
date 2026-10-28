@@ -92,8 +92,14 @@ func newApplyService(source apiCatalogSource, options api.Options, planStorePath
 				if err != nil {
 					return err
 				}
-				_, err = newNativeRollbackHandler().Prepare(ctx, applyrequest.ECSOperationRequest{Intent: *parent.Operations[0].ECS, Role: role}, target)
-				return err
+				request := applyrequest.ECSOperationRequest{Intent: *parent.Operations[0].ECS, Role: role, NativeRollback: target.Clone()}
+				if _, err = newNativeRollbackHandler().Prepare(ctx, request, target); err != nil {
+					return err
+				}
+				if int64(target.DesiredCount) != int64(request.Intent.DesiredCount) {
+					return (ecsexecution.NativeCapacityRestore{NativeRollback: newNativeRollbackHandler(), ObserveRouting: nativeALBReadiness().Observe}).Preflight(ctx, request)
+				}
+				return nil
 			}
 		}
 		service.AuthorizeCreate = func(ctx context.Context, record applyrequest.Record) (*applyrequest.ExecutionPrincipal, error) {
@@ -181,7 +187,8 @@ func newNativeECSExecutor(source apiCatalogSource, options api.Options, planStor
 		string(reconcile.StepVerifyServiceStability): ecsexecution.StrategyHandler{Advanced: newAdvancedObservationHandler(), Rolling: ecsexecution.RollingObservation{ClientFor: func(ctx context.Context, role applyrequest.DeployerRoleReadiness) (ecsexecution.ObservationClient, error) {
 			return ecsexecution.DeployerClient(ctx, role)
 		}, CheckCapabilities: checkECSCapabilities}},
-		applyrequest.NativeRollbackOperationKind: ecsexecution.NativeRollbackOperation{NativeRollback: newNativeRollbackHandler()},
+		applyrequest.NativeRollbackOperationKind:        ecsexecution.NativeRollbackOperation{NativeRollback: newNativeRollbackHandler()},
+		applyrequest.NativeCapacityRestoreOperationKind: ecsexecution.NativeCapacityRestore{NativeRollback: newNativeRollbackHandler(), ObserveRouting: nativeALBReadiness().Observe},
 	}
 	return applyrequest.Executor{Service: service, Logger: logger, PollInterval: time.Second, WorkerID: fmt.Sprintf("tenet-api-ecs-%d-%d", os.Getpid(), time.Now().UnixNano()), ECS: &applyrequest.ECSExecution{
 		Enabled: ecsExecutionEnabled(), AllowAdvanced: ecsAdvancedExecutionEnabled(), Handlers: handlers,
