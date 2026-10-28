@@ -58,10 +58,11 @@ operator scope on the exact advanced deployment names. The
 [native support matrix and recovery guide](ecs-native-recovery.md) applies to
 automatic execution as well: existing same-strategy, fixed-capacity IPv4/ALB
 services only. Turning on global sync does not opt a manual deployment into it.
-Advanced sync with missing traffic inputs or `selfHeal: true` is rejected.
+Advanced sync with missing traffic inputs is rejected. Set `selfHeal: true` only
+when automatic restoration of the managed fields below is intended.
 
 Absent policy or `mode: manual` requires manual approval. Automatic Git-change
-sync supports all four native strategies; self-heal remains Rolling-only. The automation identity is
+sync and separately enabled self-heal support all four native strategies. The automation identity is
 server configuration, not a request header or an attribution label. Its approval
 is recorded separately from human approval. Current repository roles/scopes are
 rechecked before mutations. Revoking access, changing the configured subject or
@@ -75,8 +76,9 @@ while automatic writes are paused, provided current RBAC still authorizes it.
 A successful Apply requires registered revision, service acceptance and verified
 runtime convergence. Repeated polls, restart and duplicate/out-of-order webhooks
 do not reapply the same verified intent. A subsequent Git image or reviewed traffic-policy change creates new work.
-Rolling also supports desired-count changes; advanced service resizing is outside
-the initial support matrix and fails preflight. Returning the branch to a previously applied commit after an
+Rolling also supports Git desired-count changes. Advanced Git capacity changes
+remain outside the initial support matrix and fail preflight; self-heal may
+restore the same capacity recorded in the last verified native Apply. Returning the branch to a previously applied commit after an
 intervening successful deployment also creates fresh execution evidence.
 
 Only a positively unsent service update can be superseded by a newly approved
@@ -94,12 +96,29 @@ retry or a different reviewed desired intent is required.
 
 `selfHeal: false` is the default: external AWS changes are not automatically
 reverted after a verified success. Existing controller/resource inspection and
-Apply evidence remain available. For Rolling only, set `selfHeal: true` with automatic mode to
-restore managed task-definition ARN, desired count and Rolling percentages.
+Apply evidence remain available. Set `selfHeal: true` with automatic mode after a
+verified forward Apply. Rolling restores managed task-definition ARN, desired
+count and Rolling percentages. Blue-Green, Canary and Linear restore the verified
+workload, Git capacity, reviewed bake/traffic policy, alarms/hooks and configured
+production traffic to the current native revision's target group. Target-group
+colors may rotate between deployments; an old color is not the recovery goal.
+
+Advanced repair requires the same service, strategy and previously verified Git
+capacity. A new image/policy commit or enabling self-heal can retain that capacity
+proof; changing Git capacity or moving to a different service cannot. A count or
+traffic-only repair starts a fresh native ECS deployment, using the declared
+strategy and health verification. Tenet never edits ALB weights directly. A
+repair whose drift disappears before execution can verify the matching current
+deployment without another service update.
 Tenet reads the exact scoped service using its deployer role, waits out external
 rollouts, and creates a distinct plan/Apply tied to the drift signature and last
 verified Apply. Repeated observations of one drift do not queue duplicates;
 the same external change recurring after a successful repair gets a new repair.
+Advanced observation requires correlated terminal native deployment/revision
+history and current ALB configuration. Active external deployments/rollbacks,
+pending or undrained source tasks, ambiguous history and failed/stopped work
+block repair. Controller/strategy changes, foreign routing bindings and mixed
+Service Connect/VPC Lattice are outside the reviewed repair scope.
 Unavailable/throttled/denied or incomplete reads cannot authorize self-heal.
 Health-only degradation cannot force another deployment.
 
@@ -178,4 +197,29 @@ commits, and accept a new fixed digest only after recovery releases ownership.
 Disable the flags and use the native runbook cleanup steps after testing.
 
 Fake-SDK tests cover this integration; no actual AWS rollout was run for this
-change. Automatic drift repair for advanced strategies remains unsupported.
+change.
+
+## Isolated advanced self-heal verification
+
+In the same disposable fixture, complete one healthy verified forward Apply for
+each strategy, then enable `syncPolicy.selfHeal: true` with automatic mode.
+
+1. Confirm the default-off policy leaves external changes alone. Change only a
+   managed field: same-family workload, desired count, bake/alarm/hook policy or
+   configured weights within the reviewed ALB pair. Test each independently.
+2. Confirm one drift-bound repair restores the Git goal through a new native
+   deployment. Repeat polling and restart after acceptance; check one service
+   update, exact revision/traffic/task health evidence and no direct ALB writes.
+3. Repeat the same drift after success and confirm a new repair epoch. Make the
+   drift disappear before execution and confirm read-only adoption is possible.
+4. Confirm external active deployment/rollback, unavailable reads, changed
+   routing, revoked scope or paused sync cannot authorize a repair write.
+   Health-only degradation must not force deployment.
+5. Exercise a rejected/failed repair: subsequent polls hold it. Explicit retry
+   retains the verified repair scope; a documentation-only commit cannot retry.
+   Review the [capacity-repair recovery limitation](ecs-native-recovery.md#recovery-outcome-and-retry)
+   before testing rollback. Clean up with the native runbook procedure.
+
+These are separately authorized manual AWS checks, not steps run by normal CI.
+Tests cover these flows with fake clients; this implementation did not execute
+an AWS rollout.

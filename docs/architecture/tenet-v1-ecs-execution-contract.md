@@ -433,7 +433,8 @@ response decoding and the native `StopServiceDeployment(ROLLBACK)` request.
 The SDK upgrade alone does not enable advanced execution. Manual native
 execution and recovery require the separate advanced flag and use dedicated
 handlers; automatic Git sync requires its own flags, subject and per-deployment policy.
-Advanced drift self-heal remains unsupported. Do not route native
+Separately enabled advanced self-heal restores verified managed drift through
+these native handlers, with the same authorization/ownership gates. Do not route native
 advanced plans through Rolling or legacy CodeDeploy handlers.
 The initial hook contract uses Lambda hooks;
 newer Pause/Continue deployment APIs are not covered by this SDK pin.

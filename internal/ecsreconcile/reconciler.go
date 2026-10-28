@@ -134,8 +134,8 @@ func (r Reconciler) reconcileDeployment(ctx context.Context, compiled manifest.C
 	if !r.Automatic || !r.LiveECS || !r.Applies.EnableAWSApply || r.SubjectID == "" || intent.SyncMode != "automatic" || (intent.DeploymentStrategy != "ROLLING" && !r.AllowAdvanced) {
 		return nil
 	}
-	if intent.DeploymentStrategy != "ROLLING" && (intent.Advanced == nil || intent.SelfHeal) {
-		return fmt.Errorf("advanced automatic sync requires reviewed traffic configuration and selfHeal disabled")
+	if intent.DeploymentStrategy != "ROLLING" && intent.Advanced == nil {
+		return fmt.Errorf("advanced automatic sync requires reviewed traffic configuration")
 	}
 	if r.Applies.AuthorizeCreate == nil {
 		return fmt.Errorf("automatic sync requires a trusted authorization provider")
