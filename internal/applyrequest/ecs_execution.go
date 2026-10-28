@@ -420,7 +420,7 @@ func (e Executor) validateECS(ctx context.Context, record Record, mutation bool)
 		if record.Recovery != nil {
 			expected = record.Recovery.ForwardIntent
 		}
-		if record.NativeRollback == nil && !reflect.DeepEqual(current, expected) {
+		if (record.NativeRollback == nil || record.NativeRollback.Automatic) && !reflect.DeepEqual(current, expected) {
 			return DeployerRoleReadiness{}, ErrSourceFingerprintConflict
 		}
 	}

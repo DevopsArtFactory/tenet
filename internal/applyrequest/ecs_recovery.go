@@ -218,6 +218,12 @@ func (s Service) validateECSRecovery(ctx context.Context, record Record, plan pl
 }
 
 func (e Executor) automaticECSRecovery(ctx context.Context, parent Record) error {
+	if parent.NativeRollback != nil {
+		return nil
+	}
+	if len(parent.Operations) > 0 && parent.Operations[0].ECS != nil && parent.Operations[0].ECS.DeploymentStrategy != "ROLLING" {
+		return e.automaticNativeRollback(ctx, parent)
+	}
 	if parent.Status != StatusFailed || parent.Recovery != nil || parent.Principal == nil || len(parent.Operations) != 3 || parent.Operations[0].ECS == nil || !parent.Operations[0].ECS.RollbackOnFailure || parent.ECSRuntime == nil {
 		return nil
 	}

@@ -135,6 +135,7 @@ func TestAdvancedAutomaticGitApprovalAndWriteGates(t *testing.T) {
 		for i := range c.Deployments {
 			c.Deployments[i].ECS.SyncMode = "automatic"
 			c.Deployments[i].ECS.SelfHeal = true
+			c.Deployments[i].ECS.RollbackOnFailure = true
 		}
 		return c, nil
 	}
@@ -170,6 +171,7 @@ func TestAdvancedAutomaticGitApprovalAndWriteGates(t *testing.T) {
 		t.Fatal("production reconciler did not receive advanced opt-in")
 	}
 	for _, r := range approved {
+		r.NativeRollback = &applyrequest.ECSNativeRollback{Automatic: true, ParentApplyID: r.ID}
 		if err := executor.ECS.Authorize(ctx, r); err != nil {
 			t.Fatal(err)
 		}

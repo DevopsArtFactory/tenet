@@ -38,8 +38,8 @@ func validateECSDeployment(d DeploymentSpec) error {
 	if d.NormalizedTargetType() != TargetTypeECS {
 		return fmt.Errorf("ecs execution inputs require an ecs target")
 	}
-	if e.RollbackOnFailure && d.NormalizedStrategy() != StrategyTypeRolling {
-		return fmt.Errorf("ecs.rollbackOnFailure currently supports Rolling only")
+	if e.RollbackOnFailure && d.NormalizedStrategy() != StrategyTypeRolling && e.Advanced == nil {
+		return fmt.Errorf("automatic native rollback requires reviewed ecs.advanced configuration")
 	}
 	if e.SyncPolicy != nil {
 		mode := strings.TrimSpace(e.SyncPolicy.Mode)

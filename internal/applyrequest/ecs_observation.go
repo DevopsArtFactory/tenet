@@ -217,7 +217,11 @@ func ecsReadiness(record Record, checkedAt string) ExecutionReadiness {
 		evidence = append(evidence, "Runtime reason: "+record.ECSRuntime.Reason)
 	}
 	if record.NativeRollback != nil {
-		summary = "Native recovery of Apply " + record.NativeRollback.ParentApplyID + ": " + summary
+		prefix := "Native recovery of Apply "
+		if record.NativeRollback.Automatic {
+			prefix = "Automatic native recovery of Apply "
+		}
+		summary = prefix + record.NativeRollback.ParentApplyID + ": " + summary
 	}
 	if record.NativeRollbackRequestID != "" {
 		summary = "Forward tracking handed to recovery Apply " + record.NativeRollbackRequestID + "; inspect that Apply for the AWS outcome."

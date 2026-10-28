@@ -244,6 +244,10 @@ func (h NativeObservation) reconcile(ctx context.Context, r applyrequest.ECSOper
 		return observedFailure(result, "native_deployment_stopped", "AWS stopped the native deployment: "+shortEvidence(aws.ToString(deployment.StatusReason))), nil
 	case types.ServiceDeploymentStatusRollbackFailed:
 		return observedFailure(result, "native_rollback_failed", "AWS reports native rollback failure: "+shortEvidence(aws.ToString(deployment.StatusReason))), nil
+	case types.ServiceDeploymentStatusRollbackRequested, types.ServiceDeploymentStatusRollbackInProgress:
+		if rollback == nil && r.Intent.RollbackOnFailure {
+			return observedFailure(result, "native_rollback_reported", "ECS started source rollback; the requested forward revision failed."), nil
+		}
 	case types.ServiceDeploymentStatusRollbackSuccessful:
 		if rollback == nil {
 			return observedFailure(result, "native_rollback_reported", "AWS reports a rollback to its source revision; the requested forward revision did not succeed."), nil
@@ -252,6 +256,14 @@ func (h NativeObservation) reconcile(ctx context.Context, r applyrequest.ECSOper
 			return observationUnavailable(result, fmt.Errorf("completed rollback source identity unavailable")), nil
 		}
 	}
+	if rollback == nil && r.Intent.RollbackOnFailure && (deployment.Status == types.ServiceDeploymentStatusPending || deployment.Status == types.ServiceDeploymentStatusInProgress) && deployment.Alarms != nil && deployment.Alarms.Status == types.ServiceDeploymentRollbackMonitorsStatusTriggered && r.Intent.Advanced.Alarms != nil && r.Intent.Advanced.Alarms.Enable {
+		for _, name := range deployment.Alarms.TriggeredAlarmNames {
+			if slices.Contains(r.Intent.Advanced.Alarms.Names, name) {
+				return observedFailure(result, "native_alarm_triggered", "ECS reports a triggered reviewed deployment alarm; automatic native recovery is required."), nil
+			}
+		}
+	}
+
 	target, err := describeNativeRevision(ctx, client, result.ServiceRevisionARN, r)
 	if err != nil {
 		return observationUnavailable(result, err), nil
