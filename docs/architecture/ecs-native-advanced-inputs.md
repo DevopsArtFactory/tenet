@@ -5,7 +5,8 @@ now carry a validated `ecs.advanced` policy through compilation, desired
 identity, plan persistence and Apply projection. Execution, monitoring and
 operator rollback are connected behind the additional advanced-execution opt-in.
 Git-change automatic sync also requires the global automation gates and a
-per-deployment automatic policy; self-heal is Rolling-only. See the
+per-deployment automatic policy; all native strategies support separately enabled
+self-heal after a verified forward Apply. See the
 [runtime and recovery runbook](../runbooks/ecs-native-recovery.md) for enablement and ownership semantics.
 
 Use the complete [advanced example repository](../../examples/ecs-native-advanced-repo)
@@ -27,7 +28,7 @@ use. No resource is provisioned by reading or planning these examples.
 | Time bounds | Each bake value is 0–1440 minutes; total configured traffic/bake schedule is at most 24 hours |
 | Alarms | Optional enabled block with 1–10 unique CloudWatch alarm names and explicit ECS rollback choice |
 | Hooks | Same-placement Lambda function pinned to a positive numeric version, explicit IAM role and supported stages |
-| Automatic sync | All native strategies with global opt-ins, scoped automation subject and explicit automatic mode; self-heal Rolling-only |
+| Automatic sync | All native strategies with global opt-ins, scoped automation subject and explicit automatic mode; separate self-heal opt-in after verified forward execution |
 
 Omit alarms/hooks to review no alarms/hooks. Zero bake times are explicit values,
 not missing settings. A Canary block is invalid on Blue-Green/Linear and vice
@@ -111,7 +112,14 @@ inherited from the reviewed task revision and existing service.
 The initial handler accepts an existing native service using the same declared
 strategy and one ALB binding. It requires `awsvpc`/IP targets, keeps capacity
 unchanged, and rejects mixed Service Connect/VPC Lattice routing. Strategy
-migration and service resizing are outside this first execution matrix.
+migration and Git capacity changes are outside this execution matrix.
+Separately enabled self-heal can restore external capacity drift to the same
+Git count verified by a preceding forward Apply on this service/strategy. That
+proof is derived from persisted server-created plans and complete checkpoints,
+not an API request field. Count/traffic repairs start a fresh native deployment;
+active/uncorrelated native work blocks repair. See the
+[drift contract](../runbooks/ecs-git-reconciliation.md#execution-and-drift) and
+[capacity-repair recovery limitation](../runbooks/ecs-native-recovery.md#recovery-outcome-and-retry).
 A configuration-only update forces one new native deployment so the changed
 policy has an observable lifecycle; a matching current native deployment can
 instead be adopted for read-only verification without another update.

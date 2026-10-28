@@ -133,7 +133,7 @@ func authorizeECSAutomaticRecord(record applyrequest.Record) error {
 		return applyrequest.ErrExecutionUnauthorized
 	}
 	intent := record.Operations[0].ECS
-	if intent.SyncMode != "automatic" || (intent.DeploymentStrategy != "ROLLING" && (!ecsAdvancedExecutionEnabled() || intent.Advanced == nil || intent.SelfHeal)) {
+	if intent.SyncMode != "automatic" || (intent.DeploymentStrategy != "ROLLING" && (!ecsAdvancedExecutionEnabled() || intent.Advanced == nil)) {
 		return applyrequest.ErrExecutionUnauthorized
 	}
 	return nil

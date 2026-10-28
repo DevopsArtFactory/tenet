@@ -77,6 +77,9 @@ type ECSOperationResult struct {
 
 // ECSOperationRequest binds an injected handler to reviewed intent and durable identity.
 type ECSOperationRequest struct {
+	// ManagedRepair is derived by the executor from a verified predecessor and drift plan.
+	ManagedRepair bool
+
 	NativeRollback *ECSNativeRollback
 
 	RetryDeploymentID string
@@ -260,7 +263,11 @@ func (e Executor) advanceECS(ctx context.Context, snapshot Record) error {
 		if op.ECSCheckpoint != nil && op.ECSCheckpoint.State == "in_flight" {
 			break
 		}
-		if err := e.ECS.Handlers[op.Kind].Preflight(ctx, ecsRequest(record, i, role)); err != nil {
+		request, err := e.reviewedECSRequest(ctx, record, i, role)
+		if err != nil {
+			return e.ecsQueuedValidationError(ctx, record, err)
+		}
+		if err := e.ECS.Handlers[op.Kind].Preflight(ctx, request); err != nil {
 			return e.ecsQueuedValidationError(ctx, record, err)
 		}
 		if started {
@@ -483,7 +490,10 @@ func (e Executor) runECSOperation(ctx context.Context, record Record, role Deplo
 		return e.finishECS(ctx, record, StatusSucceeded, "", nil)
 	}
 	op := record.Operations[index]
-	request := ecsRequest(record, index, role)
+	request, requestErr := e.reviewedECSRequest(ctx, record, index, role)
+	if requestErr != nil {
+		return requestErr
+	}
 	handler := e.ECS.Handlers[op.Kind]
 	if op.ECSCheckpoint != nil && op.ECSCheckpoint.RetryAfter != "" {
 		retry, err := time.Parse(time.RFC3339Nano, op.ECSCheckpoint.RetryAfter)

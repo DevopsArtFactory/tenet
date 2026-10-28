@@ -72,6 +72,16 @@ func newECSGitReconciler(source apiCatalogSource, options api.Options, statuses 
 			if err != nil {
 				return ecsreconcile.Drift{}, err
 			}
+			if deployment.ECS.DeploymentStrategy != "ROLLING" {
+				if !ecsAdvancedExecutionEnabled() {
+					return ecsreconcile.Drift{}, applyrequest.ErrExecutionUnauthorized
+				}
+				probe := ecsexecution.NativeManagedDrift{ClientFor: func(ctx context.Context, role applyrequest.DeployerRoleReadiness) (ecsexecution.NativeDriftClient, error) {
+					return ecsexecution.DeployerClient(ctx, role)
+				}, CheckCapabilities: checkECSCapabilities, ObserveRouting: nativeALBReadiness().Observe}
+				detected, signature, err := probe.Observe(ctx, *deployment.ECS, role, verified)
+				return ecsreconcile.Drift{Detected: detected, Signature: signature}, err
+			}
 			probe := ecsexecution.ManagedDrift{ClientFor: func(ctx context.Context, role applyrequest.DeployerRoleReadiness) (ecsexecution.DriftClient, error) {
 				return ecsexecution.DeployerClient(ctx, role)
 			}, CheckCapabilities: checkECSCapabilities}

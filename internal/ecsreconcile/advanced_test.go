@@ -78,7 +78,7 @@ func TestAdvancedAutomaticGitCommitsDeduplicateAndRevertWithFreshEvidence(t *tes
 }
 func TestAdvancedAutomaticGatesAndDuplicateOwnersPreventApproval(t *testing.T) {
 	for _, strategy := range []string{"BLUE_GREEN", "CANARY", "LINEAR"} {
-		for _, name := range []string{"advanced off", "automatic off", "manual", "live off", "apply off", "subject missing", "RBAC revoked", "duplicate owner", "self-heal", "missing policy"} {
+		for _, name := range []string{"advanced off", "automatic off", "manual", "live off", "apply off", "subject missing", "RBAC revoked", "duplicate owner", "missing policy"} {
 			t.Run(strategy+"/"+name, func(t *testing.T) {
 				f := setupAdvanced(t, strategy)
 				switch name {
@@ -100,13 +100,11 @@ func TestAdvancedAutomaticGatesAndDuplicateOwnersPreventApproval(t *testing.T) {
 					alias := f.catalog.Deployments[0]
 					alias.Name += "-alias"
 					f.catalog.Deployments = append(f.catalog.Deployments, alias)
-				case "self-heal":
-					f.catalog.Deployments[0].ECS.SelfHeal = true
 				case "missing policy":
 					f.catalog.Deployments[0].ECS.Advanced = nil
 				}
 				err := f.r.RunOnce(context.Background())
-				if (name == "RBAC revoked" || name == "duplicate owner" || name == "self-heal" || name == "missing policy") && err == nil {
+				if (name == "RBAC revoked" || name == "duplicate owner" || name == "missing policy") && err == nil {
 					t.Fatal("missing blocked evidence")
 				}
 				if len(f.records(t)) != 0 || f.writes != 0 {

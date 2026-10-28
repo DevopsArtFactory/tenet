@@ -60,6 +60,9 @@ func (h AdvancedService) observe(ctx context.Context, r applyrequest.ECSOperatio
 	if h.ClientFor == nil || h.CheckCapabilities == nil || h.ObserveRouting == nil || r.Recovery != nil {
 		return empty, fmt.Errorf("native service/deployer/routing providers and a forward advanced request are required")
 	}
+	if r.ManagedRepair && (!r.Intent.SelfHeal || r.Intent.SyncMode != "automatic" || r.NativeRollback != nil) {
+		return empty, fmt.Errorf("managed native repair requires explicit automatic self-heal intent")
+	}
 	if r.RetryDeploymentID != "" && !nativeScopedARN(r.RetryDeploymentID, "service-deployment", r.Intent) {
 		return empty, fmt.Errorf("native retry requires a concrete failed service-deployment ARN")
 	}
@@ -82,7 +85,7 @@ func (h AdvancedService) observe(ctx context.Context, r applyrequest.ECSOperatio
 	if aws.ToString(service.ServiceArn) != e.ServiceARN || aws.ToString(service.ClusterArn) != e.ClusterARN || aws.ToString(service.Status) != "ACTIVE" || service.SchedulingStrategy != types.SchedulingStrategyReplica || service.DeploymentController == nil || service.DeploymentController.Type != types.DeploymentControllerTypeEcs || service.DeploymentConfiguration == nil || string(service.DeploymentConfiguration.Strategy) != e.DeploymentStrategy {
 		return empty, fmt.Errorf("existing service must already use the reviewed ECS native advanced strategy")
 	}
-	if service.DesiredCount != int32(e.DesiredCount) {
+	if service.DesiredCount != int32(e.DesiredCount) && !r.ManagedRepair {
 		return empty, fmt.Errorf("initial native advanced execution does not resize service capacity")
 	}
 	routing := e.Advanced.Routing
@@ -217,7 +220,19 @@ func (h AdvancedService) observe(ctx context.Context, r applyrequest.ECSOperatio
 				if err != nil {
 					return empty, err
 				}
-				if aws.ToString(revision.TaskDefinition) == target {
+				canAdopt := service.DesiredCount == int32(e.DesiredCount)
+				if r.ManagedRepair && described.Status == types.ServiceDeploymentStatusSuccessful {
+					group, err := nativeRevisionTargetGroup(revision, e)
+					if err != nil {
+						return empty, err
+					}
+					percent, err := configuredNativePercent(observedRouting, group, e)
+					if err != nil {
+						return empty, err
+					}
+					canAdopt = canAdopt && percent == 100
+				}
+				if aws.ToString(revision.TaskDefinition) == target && canAdopt {
 					observation.noOp = described
 				}
 			}
@@ -279,8 +294,10 @@ func (h AdvancedService) Execute(ctx context.Context, r applyrequest.ECSOperatio
 	if err != nil {
 		return applyrequest.ECSOperationResult{}, beforeMutationError(err)
 	}
-	if observation.noOp != nil && prepared.NativeService.NoOpDeploymentARN == aws.ToString(observation.noOp.ServiceDeploymentArn) {
+	if observation.noOp != nil && (prepared.NativeService.NoOpDeploymentARN == aws.ToString(observation.noOp.ServiceDeploymentArn) || r.ManagedRepair) {
 		result := prepared.Clone()
+		result.NativeService.NoOpDeploymentARN = aws.ToString(observation.noOp.ServiceDeploymentArn)
+		result.NativeService.NoOpRevisionARN = aws.ToString(observation.noOp.TargetServiceRevision.Arn)
 		result.ServiceDeploymentARN = aws.ToString(observation.noOp.ServiceDeploymentArn)
 		result.ServiceRevisionARN = aws.ToString(observation.noOp.TargetServiceRevision.Arn)
 		return result, nil
@@ -307,7 +324,11 @@ func (h AdvancedService) Execute(ctx context.Context, r applyrequest.ECSOperatio
 	// Config-only changes must start a native deployment as well; otherwise ECS can
 	// accept settings without producing the lifecycle identity we need to observe.
 	force := aws.ToString(observation.service.TaskDefinition) == prepared.TaskDefinitionARN
-	output, err := observation.client.UpdateService(ctx, &ecs.UpdateServiceInput{Cluster: aws.String(r.Intent.ClusterARN), Service: aws.String(r.Intent.ServiceARN), TaskDefinition: aws.String(prepared.TaskDefinitionARN), DeploymentConfiguration: config, ForceNewDeployment: force}, func(options *ecs.Options) { options.Retryer = aws.NopRetryer{}; options.RetryMaxAttempts = 1 })
+	input := &ecs.UpdateServiceInput{Cluster: aws.String(r.Intent.ClusterARN), Service: aws.String(r.Intent.ServiceARN), TaskDefinition: aws.String(prepared.TaskDefinitionARN), DeploymentConfiguration: config, ForceNewDeployment: force}
+	if r.ManagedRepair && observation.service.DesiredCount != int32(r.Intent.DesiredCount) {
+		input.DesiredCount = aws.Int32(int32(r.Intent.DesiredCount))
+	}
+	output, err := observation.client.UpdateService(ctx, input, func(options *ecs.Options) { options.Retryer = aws.NopRetryer{}; options.RetryMaxAttempts = 1 })
 	if err != nil {
 		return applyrequest.ECSOperationResult{}, ecsMutationError(err)
 	}

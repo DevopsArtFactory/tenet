@@ -134,6 +134,7 @@ func TestAdvancedAutomaticGitApprovalAndWriteGates(t *testing.T) {
 		c.Git = &domain.GitSource{Repository: "org/desired", Ref: "main", Revision: strings.Repeat("a", 40)}
 		for i := range c.Deployments {
 			c.Deployments[i].ECS.SyncMode = "automatic"
+			c.Deployments[i].ECS.SelfHeal = true
 		}
 		return c, nil
 	}
