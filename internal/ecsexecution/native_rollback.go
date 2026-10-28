@@ -3,14 +3,10 @@ package ecsexecution
 import (
 	"context"
 	"fmt"
-	"reflect"
-	"strings"
 	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
-	"github.com/DevopsArtFactory/tenet/internal/reconcile"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
@@ -19,59 +15,14 @@ import (
 // NativeRollbackTarget is derived from an owned, durably accepted forward update.
 // It names ECS's actual source revision, which can differ from the service's
 // desired task definition after a failed deployment. HTTP callers cannot select it.
-type NativeRollbackTarget struct {
-	ParentApplyID            string `json:"parentApplyId"`
-	DeploymentARN            string `json:"deploymentArn"`
-	ForwardRevisionARN       string `json:"forwardRevisionArn"`
-	SourceRevisionARN        string `json:"sourceRevisionArn"`
-	ForwardTaskDefinitionARN string `json:"forwardTaskDefinitionArn"`
-	SourceTaskDefinitionARN  string `json:"sourceTaskDefinitionArn"`
-	DesiredCount             int32  `json:"desiredCount"`
-}
+type NativeRollbackTarget = applyrequest.ECSNativeRollback
 
 func NativeRollbackEvidence(parent applyrequest.Record) (NativeRollbackTarget, error) {
-	var empty NativeRollbackTarget
-	if parent.ID == "" || parent.Principal == nil || !parent.Principal.Identity.Authenticated || parent.Recovery != nil || (parent.Status != applyrequest.StatusRunning && parent.Status != applyrequest.StatusFailed) || len(parent.Operations) != 3 {
-		return empty, fmt.Errorf("owned running/failed native forward apply required")
+	target, err := applyrequest.NativeRollbackEvidence(parent)
+	if err != nil {
+		return NativeRollbackTarget{}, err
 	}
-	kinds := []reconcile.StepKind{reconcile.StepRegisterECSTaskDefinition, reconcile.StepUpdateECSService, reconcile.StepVerifyServiceStability}
-	for i, operation := range parent.Operations {
-		if operation.Kind != string(kinds[i]) || !reflect.DeepEqual(operation.ECS, parent.Operations[0].ECS) {
-			return empty, fmt.Errorf("unaltered native forward operations required")
-		}
-	}
-	first, update := parent.Operations[0], parent.Operations[1]
-	if first.ECS == nil || update.ECS == nil || first.ECS.DeploymentStrategy == "ROLLING" || first.ECSCheckpoint == nil || first.ECSCheckpoint.State != "complete" || update.ECSCheckpoint == nil || update.ECSCheckpoint.State != "complete" || update.ECSCheckpoint.MutationAuthorizedAt == "" {
-		return empty, fmt.Errorf("durable owned registration and update checkpoints required")
-	}
-	if _, err := time.Parse(time.RFC3339Nano, update.ECSCheckpoint.MutationAuthorizedAt); err != nil {
-		return empty, fmt.Errorf("valid forward mutation authorization timestamp required")
-	}
-	result := update.ECSCheckpoint.Result
-	if result.NativeService == nil || result.NativeService.NoOpDeploymentARN != "" || result.PreviousService == nil || first.ECSCheckpoint.Result.TaskDefinitionARN != result.TaskDefinitionARN {
-		return empty, fmt.Errorf("adopted or incomplete deployment cannot authorize rollback")
-	}
-	target := NativeRollbackTarget{ParentApplyID: parent.ID, DeploymentARN: result.ServiceDeploymentARN, ForwardRevisionARN: result.ServiceRevisionARN, SourceRevisionARN: result.PreviousServiceRevisionARN, ForwardTaskDefinitionARN: result.TaskDefinitionARN, SourceTaskDefinitionARN: result.PreviousTaskDefinitionARN, DesiredCount: result.PreviousService.DesiredCount}
-	known := false
-	for _, source := range result.NativeService.SourceRevisions {
-		known = known || source.ARN == target.SourceRevisionARN && source.TaskDefinitionARN == target.SourceTaskDefinitionARN
-	}
-	if !known {
-		return empty, fmt.Errorf("rollback requires the actual source captured before the forward write")
-	}
-	if err := target.validate(applyrequest.ECSOperationRequest{Intent: *first.ECS}); err != nil {
-		return empty, err
-	}
-	return target, nil
-}
-
-func (t NativeRollbackTarget) validate(r applyrequest.ECSOperationRequest) error {
-	base, _ := arn.Parse(r.Intent.BaseTaskDefinitionARN)
-	family, _, _ := strings.Cut(strings.TrimPrefix(base.Resource, "task-definition/"), ":")
-	if t.ParentApplyID == "" || t.DesiredCount != int32(r.Intent.DesiredCount) || !nativeScopedARN(t.DeploymentARN, "service-deployment", r.Intent) || !nativeScopedARN(t.ForwardRevisionARN, "service-revision", r.Intent) || !nativeScopedARN(t.SourceRevisionARN, "service-revision", r.Intent) || t.ForwardRevisionARN == t.SourceRevisionARN || !sameFamily(t.ForwardTaskDefinitionARN, r, family) || !sameFamily(t.SourceTaskDefinitionARN, r, family) {
-		return fmt.Errorf("fixed native rollback identities and unchanged capacity required")
-	}
-	return nil
+	return *target, nil
 }
 
 type NativeRollbackClient interface {
@@ -81,8 +32,7 @@ type NativeRollbackClient interface {
 }
 
 // NativeRollback requests ECS-owned recovery; acceptance is not healthy recovery.
-// Production/API wiring stays disabled until the separate recovery observer and
-// durable child-apply handoff are connected.
+// The explicit advanced-execution gate controls production/API access.
 type NativeRollback struct {
 	ClientFor         func(context.Context, applyrequest.DeployerRoleReadiness) (NativeRollbackClient, error)
 	CheckCapabilities func(context.Context, applyrequest.DeployerRoleReadiness, []applyrequest.OperationExecutionCapabilityCheck) error
@@ -93,9 +43,17 @@ type NativeRollback struct {
 func (h NativeRollback) Prepare(ctx context.Context, r applyrequest.ECSOperationRequest, target NativeRollbackTarget) (applyrequest.ECSOperationResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	_, _, err := h.observe(ctx, r, target)
+	_, deployment, err := h.observe(ctx, r, target)
 	if err != nil {
 		return applyrequest.ECSOperationResult{}, err
+	}
+	if deployment.Status != types.ServiceDeploymentStatusPending && deployment.Status != types.ServiceDeploymentStatusInProgress && !nativeRollbackAccepted(deployment, target) {
+		return applyrequest.ECSOperationResult{}, fmt.Errorf("native deployment no longer accepts rollback")
+	}
+	if deployment.Status == types.ServiceDeploymentStatusPending || deployment.Status == types.ServiceDeploymentStatusInProgress {
+		if err := h.CheckCapabilities(ctx, r.Role, nativeStopChecks(r, target)); err != nil {
+			return applyrequest.ECSOperationResult{}, err
+		}
 	}
 	return rollbackResult(target), nil
 }
@@ -118,12 +76,9 @@ func (h NativeRollback) Execute(ctx context.Context, r applyrequest.ECSOperation
 		return result, nil
 	}
 	if deployment.Status != types.ServiceDeploymentStatusPending && deployment.Status != types.ServiceDeploymentStatusInProgress {
-		return applyrequest.ECSOperationResult{}, beforeMutationError(fmt.Errorf("native deployment is not eligible for a new rollback request"))
+		return applyrequest.ECSOperationResult{}, &applyrequest.ECSCallError{Err: fmt.Errorf("native deployment is no longer eligible for rollback; no stop was sent"), Rejected: true}
 	}
-	checks := []applyrequest.OperationExecutionCapabilityCheck{
-		{Action: "ecs:StopServiceDeployment", ResourceName: r.Intent.ServiceARN, RequiredRole: r.Role.RoleARN, Context: map[string]string{"ecs:cluster": r.Intent.ClusterARN}},
-		{Action: "ecs:StopServiceDeployment", ResourceName: target.DeploymentARN, RequiredRole: r.Role.RoleARN, Context: map[string]string{"ecs:cluster": r.Intent.ClusterARN, "ecs:service": r.Intent.ServiceARN}},
-	}
+	checks := nativeStopChecks(r, target)
 	if err := h.CheckCapabilities(ctx, r.Role, checks); err != nil {
 		return applyrequest.ECSOperationResult{}, beforeMutationError(err)
 	}
@@ -162,7 +117,7 @@ func (h NativeRollback) observe(ctx context.Context, r applyrequest.ECSOperation
 	if err := verifiedNativeRole(r.Intent, r.Role); err != nil {
 		return nil, nil, err
 	}
-	if err := t.validate(r); err != nil {
+	if err := t.Validate(r.Intent); err != nil {
 		return nil, nil, err
 	}
 	if h.ClientFor == nil || h.CheckCapabilities == nil || r.Recovery != nil {
@@ -227,4 +182,11 @@ func (h NativeRollback) observe(ctx context.Context, r applyrequest.ECSOperation
 		}
 	}
 	return client, deployment, nil
+}
+
+func nativeStopChecks(r applyrequest.ECSOperationRequest, target NativeRollbackTarget) []applyrequest.OperationExecutionCapabilityCheck {
+	return []applyrequest.OperationExecutionCapabilityCheck{
+		{Action: "ecs:StopServiceDeployment", ResourceName: r.Intent.ServiceARN, RequiredRole: r.Role.RoleARN, Context: map[string]string{"ecs:cluster": r.Intent.ClusterARN}},
+		{Action: "ecs:StopServiceDeployment", ResourceName: target.DeploymentARN, RequiredRole: r.Role.RoleARN, Context: map[string]string{"ecs:cluster": r.Intent.ClusterARN, "ecs:service": r.Intent.ServiceARN}},
+	}
 }

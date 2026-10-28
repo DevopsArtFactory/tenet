@@ -237,6 +237,9 @@ func (s Service) enrichOperationPermissionChecks(ctx context.Context, record Rec
 func normalizeExecutionReadiness(record Record) Record {
 	record.Source.Git = record.Source.Git.Clone()
 	record.Recovery = record.Recovery.Clone()
+	if record.NativeRollback != nil {
+		record.NativeRollback = record.NativeRollback.Clone()
+	}
 	record.Principal = record.Principal.Clone()
 	record.ECSRuntime = record.ECSRuntime.Clone()
 	record.Operations = normalizeOperationIDs(record.Operations)

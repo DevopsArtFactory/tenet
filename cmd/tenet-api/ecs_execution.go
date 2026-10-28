@@ -30,7 +30,14 @@ func ecsExecutionEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("TENET_AWS_ENABLE_ECS_EXECUTION")), "true")
 }
 
+func ecsAdvancedExecutionEnabled() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("TENET_AWS_ENABLE_ECS_ADVANCED_EXECUTION")), "true")
+}
+
 func validateECSExecutionConfiguration(source apiCatalogSource) error {
+	if ecsAdvancedExecutionEnabled() && (!ecsExecutionEnabled() || !awsApplyEnabled()) {
+		return fmt.Errorf("advanced ECS execution requires both TENET_AWS_ENABLE_ECS_EXECUTION and TENET_AWS_ENABLE_APPLY")
+	}
 	if !ecsExecutionEnabled() {
 		return nil
 	}
@@ -79,11 +86,24 @@ func newApplyService(source apiCatalogSource, options api.Options, planStorePath
 			}, CheckCapabilities: checkECSCapabilities}
 			return handler.RollbackTarget(ctx, parent, role)
 		}
+		if ecsAdvancedExecutionEnabled() {
+			service.PrepareNativeRollback = func(ctx context.Context, parent applyrequest.Record, target applyrequest.ECSNativeRollback) error {
+				role, err := service.DeployerRoleReadiness(ctx, applyrequest.DeployerRoleTarget{DeploymentName: parent.DeploymentName})
+				if err != nil {
+					return err
+				}
+				_, err = newNativeRollbackHandler().Prepare(ctx, applyrequest.ECSOperationRequest{Intent: *parent.Operations[0].ECS, Role: role}, target)
+				return err
+			}
+		}
 		service.AuthorizeCreate = func(ctx context.Context, record applyrequest.Record) (*applyrequest.ExecutionPrincipal, error) {
-			if len(record.Operations) != 3 || record.Operations[0].ECS == nil || record.Operations[0].ECS.DeploymentController != "ECS" || record.Operations[0].ECS.DeploymentStrategy != "ROLLING" {
+			if len(record.Operations) != 3 || record.Operations[0].ECS == nil || record.Operations[0].ECS.DeploymentController != "ECS" || (record.Operations[0].ECS.DeploymentStrategy != "ROLLING" && (!ecsAdvancedExecutionEnabled() || record.Operations[0].ECS.Advanced == nil)) {
 				return nil, fmt.Errorf("%w: only reviewed native ECS Rolling plans support live execution", applyrequest.ErrPlanNotReady)
 			}
 			principal := &applyrequest.ExecutionPrincipal{Automatic: applyrequest.AutomaticApprovalFromContext(ctx), Identity: requestactor.AuthenticatedIdentityFromContext(ctx), Groups: requestactor.AuthenticatedGroupsFromContext(ctx)}
+			if principal.Automatic && record.Operations[0].ECS.DeploymentStrategy != "ROLLING" {
+				return nil, applyrequest.ErrExecutionUnauthorized
+			}
 			if err := authorizeECSAutomaticApproval(principal); err != nil {
 				return nil, err
 			}
@@ -136,22 +156,26 @@ func authorizeECSPrincipal(ctx context.Context, options api.Options, principal *
 func newNativeECSExecutor(source apiCatalogSource, options api.Options, planStorePath, applyStorePath string, logger *slog.Logger) applyrequest.Executor {
 	service := newApplyService(source, options, planStorePath, applyStorePath)
 	handlers := map[string]applyrequest.ECSOperationHandler{
-		string(reconcile.StepRegisterECSTaskDefinition): ecsexecution.Registration{ClientFor: func(ctx context.Context, role applyrequest.DeployerRoleReadiness) (ecsexecution.RegistrationClient, error) {
+		string(reconcile.StepRegisterECSTaskDefinition): ecsexecution.Registration{AllowAdvanced: ecsAdvancedExecutionEnabled(), ClientFor: func(ctx context.Context, role applyrequest.DeployerRoleReadiness) (ecsexecution.RegistrationClient, error) {
 			return ecsexecution.DeployerClient(ctx, role)
 		}, CheckCapabilities: checkECSCapabilities},
-		string(reconcile.StepUpdateECSService): ecsexecution.RollingService{ClientFor: func(ctx context.Context, role applyrequest.DeployerRoleReadiness) (ecsexecution.ServiceClient, error) {
+		string(reconcile.StepUpdateECSService): ecsexecution.StrategyHandler{Advanced: newAdvancedServiceHandler(), Rolling: ecsexecution.RollingService{ClientFor: func(ctx context.Context, role applyrequest.DeployerRoleReadiness) (ecsexecution.ServiceClient, error) {
 			return ecsexecution.DeployerClient(ctx, role)
-		}, CheckCapabilities: checkECSCapabilities},
-		string(reconcile.StepVerifyServiceStability): ecsexecution.RollingObservation{ClientFor: func(ctx context.Context, role applyrequest.DeployerRoleReadiness) (ecsexecution.ObservationClient, error) {
+		}, CheckCapabilities: checkECSCapabilities}},
+		string(reconcile.StepVerifyServiceStability): ecsexecution.StrategyHandler{Advanced: newAdvancedObservationHandler(), Rolling: ecsexecution.RollingObservation{ClientFor: func(ctx context.Context, role applyrequest.DeployerRoleReadiness) (ecsexecution.ObservationClient, error) {
 			return ecsexecution.DeployerClient(ctx, role)
-		}, CheckCapabilities: checkECSCapabilities},
+		}, CheckCapabilities: checkECSCapabilities}},
+		applyrequest.NativeRollbackOperationKind: ecsexecution.NativeRollbackOperation{NativeRollback: newNativeRollbackHandler()},
 	}
 	return applyrequest.Executor{Service: service, Logger: logger, PollInterval: time.Second, WorkerID: fmt.Sprintf("tenet-api-ecs-%d-%d", os.Getpid(), time.Now().UnixNano()), ECS: &applyrequest.ECSExecution{
-		Enabled: ecsExecutionEnabled(), Handlers: handlers,
+		Enabled: ecsExecutionEnabled(), AllowAdvanced: ecsAdvancedExecutionEnabled(), Handlers: handlers,
 		AuthorizeMutation: func(_ context.Context, record applyrequest.Record) error {
 			return authorizeECSAutomaticApproval(record.Principal)
 		},
 		Authorize: func(ctx context.Context, record applyrequest.Record) error {
+			if len(record.Operations) > 0 && record.Operations[0].ECS != nil && record.Operations[0].ECS.DeploymentStrategy != "ROLLING" && (!ecsAdvancedExecutionEnabled() || record.Principal != nil && record.Principal.Automatic) {
+				return applyrequest.ErrExecutionUnauthorized
+			}
 			return authorizeECSPrincipal(ctx, options, record.Principal, record.DeploymentName)
 		},
 		CurrentIntent: func(ctx context.Context, name string) (*domain.ECSDeploymentIntent, error) {

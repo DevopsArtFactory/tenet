@@ -56,12 +56,18 @@ func recoveryEvidence(parent Record) (*ECSRecovery, error) {
 }
 
 func (s Service) RequestRollback(ctx context.Context, parentID string) (CreateResult, error) {
-	if !s.EnableAWSApply || s.AuthorizeCreate == nil || s.RollbackTarget == nil {
+	if !s.EnableAWSApply || s.AuthorizeCreate == nil {
 		return CreateResult{}, ErrRecoveryUnavailable
 	}
 	parent, err := s.Get(ctx, parentID)
 	if err != nil {
 		return CreateResult{}, err
+	}
+	if len(parent.Operations) > 0 && parent.Operations[0].ECS != nil && parent.Operations[0].ECS.DeploymentStrategy != "ROLLING" {
+		return s.requestNativeRollback(ctx, parent)
+	}
+	if s.RollbackTarget == nil {
+		return CreateResult{}, ErrRecoveryUnavailable
 	}
 	recovery, err := recoveryEvidence(parent)
 	if err != nil {
@@ -174,6 +180,13 @@ func validateRecoveryTarget(r *ECSRecovery) error {
 }
 
 func reviewedECSOperationMatches(record Record, op Operation, reviewed planpreview.Operation) bool {
+	if record.NativeRollback != nil {
+		target := op.ECS.ServiceARN
+		if op.Kind == NativeRollbackOperationKind {
+			target = record.NativeRollback.DeploymentARN
+		}
+		return op.Target == target && reflect.DeepEqual(op.ECS, reviewed.ECS)
+	}
 	if record.Recovery == nil {
 		return op.Target == reviewed.Target && reflect.DeepEqual(op.ECS, reviewed.ECS)
 	}
@@ -249,7 +262,7 @@ func (s Service) checkFailedECSIntent(ctx context.Context, candidate Record) err
 		return err
 	}
 	for _, record := range records {
-		if record.Recovery != nil || record.Status != StatusFailed || record.Principal == nil || len(record.Operations) == 0 || record.Operations[0].ECS == nil {
+		if record.Recovery != nil || record.NativeRollback != nil || (record.Status != StatusFailed && record.NativeRollbackRequestID == "") || record.Principal == nil || len(record.Operations) == 0 || record.Operations[0].ECS == nil {
 			continue
 		}
 		if reflect.DeepEqual(record.Operations[0].ECS, candidate.Operations[0].ECS) {
@@ -262,7 +275,7 @@ func (s Service) checkFailedECSIntent(ctx context.Context, candidate Record) err
 				if err != nil {
 					return err
 				}
-				if parent.Status == StatusFailed && parent.Recovery == nil && len(parent.Operations) > 0 && reflect.DeepEqual(parent.Operations[0].ECS, candidate.Operations[0].ECS) {
+				if ecsRetryableParent(parent) && len(parent.Operations) > 0 && reflect.DeepEqual(parent.Operations[0].ECS, candidate.Operations[0].ECS) {
 					return nil
 				}
 			}
@@ -280,7 +293,7 @@ func (s Service) Retry(ctx context.Context, parentID string) (CreateResult, erro
 	if err != nil {
 		return CreateResult{}, err
 	}
-	if parent.Status != StatusFailed || parent.Recovery != nil || parent.Principal == nil || len(parent.Operations) != 3 || parent.Operations[0].ECS == nil {
+	if !ecsRetryableParent(parent) || parent.Principal == nil || len(parent.Operations) != 3 || parent.Operations[0].ECS == nil {
 		return CreateResult{}, ErrRecoveryUnavailable
 	}
 	if _, err := s.AuthorizeCreate(ctx, parent); err != nil {
@@ -300,7 +313,7 @@ func (s Service) Retry(ctx context.Context, parentID string) (CreateResult, erro
 		return CreateResult{}, err
 	}
 	for _, record := range records {
-		if record.Recovery != nil && record.Recovery.ApplyID == parent.ID && !record.Status.IsTerminal() {
+		if ((record.Recovery != nil && record.Recovery.ApplyID == parent.ID) || (record.NativeRollback != nil && record.NativeRollback.ParentApplyID == parent.ID)) && !record.Status.IsTerminal() {
 			return CreateResult{}, fmt.Errorf("%w: rollback is still active", ErrRecoveryUnavailable)
 		}
 		if record.RetryOf == parent.ID {
@@ -319,6 +332,9 @@ func (s Service) Retry(ctx context.Context, parentID string) (CreateResult, erro
 }
 
 func failedDeploymentID(record Record) string {
+	if len(record.Operations) > 1 && record.Operations[1].ECSCheckpoint != nil && record.Operations[1].ECSCheckpoint.Result.ServiceDeploymentARN != "" {
+		return record.Operations[1].ECSCheckpoint.Result.ServiceDeploymentARN
+	}
 	if len(record.Operations) > 1 && record.Operations[1].ECSCheckpoint != nil && record.Operations[1].ECSCheckpoint.Result.ServiceDeploymentID != "" {
 		return record.Operations[1].ECSCheckpoint.Result.ServiceDeploymentID
 	}
@@ -338,8 +354,12 @@ func (s Service) validateECSRetry(ctx context.Context, record Record) error {
 	if err != nil {
 		return err
 	}
-	if parent.Status != StatusFailed || parent.Recovery != nil || record.Recovery != nil || parent.DeploymentName != record.DeploymentName || len(parent.Operations) != 3 || len(record.Operations) != 3 || !reflect.DeepEqual(parent.Operations[0].ECS, record.Operations[0].ECS) || record.RetryDeploymentID != failedDeploymentID(parent) {
+	if !ecsRetryableParent(parent) || record.Recovery != nil || record.NativeRollback != nil || parent.DeploymentName != record.DeploymentName || len(parent.Operations) != 3 || len(record.Operations) != 3 || !reflect.DeepEqual(parent.Operations[0].ECS, record.Operations[0].ECS) || record.RetryDeploymentID != failedDeploymentID(parent) {
 		return ErrRecoveryUnavailable
 	}
 	return nil
+}
+
+func ecsRetryableParent(parent Record) bool {
+	return parent.Recovery == nil && parent.NativeRollback == nil && (parent.Status == StatusFailed || (parent.Status == StatusCancelled && parent.NativeRollbackRequestID != ""))
 }

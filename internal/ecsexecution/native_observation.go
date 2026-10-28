@@ -56,12 +56,12 @@ func (h NativeObservation) Preflight(ctx context.Context, r applyrequest.ECSOper
 	return h.CheckCapabilities(ctx, r.Role, checks)
 }
 func (h NativeObservation) Prepare(ctx context.Context, r applyrequest.ECSOperationRequest) (applyrequest.ECSOperationResult, error) {
-	return h.prepare(ctx, r, nil)
+	return h.prepare(ctx, r, r.NativeRollback)
 }
 func (h NativeObservation) prepare(_ context.Context, r applyrequest.ECSOperationRequest, rollback *NativeRollbackTarget) (applyrequest.ECSOperationResult, error) {
 	var accepted applyrequest.ECSOperationResult
 	if rollback != nil {
-		if err := rollback.validate(r); err != nil {
+		if err := rollback.Validate(r.Intent); err != nil {
 			return accepted, err
 		}
 		accepted = rollbackResult(*rollback)
@@ -109,7 +109,7 @@ func (h NativeObservation) Execute(ctx context.Context, r applyrequest.ECSOperat
 	return applyrequest.ECSOperationResult{}, &applyrequest.ECSObservationPending{Result: result.Result, RetryAfter: result.RetryAfter}
 }
 func (h NativeObservation) Reconcile(ctx context.Context, r applyrequest.ECSOperationRequest) (applyrequest.ECSReconciliation, error) {
-	return h.reconcile(ctx, r, nil)
+	return h.reconcile(ctx, r, r.NativeRollback)
 }
 func (h NativeObservation) reconcile(ctx context.Context, r applyrequest.ECSOperationRequest, rollback *NativeRollbackTarget) (applyrequest.ECSReconciliation, error) {
 	if err := ctx.Err(); err != nil {

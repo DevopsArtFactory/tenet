@@ -161,25 +161,27 @@ type Transition struct {
 
 // Record is one immutable apply request derived from a persisted ready plan preview.
 type Record struct {
-	RetryDeploymentID  string                 `json:"retryDeploymentId,omitempty"`
-	Recovery           *ECSRecovery           `json:"recovery,omitempty"`
-	RetryOf            string                 `json:"retryOf,omitempty"`
-	Principal          *ExecutionPrincipal    `json:"principal,omitempty"`
-	ECSRuntime         *ECSRolloutObservation `json:"ecsRuntime,omitempty"`
-	ID                 string                 `json:"id"`
-	PlanID             string                 `json:"planId"`
-	DeploymentName     string                 `json:"deploymentName"`
-	Status             Status                 `json:"status"`
-	CreatedAt          string                 `json:"createdAt"`
-	Actor              requestactor.Actor     `json:"actor"`
-	Error              string                 `json:"error,omitempty"`
-	Details            []string               `json:"details,omitempty"`
-	Lifecycle          Lifecycle              `json:"lifecycle,omitempty"`
-	Claim              *Claim                 `json:"claim,omitempty"`
-	Transitions        []Transition           `json:"transitions,omitempty"`
-	Operations         []Operation            `json:"operations,omitempty"`
-	ExecutionReadiness *ExecutionReadiness    `json:"executionReadiness,omitempty"`
-	Source             SourceContext          `json:"source"`
+	NativeRollback          *ECSNativeRollback     `json:"nativeRollback,omitempty"`
+	NativeRollbackRequestID string                 `json:"nativeRollbackRequestId,omitempty"`
+	RetryDeploymentID       string                 `json:"retryDeploymentId,omitempty"`
+	Recovery                *ECSRecovery           `json:"recovery,omitempty"`
+	RetryOf                 string                 `json:"retryOf,omitempty"`
+	Principal               *ExecutionPrincipal    `json:"principal,omitempty"`
+	ECSRuntime              *ECSRolloutObservation `json:"ecsRuntime,omitempty"`
+	ID                      string                 `json:"id"`
+	PlanID                  string                 `json:"planId"`
+	DeploymentName          string                 `json:"deploymentName"`
+	Status                  Status                 `json:"status"`
+	CreatedAt               string                 `json:"createdAt"`
+	Actor                   requestactor.Actor     `json:"actor"`
+	Error                   string                 `json:"error,omitempty"`
+	Details                 []string               `json:"details,omitempty"`
+	Lifecycle               Lifecycle              `json:"lifecycle,omitempty"`
+	Claim                   *Claim                 `json:"claim,omitempty"`
+	Transitions             []Transition           `json:"transitions,omitempty"`
+	Operations              []Operation            `json:"operations,omitempty"`
+	ExecutionReadiness      *ExecutionReadiness    `json:"executionReadiness,omitempty"`
+	Source                  SourceContext          `json:"source"`
 }
 
 // ClaimRequest captures one executor's local-safe attempt to claim queued work.

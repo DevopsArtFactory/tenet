@@ -77,6 +77,8 @@ type ECSOperationResult struct {
 
 // ECSOperationRequest binds an injected handler to reviewed intent and durable identity.
 type ECSOperationRequest struct {
+	NativeRollback *ECSNativeRollback
+
 	RetryDeploymentID string
 	// BeforeMutation must succeed immediately before a concrete SDK write.
 	BeforeMutation func(context.Context) error
@@ -156,6 +158,8 @@ func (e *ECSCallError) Unwrap() error {
 // ECSExecution is an explicit, fail-closed live boundary. No production handlers
 // are installed by default; supplying handlers alone does not opt into execution.
 type ECSExecution struct {
+	AllowAdvanced bool
+
 	Enabled  bool
 	Handlers map[string]ECSOperationHandler
 	// Authorize must recheck a trusted authenticated subject's operator role and
@@ -195,6 +199,23 @@ func (e Executor) advanceECS(ctx context.Context, snapshot Record) error {
 	record, err := store.Get(ctx, snapshot.ID)
 	if err != nil {
 		return err
+	}
+	if record.NativeRollback != nil && !record.Status.IsTerminal() {
+		// Validate the saved recovery before retiring any still-running forward owner.
+		if _, err := e.validateECS(ctx, record, ecsNeedsMutation(record)); err != nil {
+			return e.ecsQueuedValidationError(ctx, record, err)
+		}
+		if err := e.Service.handoffNativeRollback(ctx, record); err != nil {
+			return err
+		}
+	} else if len(record.Operations) == 3 && record.Operations[0].ECS.DeploymentStrategy != "ROLLING" {
+		pending, err := e.Service.hasPendingNativeRollback(ctx, record)
+		if err != nil {
+			return err
+		}
+		if pending {
+			return nil
+		}
 	}
 	if record.Status.IsTerminal() {
 		return e.automaticECSRecovery(ctx, record)
@@ -290,6 +311,9 @@ func ecsRequest(record Record, index int, role DeployerRoleReadiness) ECSOperati
 	op := record.Operations[index]
 	sum := sha256.Sum256([]byte(record.ID + "/" + op.ID))
 	request := ECSOperationRequest{ApplyID: record.ID, OperationID: op.ID, RequestID: "tenet-" + hex.EncodeToString(sum[:16]), Recovery: record.Recovery.Clone(), RetryDeploymentID: record.RetryDeploymentID, Intent: *op.ECS, Role: role}
+	if record.NativeRollback != nil {
+		request.NativeRollback = record.NativeRollback.Clone()
+	}
 	for _, previous := range record.Operations[:index] {
 		if previous.ECSCheckpoint != nil && previous.ECSCheckpoint.State == "complete" {
 			request.PriorResults = append(request.PriorResults, previous.ECSCheckpoint.Result.Clone())
@@ -313,7 +337,7 @@ func (e Executor) validateECS(ctx context.Context, record Record, mutation bool)
 		return DeployerRoleReadiness{}, err
 	}
 	plan = planpreview.NormalizeOperationIDs(plan)
-	if plan.Status != planpreview.StatusReady || plan.ID != record.PlanID || plan.DeploymentName != record.DeploymentName || !reviewedDriftLink(record, plan) || record.Source.Fingerprint != plan.Source.Fingerprint || !reflect.DeepEqual(record.Source.Git, plan.Source.Git) || record.Source.Fingerprint == "" || len(plan.Operations) != len(record.Operations) || len(record.Operations) != 3 {
+	if plan.Status != planpreview.StatusReady || plan.ID != record.PlanID || plan.DeploymentName != record.DeploymentName || !reviewedDriftLink(record, plan) || record.Source.Fingerprint != plan.Source.Fingerprint || !reflect.DeepEqual(record.Source.Git, plan.Source.Git) || record.Source.Fingerprint == "" || len(plan.Operations) != 3 || (record.NativeRollback == nil && len(record.Operations) != 3) || (record.NativeRollback != nil && len(record.Operations) != 2) {
 		return DeployerRoleReadiness{}, fmt.Errorf("apply does not match its reviewed native ECS plan")
 	}
 	if err := e.Service.validateECSRetry(ctx, record); err != nil {
@@ -322,7 +346,13 @@ func (e Executor) validateECS(ctx context.Context, record Record, mutation bool)
 	if err := e.Service.validateECSRecovery(ctx, record, plan); err != nil {
 		return DeployerRoleReadiness{}, err
 	}
+	if err := e.Service.validateNativeRollback(ctx, record, plan); err != nil {
+		return DeployerRoleReadiness{}, err
+	}
 	kinds := []string{string(reconcile.StepRegisterECSTaskDefinition), string(reconcile.StepUpdateECSService), string(reconcile.StepVerifyServiceStability)}
+	if record.NativeRollback != nil {
+		kinds = []string{NativeRollbackOperationKind, string(reconcile.StepVerifyServiceStability)}
+	}
 	expectedID, idErr := stableRecordID(record)
 	if idErr != nil || expectedID != record.ID {
 		return DeployerRoleReadiness{}, fmt.Errorf("apply identity does not match reviewed source")
@@ -330,8 +360,12 @@ func (e Executor) validateECS(ctx context.Context, record Record, mutation bool)
 	started := false
 	incomplete := false
 	for i, op := range record.Operations {
-		reviewed := plan.Operations[i]
-		if op.ECS == nil || op.ECS.DeploymentController != "ECS" || op.ECS.DeploymentStrategy != "ROLLING" || op.Kind != kinds[i] || e.ECS.Handlers[op.Kind] == nil || op.ID != reviewed.ID || op.Kind != reviewed.Kind || !reviewedECSOperationMatches(record, op, reviewed) || !reflect.DeepEqual(op.ECS, record.Operations[0].ECS) {
+		reviewIndex := i
+		if record.NativeRollback != nil {
+			reviewIndex++
+		}
+		reviewed := plan.Operations[reviewIndex]
+		if op.ECS == nil || op.ECS.DeploymentController != "ECS" || (op.ECS.DeploymentStrategy != "ROLLING" && !e.ECS.AllowAdvanced) || op.Kind != kinds[i] || e.ECS.Handlers[op.Kind] == nil || op.ID != reviewed.ID || (record.NativeRollback == nil && op.Kind != reviewed.Kind) || !reviewedECSOperationMatches(record, op, reviewed) || !reflect.DeepEqual(op.ECS, record.Operations[0].ECS) {
 			return DeployerRoleReadiness{}, fmt.Errorf("unsupported or altered reviewed ECS operation")
 		}
 		if cp := op.ECSCheckpoint; cp != nil {
@@ -359,7 +393,7 @@ func (e Executor) validateECS(ctx context.Context, record Record, mutation bool)
 				return DeployerRoleReadiness{}, err
 			}
 		}
-		if record.Recovery == nil {
+		if record.Recovery == nil && record.NativeRollback == nil {
 			if err := e.Service.checkFailedECSIntent(ctx, record); err != nil {
 				return DeployerRoleReadiness{}, err
 			}
@@ -372,13 +406,13 @@ func (e Executor) validateECS(ctx context.Context, record Record, mutation bool)
 		if record.Recovery != nil {
 			expected = record.Recovery.ForwardIntent
 		}
-		if !reflect.DeepEqual(current, expected) {
+		if record.NativeRollback == nil && !reflect.DeepEqual(current, expected) {
 			return DeployerRoleReadiness{}, ErrSourceFingerprintConflict
 		}
 	}
 	// The full preview fingerprint includes observed runtime state; once execution
 	// starts, compare desired intent above so our own rollout does not invalidate it.
-	if !started && record.Recovery == nil {
+	if !started && record.Recovery == nil && record.NativeRollback == nil {
 		if err := e.Service.validateCurrentFingerprint(ctx, plan); err != nil {
 			return DeployerRoleReadiness{}, err
 		}
@@ -463,7 +497,7 @@ func (e Executor) runECSOperation(ctx context.Context, record Record, role Deplo
 	if op.ECSCheckpoint != nil && op.ECSCheckpoint.State == "retryable_rejection" && op.ECSCheckpoint.Attempts >= 3 {
 		return e.finishECS(ctx, record, StatusFailed, "ECS execution retries exhausted after confirmed AWS rejections", nil)
 	}
-	if op.ECSCheckpoint != nil && op.ECSCheckpoint.State == "in_flight" && (!op.ECSCheckpoint.MutationGuarded || op.ECSCheckpoint.MutationAuthorizedAt != "" || index == 2) {
+	if op.ECSCheckpoint != nil && op.ECSCheckpoint.State == "in_flight" && (!op.ECSCheckpoint.MutationGuarded || op.ECSCheckpoint.MutationAuthorizedAt != "" || op.Kind == string(reconcile.StepVerifyServiceStability)) {
 		result, err := handler.Reconcile(ctx, request)
 		if err != nil {
 			return e.recordECSError(ctx, record, index, err)
@@ -489,7 +523,7 @@ func (e Executor) runECSOperation(ctx context.Context, record Record, role Deplo
 	}
 	// Refresh authorization/intent/role and concrete capabilities immediately before
 	// a write, then persist in-flight intent before allowing the handler to call AWS.
-	refreshedRole, err := e.validateECS(ctx, record, index < 2)
+	refreshedRole, err := e.validateECS(ctx, record, op.Kind != string(reconcile.StepVerifyServiceStability))
 	if err != nil {
 		return err
 	}
@@ -680,7 +714,7 @@ func (e Executor) finishECS(ctx context.Context, record Record, status Status, m
 }
 
 func ecsApplyConflicts(candidate, other Record) bool {
-	if candidate.ID == other.ID || other.Status != StatusRunning || len(candidate.Operations) == 0 || candidate.Operations[0].ECS == nil {
+	if candidate.ID == other.ID || (other.Status != StatusRunning && !(other.NativeRollback != nil && other.Status == StatusQueued)) || len(candidate.Operations) == 0 || candidate.Operations[0].ECS == nil {
 		return false
 	}
 	if candidate.DeploymentName == other.DeploymentName {
@@ -708,7 +742,7 @@ func (e Executor) ecsRefreshHeartbeat(current Record) (Record, error) {
 }
 
 func ecsAllComplete(record Record) bool {
-	if len(record.Operations) != 3 {
+	if (record.NativeRollback == nil && len(record.Operations) != 3) || (record.NativeRollback != nil && len(record.Operations) != 2) {
 		return false
 	}
 	for _, op := range record.Operations {
@@ -720,12 +754,12 @@ func ecsAllComplete(record Record) bool {
 }
 
 func ecsNeedsMutation(record Record) bool {
-	for i, op := range record.Operations {
+	for _, op := range record.Operations {
 		cp := op.ECSCheckpoint
 		if cp != nil && cp.State == "complete" {
 			continue
 		}
-		if i == 2 {
+		if op.Kind == string(reconcile.StepVerifyServiceStability) {
 			return false
 		}
 		return cp == nil || cp.State != "in_flight" || (cp.MutationGuarded && cp.MutationAuthorizedAt == "")

@@ -864,22 +864,23 @@ var (
 )
 
 type operatorContextResponse struct {
-	ECSExecutionEnabled   bool                                         `json:"ecsExecutionEnabled"`
-	TrustedHeaders        operatorContextTrustedHeaders                `json:"trustedHeaders"`
-	AuthRuntime           AuthRuntimeDiagnostic                        `json:"authRuntime"`
-	Enforcement           operatorContextEnforcement                   `json:"enforcement"`
-	Identity              requestactor.AuthenticatedIdentity           `json:"identity"`
-	IdentityHeaderSupport operatorContextIdentityHeaderSupport         `json:"identityHeaderSupport"`
-	IdentityProvenance    requestactor.AuthenticatedIdentityProvenance `json:"identityProvenance"`
-	Actor                 requestactor.Actor                           `json:"actor"`
-	ActorHeaderSupport    operatorContextIdentityHeaderSupport         `json:"actorHeaderSupport"`
-	ActorProvenance       requestactor.ActorProvenance                 `json:"actorProvenance"`
-	ActorAttribution      requestactor.ActorAttribution                `json:"actorAttribution"`
-	Roles                 operatorContextRoles                         `json:"roles"`
-	DeploymentAccess      operatorContextDeploymentAccess              `json:"deploymentAccess"`
-	AccessVerdicts        operatorContextAccessVerdicts                `json:"accessVerdicts"`
-	RepositoryPolicy      operatorContextRepositoryPolicy              `json:"repositoryPolicy"`
-	DesiredStateSource    operatorContextDesiredStateSource            `json:"desiredStateSource"`
+	ECSAdvancedExecutionEnabled bool                                         `json:"ecsAdvancedExecutionEnabled"`
+	ECSExecutionEnabled         bool                                         `json:"ecsExecutionEnabled"`
+	TrustedHeaders              operatorContextTrustedHeaders                `json:"trustedHeaders"`
+	AuthRuntime                 AuthRuntimeDiagnostic                        `json:"authRuntime"`
+	Enforcement                 operatorContextEnforcement                   `json:"enforcement"`
+	Identity                    requestactor.AuthenticatedIdentity           `json:"identity"`
+	IdentityHeaderSupport       operatorContextIdentityHeaderSupport         `json:"identityHeaderSupport"`
+	IdentityProvenance          requestactor.AuthenticatedIdentityProvenance `json:"identityProvenance"`
+	Actor                       requestactor.Actor                           `json:"actor"`
+	ActorHeaderSupport          operatorContextIdentityHeaderSupport         `json:"actorHeaderSupport"`
+	ActorProvenance             requestactor.ActorProvenance                 `json:"actorProvenance"`
+	ActorAttribution            requestactor.ActorAttribution                `json:"actorAttribution"`
+	Roles                       operatorContextRoles                         `json:"roles"`
+	DeploymentAccess            operatorContextDeploymentAccess              `json:"deploymentAccess"`
+	AccessVerdicts              operatorContextAccessVerdicts                `json:"accessVerdicts"`
+	RepositoryPolicy            operatorContextRepositoryPolicy              `json:"repositoryPolicy"`
+	DesiredStateSource          operatorContextDesiredStateSource            `json:"desiredStateSource"`
 }
 
 // AuthRuntimeDiagnostic describes optional Tenet-managed authentication runtime capability.
@@ -1154,7 +1155,7 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 	summary := buildOperatorContextAccessSummary(r.Context(), options, deployments, scopes)
 	repositoryPolicy := buildOperatorContextRepositoryPolicy(r.Context(), options, identity, requestactor.AuthenticatedGroupsFromContext(r.Context()))
 	return operatorContextResponse{
-		ECSExecutionEnabled: options.ECSExecutionEnabled,
+		ECSExecutionEnabled: options.ECSExecutionEnabled, ECSAdvancedExecutionEnabled: options.ECSAdvancedExecutionEnabled,
 		TrustedHeaders: operatorContextTrustedHeaders{
 			Enabled:                               options.TrustAuthenticatedHeaders,
 			AuthenticatedIdentityRequired:         options.RequireAuthenticatedIdentity,
@@ -2449,6 +2450,7 @@ func filterAuthorizedProjectEnvironmentOverviewDetail(detail catalog.ProjectEnvi
 
 // Options configures the API router.
 type Options struct {
+	ECSAdvancedExecutionEnabled          bool
 	ECSExecutionEnabled                  bool
 	RequestApplyRollback                 func(context.Context, string) (applyrequest.CreateResult, error)
 	RetryApplyRequest                    func(context.Context, string) (applyrequest.CreateResult, error)
