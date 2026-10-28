@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -25,17 +26,25 @@ import (
 
 func TestNativeAPIExecutorPipelineHandsOffAndRecoversAllStrategies(t *testing.T) {
 	type scenario struct {
-		count int
-		mode  string
+		count     int
+		mode      string
+		automatic bool
 	}
 	var scenarios []scenario
 	for _, count := range []int{1, 2, 4} {
 		for _, mode := range []string{"accepted", "lost-response", "ecs-already-rolling-back", "finished-before-stop", "capacity-lost-response", "capacity-rejected", "capacity-already-restored"} {
 			if count != 2 || !strings.HasPrefix(mode, "capacity-") {
-				scenarios = append(scenarios, scenario{count, mode})
+				scenarios = append(scenarios, scenario{count: count, mode: mode})
 			}
 		}
 	}
+	for _, count := range []int{1, 4} {
+		for _, mode := range []string{"accepted", "lost-response", "ecs-already-rolling-back", "capacity-lost-response", "git-accepted"} {
+			scenarios = append(scenarios, scenario{count, mode, true})
+		}
+	}
+	scenarios = append(scenarios, scenario{2, "accepted", true})
+
 	for _, strategy := range []string{"BLUE_GREEN", "CANARY", "LINEAR"} {
 		for _, test := range scenarios {
 			count, mode := test.count, test.mode
@@ -44,15 +53,22 @@ func TestNativeAPIExecutorPipelineHandsOffAndRecoversAllStrategies(t *testing.T)
 			if mode == "ecs-already-rolling-back" {
 				expectedStops = 0
 			}
-			t.Run(fmt.Sprintf("%s/%d/%s", strategy, count, mode), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%d/%s/automatic=%v", strategy, count, mode, test.automatic), func(t *testing.T) {
 				ctx := context.Background()
 				backend, update, r := nativeFixture(t, strategy)
 				r.Intent.DesiredCount = count
+				r.Intent.RollbackOnFailure = test.automatic
+				if mode == "git-accepted" {
+					r.Intent.SyncMode = "automatic"
+				}
 				// Exercise actual registration rather than preloading its result.
 				delete(backend.definitions, r.PriorResults[0].TaskDefinitionARN)
 				backend.registrationFake.revisions = nil
 				backend.registrationFake.writes = 0
 				detail := catalog.DeploymentOverviewDetail{Name: "worker", TargetType: "ecs", Strategy: strings.ToLower(strategy), ExecutionMode: "ecsNative", ECS: r.Intent.Clone(), DesiredArtifact: domain.DeploymentArtifact{Image: r.Intent.Image}}
+				if mode == "git-accepted" {
+					detail.Git = &domain.GitSource{Repository: "org/desired", Ref: "main", Revision: strings.Repeat("a", 40)}
+				}
 				dir := t.TempDir()
 				plans := planpreview.Service{Store: planpreview.NewFileStore(filepath.Join(dir, "plans.json")), LoadDetail: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) { return detail, nil }}
 				plan, err := plans.Create(ctx, "worker", planpreview.CreateRequest{})
@@ -75,7 +91,7 @@ func TestNativeAPIExecutorPipelineHandsOffAndRecoversAllStrategies(t *testing.T)
 					if !allowed || !identity.Authenticated {
 						return nil, applyrequest.ErrExecutionUnauthorized
 					}
-					return &applyrequest.ExecutionPrincipal{Identity: identity}, nil
+					return &applyrequest.ExecutionPrincipal{Identity: identity, Automatic: applyrequest.AutomaticApprovalFromContext(ctx)}, nil
 				}}
 				service.PrepareNativeRollback = func(ctx context.Context, parent applyrequest.Record, target applyrequest.ECSNativeRollback) error {
 					_, err := stopHandler.Prepare(ctx, applyrequest.ECSOperationRequest{Intent: *parent.Operations[0].ECS, Role: role}, target)
@@ -117,7 +133,11 @@ func TestNativeAPIExecutorPipelineHandsOffAndRecoversAllStrategies(t *testing.T)
 					router.ServeHTTP(out, request)
 					return out
 				}
-				created, err := service.Create(requestactor.WithAuthenticatedIdentityContext(ctx, actor), plan.Record.ID)
+				approvalContext := requestactor.WithAuthenticatedIdentityContext(ctx, actor)
+				if mode == "git-accepted" {
+					approvalContext = applyrequest.WithAutomaticApproval(approvalContext)
+				}
+				created, err := service.Create(approvalContext, plan.Record.ID)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -140,14 +160,32 @@ func TestNativeAPIExecutorPipelineHandsOffAndRecoversAllStrategies(t *testing.T)
 					d.Rollback = &types.Rollback{ServiceRevisionArn: aws.String(before.PreviousServiceRevisionARN)}
 					backend.deployments[before.ServiceDeploymentARN] = d
 				}
-				// Repeated operator requests resolve to one server-authored child.
-				response := post("/v1/applies/" + parent.ID + "/rollback")
-				if response.Code != http.StatusCreated {
-					t.Fatalf("rollback API: %d %s", response.Code, response.Body.String())
-				}
+
 				var child applyrequest.Record
-				if err := json.Unmarshal(response.Body.Bytes(), &child); err != nil {
-					t.Fatal(err)
+				if test.automatic {
+					if mode != "ecs-already-rolling-back" {
+						d := backend.deployments[before.ServiceDeploymentARN]
+						d.Alarms = &types.ServiceDeploymentAlarms{Status: types.ServiceDeploymentRollbackMonitorsStatusTriggered, TriggeredAlarmNames: []string{r.Intent.Advanced.Alarms.Names[0]}}
+						backend.deployments[before.ServiceDeploymentARN] = d
+					}
+					if err := executor.RunOnce(ctx); err != nil {
+						t.Fatal(err)
+					}
+					parent, err = service.Get(ctx, parent.ID)
+					if err != nil || parent.Status != applyrequest.StatusFailed || parent.ECSRuntime == nil {
+						t.Fatal("native failure signal did not preserve failed forward", parent, err)
+					}
+					if err := executor.RunOnce(ctx); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					response := post("/v1/applies/" + parent.ID + "/rollback")
+					if response.Code != http.StatusCreated {
+						t.Fatalf("rollback API: %d %s", response.Code, response.Body.String())
+					}
+					if err := json.Unmarshal(response.Body.Bytes(), &child); err != nil {
+						t.Fatal(err)
+					}
 				}
 				// API response may use a wrapper; locate the authoritative child via store.
 				all, err := service.Store.List(ctx)
@@ -159,7 +197,7 @@ func TestNativeAPIExecutorPipelineHandsOffAndRecoversAllStrategies(t *testing.T)
 						child = record
 					}
 				}
-				if child.NativeRollback == nil || child.NativeRollback.SourceRevisionARN != before.PreviousServiceRevisionARN || child.NativeRollback.SourceTaskDefinitionARN != before.PreviousTaskDefinitionARN {
+				if child.NativeRollback == nil || child.NativeRollback.Automatic != test.automatic || !reflect.DeepEqual(child.Principal, parent.Principal) && test.automatic || child.NativeRollback.SourceRevisionARN != before.PreviousServiceRevisionARN || child.NativeRollback.SourceTaskDefinitionARN != before.PreviousTaskDefinitionARN {
 					t.Fatal("API accepted caller source or lost pre-write source evidence")
 				}
 				again := post("/v1/applies/" + parent.ID + "/rollback")
@@ -167,7 +205,11 @@ func TestNativeAPIExecutorPipelineHandsOffAndRecoversAllStrategies(t *testing.T)
 					t.Fatalf("duplicate recovery %d %s", again.Code, again.Body.String())
 				}
 				parent, _ = service.Get(ctx, parent.ID)
-				if parent.Status != applyrequest.StatusCancelled || parent.NativeRollbackRequestID != child.ID {
+				expectedParentStatus := applyrequest.StatusCancelled
+				if test.automatic {
+					expectedParentStatus = applyrequest.StatusFailed
+				}
+				if parent.Status != expectedParentStatus || parent.NativeRollbackRequestID != child.ID {
 					t.Fatal("forward ownership did not transfer")
 				}
 				if mode == "finished-before-stop" {
@@ -272,6 +314,16 @@ func TestNativeAPIExecutorPipelineHandsOffAndRecoversAllStrategies(t *testing.T)
 				done, err := service.Get(ctx, child.ID)
 				if err != nil || done.Status != applyrequest.StatusSucceeded || done.ECSRuntime.Reason != "native_source_recovered" || done.ECSRuntime.DeadlineAt != deadline || done.ECSRuntime.DesiredCount != 2 || backend.service.DesiredCount != 2 || capacity.capacityCalls != expectedCapacityCalls || stopped.stops != expectedStops || backend.writes != 1 || backend.registrationFake.writes != 1 {
 					t.Fatalf("native recovery pipeline did not converge without extra writes: %+v %v", done, err)
+				}
+				if test.automatic {
+					if err := executor.RunOnce(ctx); err != nil {
+						t.Fatal(err)
+					}
+					rows, err := service.Store.List(ctx)
+					failed, loadErr := service.Get(ctx, parent.ID)
+					if err != nil || loadErr != nil || len(rows) != 2 || failed.Status != applyrequest.StatusFailed || !reflect.DeepEqual(failed.Operations[1].ECSCheckpoint.Result, before) {
+						t.Fatal("automatic recovery looped or rewrote forward evidence", rows, err)
+					}
 				}
 			})
 		}

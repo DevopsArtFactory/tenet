@@ -391,8 +391,8 @@ reviewed image still differs; active conflicting rollout checks still apply.
 
 ## Rolling recovery and failed-intent holds
 
-`ecs.rollbackOnFailure` is an explicit, default-off Rolling policy included in
-reviewed intent. A separate recovery Apply binds the failed forward Apply,
+`ecs.rollbackOnFailure` is an explicit, default-off policy included in reviewed
+intent. For Rolling, a separate recovery Apply binds the failed forward Apply,
 registered revision/deployment identity, previous service snapshot and exact
 previous ACTIVE target. The original failed record remains unchanged. Recovery
 uses the same authorization, service lock, durable mutation guard and observer;
@@ -405,6 +405,8 @@ its own `retryOf` identity and a fresh source plan; a new Git intent can instead
 reviewed normally. Recovery and retry creation share the service execution lock.
 Read [ECS Rolling recovery](../runbooks/ecs-rolling-recovery.md) for API routes,
 policy/failure criteria, concurrency, audit and the gated integration scenario.
+Blue-Green, Canary and Linear use [dedicated native automatic recovery](../runbooks/ecs-native-recovery.md#opt-in-to-automatic-failure-recovery),
+including captured pre-update count restoration; they never use Rolling handlers.
 
 Plan and Apply file stores share the same process-level sidecar-lock primitive.
 Concurrent API/reconciler plan creates load, deduplicate and append while holding

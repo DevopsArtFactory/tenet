@@ -129,6 +129,47 @@ have drained. A failed/rejected recovery remains separate from its cancelled or
 failed parent. The failed forward Git intent stays held; explicit retry or a
 different reviewed Git intent is required after ownership is released.
 
+## Opt in to automatic failure recovery
+
+Add `ecs.rollbackOnFailure: true` to the reviewed deployment manifest. The default
+is false. This supports native Blue-Green, Canary and Linear as well as the
+existing Rolling flow, using their separate recovery handlers. Native advanced
+inputs and the three live execution flags above remain required.
+
+```yaml
+ecs:
+  # Keep the existing reviewed placement and advanced routing/traffic inputs.
+  rollbackOnFailure: true
+```
+
+Tenet acts on a correlated native deployment alarm reported as `TRIGGERED` with
+a reviewed alarm name, or on ECS reporting source rollback requested/in progress/
+completed. Configure native deployment alarms/hooks to supply AWS failure
+signals. `ecs.advanced.alarms.rollback` controls ECS's own alarm rollback; the
+separate `ecs.rollbackOnFailure` flag authorizes Tenet's recovery Apply, including
+restoration of the captured pre-update count. If ECS already started rollback,
+Tenet observes it without another Stop request.
+
+The worker saves the failed forward outcome first, then approves one recovery
+Apply using the original authenticated principal and its reviewed policy. The
+recovery's `nativeRollback.automatic` marker is separate from
+`principal.automatic`, which identifies Git automation approval. Current RBAC,
+strategy/live flags, role and IAM remain mandatory. Git-approved recovery also
+requires the global automatic-sync flags and configured service subject. Human-
+approved deployment recovery inherits that human's explicit policy and scope.
+A new/withdrawn desired intent, paused automation or revoked access blocks new
+automatic recovery writes; already accepted read-only observation can finish
+under current access. Restore the reviewed policy/gates to resume paused work.
+
+Timeouts, unavailable reads, health-only degradation, foreign/unowned/adopted
+updates, stopped deployments, rollback failures and newer/ambiguous history do
+not authorize a fresh automatic rollback. Unsupported terminal states require
+operator review; Tenet never falls back to Rolling/CodeDeploy execution. An
+explicit retry or an existing manual recovery suppresses automatic scheduling.
+Failed recovery never recursively creates another recovery. The failed Git
+intent remains held after successful recovery until explicit retry or a new
+reviewed desired intent.
+
 ## Gated isolated AWS verification
 
 This runbook is intentionally **not executed by tests or CI**. Select a disposable
@@ -165,7 +206,15 @@ Do not use example production-looking ARNs as real targets.
    failure and an explicitly rejected capacity request.
 10. After recovery is terminal, explicitly retry the reviewed Git intent. Confirm
    a new deployment identity and no concurrent recovery/update calls.
-11. Disable the flags, restore the disposable service intentionally, and remove
+11. Enable `ecs.rollbackOnFailure` on each strategy and repeat scale-out/in
+   with a reviewed alarm failure. Confirm one failed forward record and one
+   automatic recovery, the original principal/automatic marker, source rollback
+   and prior count/health verification. Repeat with ECS already rolling back;
+   confirm no duplicate Stop, count write or automatic retry loop after restart.
+12. Verify the default-off policy, unavailable/timeout signals, unreviewed alarms,
+   changed desired intent, manual recovery/explicit retry, paused Git automation
+   and revoked scope cannot authorize automatic recovery writes.
+13. Disable the flags, restore the disposable service intentionally, and remove
    test tasks/revisions, ALB targets/rules, hooks and temporary roles only after
    verifying nothing still references them. Preserve Apply/audit evidence.
 

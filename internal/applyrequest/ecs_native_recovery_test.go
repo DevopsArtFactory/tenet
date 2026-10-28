@@ -14,12 +14,17 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
 
-func nativeRecoveryFixture(t *testing.T) (*ecsFixture, context.Context) {
+func nativeRecoveryFixture(t *testing.T, automaticPolicy ...bool) (*ecsFixture, context.Context) {
 	t.Helper()
 	f := newECSFixture(t)
 	raw, err := manifestfs.Load(filepath.Join("..", "..", "examples", "ecs-native-advanced-repo"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(automaticPolicy) > 0 && automaticPolicy[0] {
+		for i := range raw.Deployments {
+			raw.Deployments[i].ECS.RollbackOnFailure = true
+		}
 	}
 	compiled, err := manifest.Compile(raw)
 	if err != nil {

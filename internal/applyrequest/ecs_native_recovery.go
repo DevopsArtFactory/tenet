@@ -18,6 +18,7 @@ const NativeRollbackOperationKind = "StopECSServiceDeployment"
 const NativeCapacityRestoreOperationKind = "RestoreECSServiceCapacity"
 
 type ECSNativeRollback struct {
+	Automatic                bool   `json:"automatic,omitempty"`
 	ParentApplyID            string `json:"parentApplyId"`
 	DeploymentARN            string `json:"deploymentArn"`
 	ForwardRevisionARN       string `json:"forwardRevisionArn"`
@@ -66,6 +67,9 @@ func NativeRollbackEvidence(parent Record) (*ECSNativeRollback, error) {
 func (t ECSNativeRollback) Clone() *ECSNativeRollback { copy := t; return &copy }
 
 func (t ECSNativeRollback) Validate(intent domain.ECSDeploymentIntent) error {
+	if t.Automatic && !intent.RollbackOnFailure {
+		return fmt.Errorf("automatic native recovery requires reviewed rollbackOnFailure")
+	}
 	service, err := arn.Parse(intent.ServiceARN)
 	base, baseErr := arn.Parse(intent.BaseTaskDefinitionARN)
 	if err != nil || baseErr != nil || service.Service != "ecs" || !strings.HasPrefix(service.Resource, "service/") || intent.DeploymentController != "ECS" || intent.Advanced == nil || (intent.DeploymentStrategy != "BLUE_GREEN" && intent.DeploymentStrategy != "CANARY" && intent.DeploymentStrategy != "LINEAR") {
@@ -107,7 +111,7 @@ func (s Service) requestNativeRollback(ctx context.Context, parent Record) (Crea
 	if err != nil {
 		return CreateResult{}, err
 	}
-	target, err := NativeRollbackEvidence(parent)
+	_, err = NativeRollbackEvidence(parent)
 	if err != nil {
 		return CreateResult{}, fmt.Errorf("%w: %v", ErrRecoveryUnavailable, err)
 	}
@@ -118,6 +122,23 @@ func (s Service) requestNativeRollback(ctx context.Context, parent Record) (Crea
 	if principal == nil || !principal.Identity.Authenticated || (principal.Identity.ID == "" && principal.Identity.Email == "") || principal.Automatic {
 		return CreateResult{}, ErrExecutionUnauthorized
 	}
+	return s.createNativeRollback(ctx, parent, principal, false)
+}
+
+// Caller holds the physical-service lock and has freshly authorized approval.
+func (s Service) createNativeRollback(ctx context.Context, parent Record, principal *ExecutionPrincipal, automatic bool) (CreateResult, error) {
+	store, ok := s.Store.(ECSExecutionStore)
+	if !ok || !s.EnableAWSApply || s.PrepareNativeRollback == nil {
+		return CreateResult{}, ErrRecoveryUnavailable
+	}
+	target, err := NativeRollbackEvidence(parent)
+	if err != nil {
+		return CreateResult{}, err
+	}
+	if automatic && (!nativeAutomaticFailure(parent) || !reflect.DeepEqual(principal, parent.Principal)) {
+		return CreateResult{}, ErrExecutionUnauthorized
+	}
+	target.Automatic = automatic
 	records, err := store.List(ctx)
 	if err != nil {
 		return CreateResult{}, err
@@ -143,8 +164,14 @@ func (s Service) requestNativeRollback(ctx context.Context, parent Record) (Crea
 		return CreateResult{}, fmt.Errorf("%w: %v", ErrRecoveryUnavailable, err)
 	}
 	child := Record{PlanID: parent.PlanID, DeploymentName: parent.DeploymentName, Source: parent.Source, Status: StatusQueued, CreatedAt: s.now().UTC().Format(time.RFC3339), Actor: requestactor.FromContext(ctx), Principal: principal.Clone(), NativeRollback: target.Clone()}
+	if automatic {
+		child.Actor = parent.Actor
+	}
 	child.Operations = nativeRecoveryOperations(parent, *target)
 	child.Details = []string{"Native recovery of Apply " + parent.ID + "; the original forward evidence is preserved."}
+	if automatic {
+		child.Details = []string{"Automatic native recovery of failed Apply " + parent.ID + "; inherited reviewed rollbackOnFailure approval and original principal."}
+	}
 	child.Lifecycle = initialLifecycle(child)
 	child.ID, err = stableRecordID(child)
 	if err != nil {
@@ -170,9 +197,15 @@ func nativeRollbackMatchesParent(child, parent Record) error {
 	if err != nil {
 		return err
 	}
+	if child.NativeRollback != nil && child.NativeRollback.Automatic {
+		if !nativeAutomaticFailure(parent) || !reflect.DeepEqual(child.Principal, parent.Principal) {
+			return fmt.Errorf("automatic native recovery lost reviewed failure approval")
+		}
+		target.Automatic = true
+	}
 	expected := nativeRecoveryOperations(parent, *target)
 	id, idErr := stableRecordID(child)
-	if idErr != nil || id != child.ID || child.Recovery != nil || child.RetryOf != "" || child.Principal == nil || !child.Principal.Identity.Authenticated || (child.Principal.Identity.ID == "" && child.Principal.Identity.Email == "") || child.Principal.Automatic || !reflect.DeepEqual(child.NativeRollback, target) || child.PlanID != parent.PlanID || child.DeploymentName != parent.DeploymentName || !reflect.DeepEqual(child.Source, parent.Source) || len(child.Operations) != len(expected) {
+	if idErr != nil || id != child.ID || child.Recovery != nil || child.RetryOf != "" || child.Principal == nil || !child.Principal.Identity.Authenticated || (child.Principal.Identity.ID == "" && child.Principal.Identity.Email == "") || (child.Principal.Automatic && !target.Automatic) || !reflect.DeepEqual(child.NativeRollback, target) || child.PlanID != parent.PlanID || child.DeploymentName != parent.DeploymentName || !reflect.DeepEqual(child.Source, parent.Source) || len(child.Operations) != len(expected) {
 		return fmt.Errorf("altered native recovery approval/source")
 	}
 	for i, op := range child.Operations {

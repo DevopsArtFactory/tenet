@@ -53,8 +53,9 @@ ecs:
   rollbackOnFailure: true
 ```
 
-It defaults to `false` and currently supports Rolling only. The reviewed plan
-shows the automatic-recovery policy and binds it into the intent/fingerprint.
+It defaults to `false`. This section describes Rolling; Blue-Green, Canary and
+Linear use the [native automatic recovery flow](ecs-native-recovery.md#opt-in-to-automatic-failure-recovery).
+The reviewed plan shows the automatic-recovery policy and binds it into the intent/fingerprint.
 A fresh repository policy evaluation must still authorize the approving principal
 when recovery is scheduled and executed. The manifest's current intent must still
 match the failed forward intent.

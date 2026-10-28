@@ -126,7 +126,7 @@ ecs:
 	}
 }
 
-func TestAutomaticECSRecoveryRequiresExplicitRollingOptIn(t *testing.T) {
+func TestAutomaticECSRecoveryRequiresExplicitOptInAndReviewedAdvancedInputs(t *testing.T) {
 	d := ecsContractSpec(t)
 	if d.ECS.RollbackOnFailure {
 		t.Fatal("automatic rollback unexpectedly enabled by default")
@@ -137,7 +137,7 @@ func TestAutomaticECSRecoveryRequiresExplicitRollingOptIn(t *testing.T) {
 	}
 	d.Strategy.Type = StrategyTypeCanary
 	if err := validateECSDeployment(d); err == nil {
-		t.Fatal("advanced native strategy accepted Rolling recovery policy")
+		t.Fatal("advanced recovery accepted missing traffic inputs")
 	}
 }
 
@@ -151,6 +151,19 @@ func TestECSSyncPolicyDefaultsAndValidation(t *testing.T) {
 		d.ECS.SyncPolicy = &ECSSyncPolicy{Mode: tc.mode, SelfHeal: tc.heal}
 		if err := ValidateDeployment(d); (err == nil) != tc.valid {
 			t.Fatalf("mode=%q selfHeal=%v: %v", tc.mode, tc.heal, err)
+		}
+	}
+}
+
+func TestAutomaticNativeRecoverySupportsAllReviewedStrategies(t *testing.T) {
+	for _, strategy := range []StrategyType{StrategyTypeBlueGreen, StrategyTypeCanary, StrategyTypeLinear} {
+		d := advancedContract(t, strategy)
+		if d.ECS.RollbackOnFailure {
+			t.Fatal("native rollback unexpectedly defaulted on")
+		}
+		d.ECS.RollbackOnFailure = true
+		if err := ValidateDeployment(d); err != nil {
+			t.Fatal(strategy, err)
 		}
 	}
 }

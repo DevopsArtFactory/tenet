@@ -96,8 +96,9 @@ might have been sent, the old Apply must reconcile and finish observing before
 new work can proceed. Failure keeps the typed intent held; use an explicit retry
 or a new desired intent. Existing [Rolling recovery](ecs-rolling-recovery.md)
 handles manual/default-off automatic rollback as separate outcomes. Native
-advanced failures use ECS alarm/hook rollback and the separate operator recovery
-Apply; the reconciler never falls back to a Rolling/CodeDeploy rollback. A
+advanced failures use ECS alarm/hook rollback and a separate recovery Apply:
+operator-approved by default, or [automatic when `ecs.rollbackOnFailure: true`](ecs-native-recovery.md#opt-in-to-automatic-failure-recovery).
+The reconciler never falls back to a Rolling/CodeDeploy rollback. A
 running recovery owns the physical service, and source recovery success does not
 become a successful deployment of the failed Git intent. Failure or an operator
 handoff holds that typed intent even after a documentation-only commit. Explicit

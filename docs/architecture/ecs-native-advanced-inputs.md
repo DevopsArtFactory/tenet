@@ -29,6 +29,7 @@ use. No resource is provisioned by reading or planning these examples.
 | Alarms | Optional enabled block with 1–10 unique CloudWatch alarm names and explicit ECS rollback choice |
 | Hooks | Same-placement Lambda function pinned to a positive numeric version, explicit IAM role and supported stages |
 | Capacity | Positive `capacity.desired` within reviewed min/max; native Git count changes and explicit self-heal supported |
+| Failure recovery | Separate operator recovery, or default-off `ecs.rollbackOnFailure` using correlated AWS failure evidence and the original approval |
 | Automatic sync | All native strategies with global opt-ins, scoped automation subject and explicit automatic mode; separate self-heal opt-in after verified forward execution |
 
 Omit alarms/hooks to review no alarms/hooks. Zero bake times are explicit values,
@@ -254,3 +255,18 @@ API. Fake SDK tests cover all three strategies, source/forward attribution,
 partial progress, missing health evidence, failures, supersession and restart.
 Production advanced writes require the additional opt-in and use durable
 child-Apply ownership handoff; no actual AWS rollout was performed.
+
+## Automatic native failure recovery
+
+`ecs.rollbackOnFailure: true` authorizes a separate native recovery Apply from a
+persisted, correlated forward failure. Reviewed triggered alarms and native
+source rollback states supply the signal; timeout/unavailable/superseded evidence
+cannot. Immutable plans, owned mutation checkpoints and the exact stored failure
+observation bind inherited approval. The original subject and current RBAC/IAM
+are checked again; Git automation gates continue to apply to Git approval.
+
+The same stop/capacity/source-observation handlers restore the captured source
+revision and pre-update count. Existing native rollback is adopted without a new
+Stop. Recovery success preserves the forward failure and held Git intent; retries
+and manual recovery take precedence, and recovery failures do not recurse.
+See the [runtime contract](../runbooks/ecs-native-recovery.md#opt-in-to-automatic-failure-recovery).

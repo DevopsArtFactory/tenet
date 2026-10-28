@@ -291,3 +291,34 @@ func TestNativePipelineChecksRealTaskToALBHealthBinding(t *testing.T) {
 		t.Fatal("current ALB failure was hidden by native completion history")
 	}
 }
+
+func TestNativeAutomaticRollbackUsesOnlyReviewedPositiveFailureSignals(t *testing.T) {
+	for _, name := range []string{"off", "triggered", "unknown alarm", "historical alarm", "rollback requested", "rollback in progress"} {
+		t.Run(name, func(t *testing.T) {
+			f, h, r, _ := nativeObserverFixture(t, "CANARY")
+			r.Intent.RollbackOnFailure = name != "off"
+			id := r.PriorResults[1].ServiceDeploymentARN
+			d := f.deployments[id]
+			d.Status = types.ServiceDeploymentStatusInProgress
+			d.Alarms = &types.ServiceDeploymentAlarms{Status: types.ServiceDeploymentRollbackMonitorsStatusTriggered, TriggeredAlarmNames: []string{r.Intent.Advanced.Alarms.Names[0]}}
+			switch name {
+			case "unknown alarm":
+				d.Alarms.TriggeredAlarmNames = []string{"unreviewed"}
+			case "historical alarm":
+				d.Alarms.Status = types.ServiceDeploymentRollbackMonitorsStatusMonitoringComplete
+			case "rollback requested":
+				d.Status = types.ServiceDeploymentStatusRollbackRequested
+				d.Alarms = nil
+			case "rollback in progress":
+				d.Status = types.ServiceDeploymentStatusRollbackInProgress
+				d.Alarms = nil
+			}
+			f.deployments[id] = d
+			outcome, err := h.Reconcile(context.Background(), r)
+			fail := name == "triggered" || name == "rollback requested" || name == "rollback in progress"
+			if err != nil || (outcome.Failure != "") != fail || outcome.Complete {
+				t.Fatal("incorrect automatic rollback signal", name, outcome, err)
+			}
+		})
+	}
+}
