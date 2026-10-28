@@ -29,8 +29,7 @@ type NativeServiceClient interface {
 }
 
 // AdvancedService requests one ECS-owned traffic deployment. It never writes to
-// ALB or CodeDeploy. Production wiring remains gated until observation/recovery
-// are implemented; this handler can be exercised with injected SDK clients.
+// ALB or CodeDeploy. Production wiring requires the advanced execution opt-in.
 type AdvancedService struct {
 	ClientFor         func(context.Context, applyrequest.DeployerRoleReadiness) (NativeServiceClient, error)
 	CheckCapabilities func(context.Context, applyrequest.DeployerRoleReadiness, []applyrequest.OperationExecutionCapabilityCheck) error
@@ -84,9 +83,6 @@ func (h AdvancedService) observe(ctx context.Context, r applyrequest.ECSOperatio
 	e := r.Intent
 	if aws.ToString(service.ServiceArn) != e.ServiceARN || aws.ToString(service.ClusterArn) != e.ClusterARN || aws.ToString(service.Status) != "ACTIVE" || service.SchedulingStrategy != types.SchedulingStrategyReplica || service.DeploymentController == nil || service.DeploymentController.Type != types.DeploymentControllerTypeEcs || service.DeploymentConfiguration == nil || string(service.DeploymentConfiguration.Strategy) != e.DeploymentStrategy {
 		return empty, fmt.Errorf("existing service must already use the reviewed ECS native advanced strategy")
-	}
-	if service.DesiredCount != int32(e.DesiredCount) && !r.ManagedRepair {
-		return empty, fmt.Errorf("initial native advanced execution does not resize service capacity")
 	}
 	routing := e.Advanced.Routing
 	if !nativeBindingMatches(service, e) {
@@ -321,11 +317,10 @@ func (h AdvancedService) Execute(ctx context.Context, r applyrequest.ECSOperatio
 	if err := authorizeMutation(ctx, r); err != nil {
 		return applyrequest.ECSOperationResult{}, beforeMutationError(err)
 	}
-	// Config-only changes must start a native deployment as well; otherwise ECS can
-	// accept settings without producing the lifecycle identity we need to observe.
+	// Count/config-only updates need a new deployment identity for native observation.
 	force := aws.ToString(observation.service.TaskDefinition) == prepared.TaskDefinitionARN
 	input := &ecs.UpdateServiceInput{Cluster: aws.String(r.Intent.ClusterARN), Service: aws.String(r.Intent.ServiceARN), TaskDefinition: aws.String(prepared.TaskDefinitionARN), DeploymentConfiguration: config, ForceNewDeployment: force}
-	if r.ManagedRepair && observation.service.DesiredCount != int32(r.Intent.DesiredCount) {
+	if observation.service.DesiredCount != int32(r.Intent.DesiredCount) {
 		input.DesiredCount = aws.Int32(int32(r.Intent.DesiredCount))
 	}
 	output, err := observation.client.UpdateService(ctx, input, func(options *ecs.Options) { options.Retryer = aws.NopRetryer{}; options.RetryMaxAttempts = 1 })
@@ -405,7 +400,7 @@ func (h AdvancedService) reconcileWithClient(ctx context.Context, client NativeD
 		if err != nil {
 			return applyrequest.ECSReconciliation{}, err
 		}
-		if deployment.TargetServiceRevision == nil || !advancedConfigMatches(deployment.DeploymentConfiguration, r.Intent) || len(deployment.SourceServiceRevisions) != 1 {
+		if deployment.TargetServiceRevision == nil || deployment.TargetServiceRevision.RequestedTaskCount != int32(r.Intent.DesiredCount) || !advancedConfigMatches(deployment.DeploymentConfiguration, r.Intent) || len(deployment.SourceServiceRevisions) != 1 {
 			continue
 		}
 		target, err := describeNativeRevision(ctx, client, aws.ToString(deployment.TargetServiceRevision.Arn), r)
