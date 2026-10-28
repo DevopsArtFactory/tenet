@@ -226,3 +226,36 @@ func TestNativeGitCapacityAndImageChangeAreSubmittedTogether(t *testing.T) {
 		})
 	}
 }
+
+func TestNativeGitCapacityAlreadyAtGoalVerifiesWithoutAnotherDeployment(t *testing.T) {
+	for _, strategy := range []string{"BLUE_GREEN", "CANARY", "LINEAR"} {
+		t.Run(strategy, func(t *testing.T) {
+			p := setupNativeHealPipeline(t, strategy, false)
+			p.commitCapacity(t, 4, "b")
+			p.f.service.DesiredCount = 4
+			p.f.service.RunningCount = 4
+			for i := 0; i < 2; i++ {
+				task := p.f.sampler.tasks[p.f.sampler.running[i]]
+				key := fmt.Sprintf("arn:aws:ecs:ap-northeast-2:123456789012:task/production/already-scaled-%d", i)
+				task.TaskArn = aws.String(key)
+				p.f.sampler.running = append(p.f.sampler.running, key)
+				p.f.sampler.tasks[key] = task
+			}
+			before := p.f.writes
+			p.tick(t)
+			queued := p.queued(t)
+			p.run(t, 3)
+			done, err := p.service.Get(context.Background(), queued.ID)
+			if err != nil || done.Status != applyrequest.StatusSucceeded || done.ECSRuntime.HealthyCount != 4 || p.f.writes != before || done.Operations[1].ECSCheckpoint.Result.NativeService.NoOpDeploymentARN == "" {
+				t.Fatal("matching capacity was redeployed or accepted without verification", done, err)
+			}
+			if _, err := applyrequest.NativeRollbackEvidence(done); err == nil {
+				t.Fatal("read-only adoption granted rollback ownership")
+			}
+			p.tick(t)
+			if len(p.rows(t)) != 2 {
+				t.Fatal("read-only capacity verification repeated")
+			}
+		})
+	}
+}

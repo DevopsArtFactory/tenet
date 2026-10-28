@@ -79,8 +79,11 @@ do not reapply the same verified intent. A subsequent Git image or reviewed traf
 All four native strategies support Git desired-count changes. The manifest field
 is `capacity.desired`, compiled to the ECS intent's `desiredCount`; it must stay
 positive and within `capacity.min`/`capacity.max`. For Blue-Green, Canary and
-Linear, a count-only change sends the reviewed count with `ForceNewDeployment` so it has a fresh native deployment and
-revision to correlate and observe. An image/count change sends both together.
+Linear, a count-only update that requires a service write sends the reviewed
+count with `ForceNewDeployment` so it has a fresh native deployment and
+revision to correlate and observe. A matching current deployment can instead
+be adopted for read-only verification if AWS already has the Git goal; it does
+not acquire rollback ownership. An image/count change sends both together.
 The declared strategy and traffic policy remain in effect. Request acceptance
 is not success: current service count, exact healthy task set, drained sources
 and configured target traffic must all converge to the approved goal.

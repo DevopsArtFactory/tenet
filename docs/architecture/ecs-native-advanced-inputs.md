@@ -114,7 +114,7 @@ The initial handler accepts an existing native service using the same declared
 strategy and one ALB binding. It requires `awsvpc`/IP targets and rejects mixed
 Service Connect/VPC Lattice routing. Strategy migration is outside this execution
 matrix. Reviewed Git capacity changes send the new desired count together with
-the native policy/workload. Count-only changes force one new native deployment;
+the native policy/workload. Count-only writes force one new native deployment;
 correlation requires its target requested count to match the reviewed intent.
 Separately enabled self-heal can restore external capacity drift to the same
 Git count verified by a preceding forward Apply on this service/strategy. That
