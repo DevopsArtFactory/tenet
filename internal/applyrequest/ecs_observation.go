@@ -242,7 +242,7 @@ func nativeECSPreflight(record Record, operation Operation, role *DeployerRoleRe
 		resourceType = "ecsServiceDeployment"
 		resourceName = operation.Target
 		capability = "ecs:StopServiceDeployment"
-	case string(reconcile.StepUpdateECSService):
+	case string(reconcile.StepUpdateECSService), NativeCapacityRestoreOperationKind:
 		capability = "ecs:UpdateService"
 	}
 	requiredRole := "target-account deployer role"

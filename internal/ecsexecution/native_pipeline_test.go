@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -23,16 +24,30 @@ import (
 )
 
 func TestNativeAPIExecutorPipelineHandsOffAndRecoversAllStrategies(t *testing.T) {
+	type scenario struct {
+		count int
+		mode  string
+	}
+	var scenarios []scenario
+	for _, count := range []int{1, 2, 4} {
+		for _, mode := range []string{"accepted", "lost-response", "ecs-already-rolling-back", "finished-before-stop", "capacity-lost-response", "capacity-rejected", "capacity-already-restored"} {
+			if count != 2 || !strings.HasPrefix(mode, "capacity-") {
+				scenarios = append(scenarios, scenario{count, mode})
+			}
+		}
+	}
 	for _, strategy := range []string{"BLUE_GREEN", "CANARY", "LINEAR"} {
-		for _, mode := range []string{"accepted", "lost-response", "ecs-already-rolling-back", "finished-before-stop"} {
+		for _, test := range scenarios {
+			count, mode := test.count, test.mode
 			lostResponse := mode == "lost-response"
 			expectedStops := 1
 			if mode == "ecs-already-rolling-back" {
 				expectedStops = 0
 			}
-			t.Run(strategy+"/"+mode, func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s/%d/%s", strategy, count, mode), func(t *testing.T) {
 				ctx := context.Background()
 				backend, update, r := nativeFixture(t, strategy)
+				r.Intent.DesiredCount = count
 				// Exercise actual registration rather than preloading its result.
 				delete(backend.definitions, r.PriorResults[0].TaskDefinitionARN)
 				backend.registrationFake.revisions = nil
@@ -48,8 +63,9 @@ func TestNativeAPIExecutorPipelineHandsOffAndRecoversAllStrategies(t *testing.T)
 				actor := requestactor.AuthenticatedIdentity{ID: "operator", Authenticated: true}
 				role := r.Role
 				stopped := &nativeRollbackFake{nativeFake: backend}
+				capacity := &nativeCapacityFake{nativeRollbackFake: stopped}
 				stopHandler := NativeRollback{ClientFor: func(context.Context, applyrequest.DeployerRoleReadiness) (NativeRollbackClient, error) {
-					return stopped, nil
+					return capacity, nil
 				}, CheckCapabilities: update.CheckCapabilities}
 				allowed := true
 				service := applyrequest.Service{Store: applyrequest.NewFileStore(filepath.Join(dir, "applies.json")), LoadPlan: plans.Get, EnableAWSApply: true, Now: func() time.Time { return now }, CurrentFingerprint: func(context.Context, string) (string, error) { return plan.Record.Source.Fingerprint, nil }, DeployerRoleReadiness: func(context.Context, applyrequest.DeployerRoleTarget) (applyrequest.DeployerRoleReadiness, error) {
@@ -86,13 +102,14 @@ func TestNativeAPIExecutorPipelineHandsOffAndRecoversAllStrategies(t *testing.T)
 					string(reconcile.StepRegisterECSTaskDefinition): Registration{AllowAdvanced: true, ClientFor: func(context.Context, applyrequest.DeployerRoleReadiness) (RegistrationClient, error) {
 						return backend.registrationFake, nil
 					}, CheckCapabilities: update.CheckCapabilities},
-					string(reconcile.StepUpdateECSService):       StrategyHandler{Advanced: update},
-					string(reconcile.StepVerifyServiceStability): StrategyHandler{Advanced: observer},
-					applyrequest.NativeRollbackOperationKind:     NativeRollbackOperation{NativeRollback: stopHandler},
+					string(reconcile.StepUpdateECSService):          StrategyHandler{Advanced: update},
+					string(reconcile.StepVerifyServiceStability):    StrategyHandler{Advanced: observer},
+					applyrequest.NativeRollbackOperationKind:        NativeRollbackOperation{NativeRollback: stopHandler},
+					applyrequest.NativeCapacityRestoreOperationKind: NativeCapacityRestore{NativeRollback: stopHandler, ObserveRouting: observer.ObserveRouting, Now: func() time.Time { return now }},
 				}}}
 				router := api.NewRouter(api.Options{TrustAuthenticatedHeaders: true, RequireAuthenticatedIdentity: true, RequireOperatorRoleForWrite: true, RequireDeploymentReadAuthorization: true, CreateApplyRequest: service.Create, ApplyRequest: service.Get, RequestApplyRollback: service.RequestRollback})
 				post := func(url string) *httptest.ResponseRecorder {
-					request := httptest.NewRequest(http.MethodPost, url, strings.NewReader(`{"taskDefinitionArn":"caller-cannot-select-source"}`))
+					request := httptest.NewRequest(http.MethodPost, url, strings.NewReader(`{"taskDefinitionArn":"caller-cannot-select-source","desiredCount":99}`))
 					request.Header.Set(requestactor.AuthenticatedHeaderID, actor.ID)
 					request.Header.Set(requestactor.AuthenticatedRolesHeader, "operator")
 					request.Header.Set(requestactor.AuthorizedDeploymentsHeader, "worker")
@@ -216,11 +233,44 @@ func TestNativeAPIExecutorPipelineHandsOffAndRecoversAllStrategies(t *testing.T)
 					obsBackend.sampler.tasks[key] = types.Task{TaskArn: aws.String("arn:aws:ecs:ap-northeast-2:123456789012:task/production/recovery-" + string(rune('a'+i))), ClusterArn: aws.String(r.Intent.ClusterARN), TaskDefinitionArn: aws.String(target.SourceTaskDefinitionARN), Group: aws.String("service:worker"), LastStatus: aws.String("RUNNING"), Containers: []types.Container{{Name: aws.String("worker"), LastStatus: aws.String("RUNNING")}}}
 				}
 				now = now.Add(time.Minute)
+				expectedCapacityCalls := 0
+				if count != 2 {
+					expectedCapacityCalls = 1
+					if mode == "capacity-already-restored" {
+						backend.service.DesiredCount = 2
+						expectedCapacityCalls = 0
+					}
+					if mode == "capacity-lost-response" {
+						capacity.capacityError = errors.New("capacity accepted but response lost")
+					}
+					if mode == "capacity-rejected" {
+						capacity.noCapacityEffect = true
+						capacity.capacityError = &types.ClientException{Message: aws.String("confirmed capacity rejection")}
+					}
+					if err := executor.RunOnce(ctx); err != nil {
+						t.Fatal(err)
+					}
+					if mode == "capacity-rejected" {
+						failed, err := service.Get(ctx, child.ID)
+						if err != nil || failed.Status != applyrequest.StatusFailed || capacity.capacityCalls != 1 || stopped.stops != expectedStops {
+							t.Fatal("rejected capacity recovery was hidden or repeated", failed, err)
+						}
+						return
+					}
+					if mode == "capacity-lost-response" {
+						capacity.capacityError = nil
+						executor.WorkerID = "capacity-restarted"
+						now = now.Add(6 * time.Minute)
+						if err := executor.RunOnce(ctx); err != nil {
+							t.Fatal(err)
+						}
+					}
+				}
 				if err := executor.RunOnce(ctx); err != nil {
 					t.Fatal(err)
 				}
 				done, err := service.Get(ctx, child.ID)
-				if err != nil || done.Status != applyrequest.StatusSucceeded || done.ECSRuntime.Reason != "native_source_recovered" || done.ECSRuntime.DeadlineAt != deadline || stopped.stops != expectedStops || backend.writes != 1 || backend.registrationFake.writes != 1 {
+				if err != nil || done.Status != applyrequest.StatusSucceeded || done.ECSRuntime.Reason != "native_source_recovered" || done.ECSRuntime.DeadlineAt != deadline || done.ECSRuntime.DesiredCount != 2 || backend.service.DesiredCount != 2 || capacity.capacityCalls != expectedCapacityCalls || stopped.stops != expectedStops || backend.writes != 1 || backend.registrationFake.writes != 1 {
 					t.Fatalf("native recovery pipeline did not converge without extra writes: %+v %v", done, err)
 				}
 			})

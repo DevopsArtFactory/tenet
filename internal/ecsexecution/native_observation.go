@@ -65,10 +65,14 @@ func (h NativeObservation) prepare(_ context.Context, r applyrequest.ECSOperatio
 			return accepted, err
 		}
 		accepted = rollbackResult(*rollback)
-		if len(r.PriorResults) != 1 || !sameNativeRollbackResult(r.PriorResults[0], *rollback) {
+		expected := 1
+		if int64(rollback.DesiredCount) != int64(r.Intent.DesiredCount) {
+			expected = 2
+		}
+		if len(r.PriorResults) != expected || !sameNativeRollbackResult(r.PriorResults[0], *rollback) || !sameNativeRollbackResult(r.PriorResults[expected-1], *rollback) {
 			return applyrequest.ECSOperationResult{}, fmt.Errorf("native recovery requires its fixed stop acceptance checkpoint")
 		}
-		accepted = r.PriorResults[0].Clone()
+		accepted = r.PriorResults[expected-1].Clone()
 	} else {
 		if len(r.PriorResults) != 2 || r.PriorResults[0].TaskDefinitionARN == "" || r.PriorResults[1].TaskDefinitionARN != r.PriorResults[0].TaskDefinitionARN || !nativeScopedARN(r.PriorResults[1].ServiceDeploymentARN, "service-deployment", r.Intent) || !nativeScopedARN(r.PriorResults[1].ServiceRevisionARN, "service-revision", r.Intent) {
 			return applyrequest.ECSOperationResult{}, fmt.Errorf("native observation requires registered workload and correlated deployment/revision checkpoints")
@@ -76,6 +80,9 @@ func (h NativeObservation) prepare(_ context.Context, r applyrequest.ECSOperatio
 		accepted = r.PriorResults[1].Clone()
 	}
 	result := r.PreparedResult.Clone()
+	if rollback != nil && result.Observation == nil && accepted.Observation != nil {
+		result = accepted.Clone()
+	}
 	if result.Observation == nil {
 		timeout := h.Timeout
 		if timeout <= 0 {
@@ -87,6 +94,7 @@ func (h NativeObservation) prepare(_ context.Context, r applyrequest.ECSOperatio
 	}
 	if rollback != nil {
 		result.Observation.Source = "aws-ecs-native-rollback"
+		result.Observation.DesiredCount = rollback.DesiredCount
 	}
 	start, startErr := time.Parse(time.RFC3339Nano, result.Observation.StartedAt)
 	deadline, deadlineErr := time.Parse(time.RFC3339Nano, result.Observation.DeadlineAt)
@@ -338,6 +346,9 @@ func (h NativeObservation) reconcile(ctx context.Context, r applyrequest.ECSOper
 		o.PendingCount = pending
 	}
 	desired := int32(r.Intent.DesiredCount)
+	if rollback != nil {
+		desired = rollback.DesiredCount
+	}
 	sourcesDrained := true
 	for _, source := range deployment.SourceServiceRevisions {
 		if source.RunningTaskCount != 0 || source.PendingTaskCount != 0 {

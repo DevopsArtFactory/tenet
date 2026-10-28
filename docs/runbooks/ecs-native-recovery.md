@@ -66,8 +66,11 @@ keeps its failure and operation evidence.
 If the process stops between the two file writes, the saved recovery reserves
 the service. The old owner cannot resume forward work. A subsequent request or
 worker repairs the parent link before claiming the child. The child contains
-two operations: stop the exact owned ECS service deployment, then observe source
-recovery. A queued recovery also blocks competing Applies on the physical
+two operations when capacity is unchanged: stop the exact owned ECS service
+deployment, then observe source recovery. When the captured pre-update count
+differs from the forward Git count, a third operation restores that captured
+count between stop acceptance and final health verification. Its identity and
+goal are derived from the saved forward checkpoint, never the HTTP body. A queued recovery also blocks competing Applies on the physical
 service. Native recovery records cannot be manually transitioned around the
 executor. Use durable storage with working local OS file locks; independent
 copies of the Apply store cannot coordinate ownership.
@@ -102,15 +105,29 @@ requests a fresh plan and explicit approval of the current Git intent. Active
 recovery blocks retries; the original failed/handed-off intent remains held
 until explicit retry or a different reviewed intent.
 
-Native Git sync supports reviewed `capacity.desired` changes, and self-heal may
-restore external drift to the last verified Git count. The current operator
-rollback endpoint requires equal pre-update and reviewed capacity, so a Git count
-change or count-restoring repair with different source capacity cannot use that
-endpoint. ECS owns alarm/hook rollback; inspect its actual
-capacity and outcome before further action. A failed repair stays held until an
-explicit retry or different reviewed intent. A separately reviewed Git count
-correction can run after the current deployment/rollback releases ownership;
-Tenet does not assume StopServiceDeployment restores the old task count.
+Native Git count changes and count-restoring self-heal also support operator
+rollback to the **captured pre-update desired count**. ECS owns source-revision
+and traffic rollback; Tenet does not assume StopServiceDeployment restores count.
+The capacity operation waits for `ROLLBACK_SUCCESSFUL` naming the captured source,
+drained forward tasks, current source workload and 100% configured source traffic.
+It then sends only `UpdateService(desiredCount: capturedCount)`, without a task
+revision/configuration update, forced deployment or ALB write. A count already
+restored by ECS is adopted without another update.
+
+The capacity update has its own durable checkpoint and current operator/role/IAM
+checks. Lost responses reconcile the fixed source and current count read-only;
+an unchanged count never authorizes replay. Explicit AWS rejections follow the
+existing bounded retry/failure protocol. Unknown/denied reads, unrelated counts,
+newer deployments, changed routing or failed source rollback block capacity
+writes. Accepted count reconciliation needs read permissions, not a renewed
+UpdateService grant; current repository access is still required.
+
+Capacity restoration and final source health share a persisted 36-hour deadline,
+which restart does not extend. Recovery succeeds only after the captured count
+of source tasks is healthy in current container/ALB evidence and forward tasks
+have drained. A failed/rejected recovery remains separate from its cancelled or
+failed parent. The failed forward Git intent stays held; explicit retry or a
+different reviewed Git intent is required after ownership is released.
 
 ## Gated isolated AWS verification
 
@@ -138,9 +155,17 @@ Do not use example production-looking ARNs as real targets.
 7. Verify revoked RBAC, disabled flags, wrong account/role, changed routing,
    newer deployment and missing AWS evidence prevent further mutation. Re-enable
    only after reviewing the current service and explicit recovery approval.
-8. After recovery is terminal, explicitly retry the reviewed Git intent. Confirm
+8. Test both two-to-four and two-to-one forward count changes. Roll back each:
+   confirm source traffic recovery precedes one count-only update back to two,
+   with no new deployment/task registration/ALB mutation. Verify acceptance alone
+   does not pass while source tasks are missing, excess or unhealthy.
+9. Restart or lose the count-update response. Verify read-only reconciliation,
+   no duplicate Stop/count write and an unchanged deadline. Test already-restored
+   count, IAM/RBAC revocation, a conflicting count/newer deployment, rollback
+   failure and an explicitly rejected capacity request.
+10. After recovery is terminal, explicitly retry the reviewed Git intent. Confirm
    a new deployment identity and no concurrent recovery/update calls.
-9. Disable the flags, restore the disposable service intentionally, and remove
+11. Disable the flags, restore the disposable service intentionally, and remove
    test tasks/revisions, ALB targets/rules, hooks and temporary roles only after
    verifying nothing still references them. Preserve Apply/audit evidence.
 

@@ -15,6 +15,7 @@ import (
 )
 
 const NativeRollbackOperationKind = "StopECSServiceDeployment"
+const NativeCapacityRestoreOperationKind = "RestoreECSServiceCapacity"
 
 type ECSNativeRollback struct {
 	ParentApplyID            string `json:"parentApplyId"`
@@ -83,8 +84,8 @@ func (t ECSNativeRollback) Validate(intent domain.ECSDeploymentIntent) error {
 		n, nErr := strconv.Atoi(revision)
 		return e == nil && found && nErr == nil && n > 0 && a.Partition == service.Partition && a.Service == "ecs" && a.Region == intent.Region && a.AccountID == intent.AWSAccountID && strings.HasPrefix(a.Resource, "task-definition/") && f == family
 	}
-	if t.ParentApplyID == "" || t.DesiredCount < 0 || int64(t.DesiredCount) != int64(intent.DesiredCount) || !scoped(t.DeploymentARN, "service-deployment") || !scoped(t.ForwardRevisionARN, "service-revision") || !scoped(t.SourceRevisionARN, "service-revision") || t.ForwardRevisionARN == t.SourceRevisionARN || !sameTaskFamily(t.ForwardTaskDefinitionARN) || !sameTaskFamily(t.SourceTaskDefinitionARN) {
-		return fmt.Errorf("fixed native rollback identities and unchanged capacity required")
+	if t.ParentApplyID == "" || t.DesiredCount < 0 || !scoped(t.DeploymentARN, "service-deployment") || !scoped(t.ForwardRevisionARN, "service-revision") || !scoped(t.SourceRevisionARN, "service-revision") || t.ForwardRevisionARN == t.SourceRevisionARN || !sameTaskFamily(t.ForwardTaskDefinitionARN) || !sameTaskFamily(t.SourceTaskDefinitionARN) {
+		return fmt.Errorf("fixed native rollback identities and captured capacity required")
 	}
 	return nil
 }
@@ -142,22 +143,7 @@ func (s Service) requestNativeRollback(ctx context.Context, parent Record) (Crea
 		return CreateResult{}, fmt.Errorf("%w: %v", ErrRecoveryUnavailable, err)
 	}
 	child := Record{PlanID: parent.PlanID, DeploymentName: parent.DeploymentName, Source: parent.Source, Status: StatusQueued, CreatedAt: s.now().UTC().Format(time.RFC3339), Actor: requestactor.FromContext(ctx), Principal: principal.Clone(), NativeRollback: target.Clone()}
-	child.Operations = cloneOperations(parent.Operations[1:])
-	for i := range child.Operations {
-		op := &child.Operations[i]
-		op.Status = OperationStatusQueued
-		op.ECSCheckpoint = nil
-		op.ExecutionAttempt = nil
-		op.Target = op.ECS.ServiceARN
-		if i == 0 {
-			op.Kind = NativeRollbackOperationKind
-			op.Phase = "Recovering"
-			op.Target = target.DeploymentARN
-			op.Summary = "Request ECS native rollback of the exact owned deployment to its captured source revision."
-		} else {
-			op.Summary = "Verify current source traffic, tasks and ALB health; stop acceptance alone is not recovery."
-		}
-	}
+	child.Operations = nativeRecoveryOperations(parent, *target)
 	child.Details = []string{"Native recovery of Apply " + parent.ID + "; the original forward evidence is preserved."}
 	child.Lifecycle = initialLifecycle(child)
 	child.ID, err = stableRecordID(child)
@@ -184,19 +170,14 @@ func nativeRollbackMatchesParent(child, parent Record) error {
 	if err != nil {
 		return err
 	}
+	expected := nativeRecoveryOperations(parent, *target)
 	id, idErr := stableRecordID(child)
-	if idErr != nil || id != child.ID || child.Recovery != nil || child.RetryOf != "" || child.Principal == nil || !child.Principal.Identity.Authenticated || (child.Principal.Identity.ID == "" && child.Principal.Identity.Email == "") || child.Principal.Automatic || !reflect.DeepEqual(child.NativeRollback, target) || child.PlanID != parent.PlanID || child.DeploymentName != parent.DeploymentName || !reflect.DeepEqual(child.Source, parent.Source) || len(child.Operations) != 2 {
+	if idErr != nil || id != child.ID || child.Recovery != nil || child.RetryOf != "" || child.Principal == nil || !child.Principal.Identity.Authenticated || (child.Principal.Identity.ID == "" && child.Principal.Identity.Email == "") || child.Principal.Automatic || !reflect.DeepEqual(child.NativeRollback, target) || child.PlanID != parent.PlanID || child.DeploymentName != parent.DeploymentName || !reflect.DeepEqual(child.Source, parent.Source) || len(child.Operations) != len(expected) {
 		return fmt.Errorf("altered native recovery approval/source")
 	}
 	for i, op := range child.Operations {
-		original := parent.Operations[i+1]
-		kind := original.Kind
-		targetARN := original.ECS.ServiceARN
-		if i == 0 {
-			kind = NativeRollbackOperationKind
-			targetARN = target.DeploymentARN
-		}
-		if op.ID != original.ID || op.Kind != kind || op.Target != targetARN || !reflect.DeepEqual(op.ECS, original.ECS) {
+		original := expected[i]
+		if op.ID != original.ID || op.Kind != original.Kind || op.Target != original.Target || !reflect.DeepEqual(op.ECS, original.ECS) {
 			return fmt.Errorf("altered native recovery operations")
 		}
 	}
@@ -274,4 +255,39 @@ func (s Service) hasPendingNativeRollback(ctx context.Context, parent Record) (b
 		return false, fmt.Errorf("linked native recovery is missing; forward tracking cannot resume")
 	}
 	return false, nil
+}
+
+func nativeRollbackKinds(record Record) []string {
+	kinds := []string{NativeRollbackOperationKind}
+	if record.NativeRollback != nil && len(record.Operations) > 0 && record.Operations[0].ECS != nil && int64(record.NativeRollback.DesiredCount) != int64(record.Operations[0].ECS.DesiredCount) {
+		kinds = append(kinds, NativeCapacityRestoreOperationKind)
+	}
+	return append(kinds, string(reconcile.StepVerifyServiceStability))
+}
+
+func nativeRecoveryOperations(parent Record, target ECSNativeRollback) []Operation {
+	operations := cloneOperations(parent.Operations[1:])
+	if int64(target.DesiredCount) != int64(parent.Operations[0].ECS.DesiredCount) {
+		restore := cloneOperations(parent.Operations[1:2])[0]
+		restore.ID += ":restore-capacity"
+		restore.Kind = NativeCapacityRestoreOperationKind
+		restore.Summary = fmt.Sprintf("After source rollback, restore captured desired count %d without starting another deployment.", target.DesiredCount)
+		operations = []Operation{operations[0], restore, operations[1]}
+	}
+	for i := range operations {
+		op := &operations[i]
+		op.Status = OperationStatusQueued
+		op.ECSCheckpoint = nil
+		op.ExecutionAttempt = nil
+		op.Target = op.ECS.ServiceARN
+		op.Phase = "Recovering"
+		if i == 0 {
+			op.Kind = NativeRollbackOperationKind
+			op.Target = target.DeploymentARN
+			op.Summary = "Request ECS native rollback of the exact owned deployment to its captured source revision."
+		} else if i == len(operations)-1 {
+			op.Summary = "Verify captured source capacity, traffic, tasks and ALB health; stop acceptance alone is not recovery."
+		}
+	}
+	return operations
 }

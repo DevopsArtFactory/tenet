@@ -184,3 +184,31 @@ func TestNativeRecoveryDoesNotInventMissingRequestedSourceWeight(t *testing.T) {
 		t.Fatal("optional requested source weight was invented or substituted for actual traffic proof", outcome, err)
 	}
 }
+
+func TestNativeRecoveryVerifiesCapturedCountRatherThanForwardCount(t *testing.T) {
+	for _, strategy := range []string{"BLUE_GREEN", "CANARY", "LINEAR"} {
+		for _, forward := range []int{1, 4} {
+			t.Run(strategy+string(rune('0'+forward)), func(t *testing.T) {
+				f, h, r, target, _ := nativeRecoveryObserverFixture(t, strategy)
+				r.Intent.DesiredCount = forward
+				r.PriorResults = append(r.PriorResults, rollbackResult(target))
+				f.service.DesiredCount = int32(forward)
+				outcome, err := h.ReconcileRollback(context.Background(), r, target)
+				if err != nil || outcome.Complete {
+					t.Fatal("rollback status hid unrestored count", outcome, err)
+				}
+				f.service.DesiredCount = 2
+				f.service.RunningCount = 3
+				outcome, err = h.ReconcileRollback(context.Background(), r, target)
+				if err != nil || outcome.Complete {
+					t.Fatal("desired count acceptance hid excess tasks", outcome, err)
+				}
+				f.service.RunningCount = 2
+				outcome, err = h.ReconcileRollback(context.Background(), r, target)
+				if err != nil || !outcome.Complete || outcome.Result.Observation.DesiredCount != 2 || outcome.Result.Observation.HealthyCount != 2 {
+					t.Fatal("source capacity goal was replaced by forward count", outcome, err)
+				}
+			})
+		}
+	}
+}

@@ -317,3 +317,48 @@ func TestNativeRecoveryHoldsHandedOffIntentUntilExplicitRetry(t *testing.T) {
 		t.Fatal("explicit retry did not bind original native deployment", retried, err)
 	}
 }
+
+func TestNativeCapacityRecoveryBindsCapturedCountAndExtraOperation(t *testing.T) {
+	for _, name := range []string{"valid", "count changed", "restore omitted", "restore ID changed", "restore payload changed"} {
+		t.Run(name, func(t *testing.T) {
+			f, ctx := nativeRecoveryFixture(t)
+			if _, err := f.executor.Service.Store.(MutationStore).Mutate(ctx, f.record.ID, func(r Record) (Record, error) {
+				r.Operations[1].ECSCheckpoint.Result.PreviousService.DesiredCount = 1
+				return r, nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			f.executor.ECS.Handlers[NativeCapacityRestoreOperationKind] = f.handler
+			child, err := f.executor.Service.RequestRollback(ctx, f.record.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(child.Record.Operations) != 3 || child.Record.NativeRollback.DesiredCount != 1 || child.Record.Operations[1].Kind != NativeCapacityRestoreOperationKind || child.Record.Operations[0].ID == child.Record.Operations[1].ID {
+				t.Fatal("capacity recovery omitted its immutable extra operation", child)
+			}
+			switch name {
+			case "count changed":
+				child.Record.NativeRollback.DesiredCount = 3
+			case "restore omitted":
+				child.Record.Operations = append(child.Record.Operations[:1], child.Record.Operations[2:]...)
+			case "restore ID changed":
+				child.Record.Operations[1].ID = child.Record.Operations[0].ID
+			case "restore payload changed":
+				child.Record.Operations[1].ECS.DesiredCount = 99
+			}
+			if name != "valid" {
+				if _, err := f.executor.Service.Store.(MutationStore).Mutate(ctx, child.Record.ID, func(Record) (Record, error) { return child.Record, nil }); err != nil {
+					t.Fatal(err)
+				}
+			}
+			err = f.executor.advanceECS(ctx, child.Record)
+			if name == "valid" {
+				if err != nil || f.handler.calls.Load() != 1 {
+					t.Fatal("valid three-stage recovery rejected", err)
+				}
+			} else if err == nil || f.handler.calls.Load() != 0 {
+				t.Fatal("altered capacity recovery executed", name, err)
+			}
+		})
+	}
+}
