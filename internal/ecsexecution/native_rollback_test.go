@@ -117,6 +117,7 @@ func TestNativeRollbackRequestsExactDeploymentOnceForEachStrategy(t *testing.T) 
 				t.Fatal(err)
 			}
 			r.PreparedResult = restored.Result
+			stopChecks = nil
 			result, err := h.Execute(context.Background(), r, restored.Target)
 			if err != nil {
 				t.Fatal(err)

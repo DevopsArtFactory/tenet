@@ -14044,6 +14044,39 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 		runNodeHarness(t, nodeProgram)
 	})
 
+	t.Run("native advanced recovery uses owned source and links handoff", func(t *testing.T) {
+		program := `const scriptContent=` + string(scriptJSON) + `;
+const detailBody=` + string(detailJSON) + `;
+const planPreview=` + string(planPreviewReadyJSON) + `;
+` + domHarness + `
+for(const mode of ['owned','adopted','disabled','missing-source','handed-off','recovered']) {
+ const document=new Document();['toolbar','summary','accounts'].forEach((id)=>document.byID.set(id,document.createElement('section')));
+ const window={location:{pathname:'/',search:'?page=plan&deployment=api-prod',hash:''}};
+ const history={replaceState(){}};const fetch=()=>new Promise(()=>{});const actions=[];
+ const source='arn:aws:ecs:us-west-2:111111111111:task-definition/actual-source:17';
+ const failedDesired='arn:aws:ecs:us-west-2:111111111111:task-definition/failed-desired:20';
+ const record={id:'native-forward',deploymentName:'api-prod',planId:planPreview.id,status:'running',principal:{identity:{id:'operator',authenticated:true}},operations:[{id:'update',kind:'UpdateECSService',ecs:{deploymentStrategy:'CANARY'},ecsCheckpoint:{state:'complete',mutationAuthorizedAt:'2026-10-28T00:00:00Z',result:{previousService:{taskDefinitionArn:failedDesired,desiredCount:0},previousTaskDefinitionArn:source,serviceDeploymentArn:'owned-deployment',previousServiceRevisionArn:'source-revision',nativeService:{sourceRevisions:[{arn:'source-revision',taskDefinitionArn:source}]}}}}]};
+ if(mode==='adopted')record.operations[0].ecsCheckpoint.result.nativeService.noOpDeploymentArn='adopted';
+ if(mode==='missing-source')record.operations[0].ecsCheckpoint.result.nativeService.sourceRevisions=[];
+ if(mode==='handed-off'){record.status='cancelled';record.nativeRollbackRequestId='native-child'}
+ if(mode==='recovered'){record.status='succeeded';record.nativeRollback={parentApplyId:'native-forward',sourceTaskDefinitionArn:source};record.operations=[];}
+ const main=scriptContent+` + "`" + `;
+ operatorContextState.context={ecsExecutionEnabled:true,ecsAdvancedExecutionEnabled:mode!=='disabled'};
+ renderDeploymentWorkspace('plan',detailBody,{status:'ready',record:planPreview},{status:record.status,record,onRecovery:(action,parent)=>actions.push([action,parent])});
+ ` + "`" + `;
+ new Function('window','document','fetch','history','HTMLElement','HTMLInputElement','detailBody','planPreview','record','actions','mode',main)(window,document,fetch,history,Element,InputElement,detailBody,planPreview,record,actions,mode);
+ const root=document.getElementById('accounts');const text=collectText(root).join(' | ');
+ const buttons=collectNodes(root,(n)=>n.tagName==='BUTTON');const rollback=buttons.find((n)=>n.textContent==='Roll back ECS deployment');
+ if(mode==='handed-off'){if(rollback||!text.includes('View recovery Apply')||!text.includes('AWS rollback outcome'))throw new Error('handoff lost separate recovery outcome');continue;}
+ if(mode==='recovered'){const retry=buttons.find((n)=>n.textContent==='Approve retry of Git intent');if(!retry||retry.disabled)throw new Error('completed source recovery cannot approve a separate retry');retry.dispatch('click');if(actions[0]?.join('|')!=='retry|native-forward')throw new Error('retry selected recovery child instead of original parent');continue;}
+ if(!rollback||rollback.disabled!==(mode!=='owned'))throw new Error('native rollback ownership/flag gate failed '+mode);
+ rollback.dispatch('click');if(actions.length!==(mode==='owned'?1:0))throw new Error('disabled native rollback emitted request');
+ if(mode==='owned'&&(!text.includes(source)||!text.includes('0 tasks')||text.includes('ECS rollback source: '+failedDesired)))throw new Error('rollback showed failed desired metadata instead of actual source');
+}
+`
+		runNodeHarness(t, program)
+	})
+
 	t.Run("native ECS recovery actions preserve zero baseline and separate outcomes", func(t *testing.T) {
 		program := `const scriptContent=` + string(scriptJSON) + `;
 const detailBody=` + string(detailJSON) + `;

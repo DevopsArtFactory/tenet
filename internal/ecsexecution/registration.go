@@ -34,6 +34,8 @@ type RegistrationClient interface {
 // Registration only registers/reuses revisions. Its client cannot update services.
 // Clients must assume the supplied deployer role, including same-account calls.
 type Registration struct {
+	AllowAdvanced bool
+
 	ClientFor func(context.Context, applyrequest.DeployerRoleReadiness) (RegistrationClient, error)
 	// CheckCapabilities checks concrete ECS actions and inherited iam:PassRole ARNs.
 	// It is an additional fail-closed gate; simulation never guarantees AWS acceptance.
@@ -58,8 +60,13 @@ func (r Registration) prepare(ctx context.Context, request applyrequest.ECSOpera
 		family, revision, _ = strings.Cut(strings.TrimPrefix(baseARN.Resource, "task-definition/"), ":")
 	}
 	revisionNumber, revisionErr := strconv.ParseInt(revision, 10, 32)
-	if err != nil || roleErr != nil || revisionErr != nil || revisionNumber <= 0 || family == "" || baseARN.Service != "ecs" || baseARN.AccountID != e.AWSAccountID || baseARN.Region != e.Region || roleARN.Service != "iam" || !strings.HasPrefix(roleARN.Resource, "role/") || roleARN.AccountID != e.AWSAccountID || roleARN.Partition != baseARN.Partition || !request.Role.Configured || !request.Role.Ready || !request.Role.CheckedWithAWS || request.Role.AWSAccountID != e.AWSAccountID || request.Role.Region != e.Region || e.DeploymentController != "ECS" || e.DeploymentStrategy != "ROLLING" || e.ContainerName == "" || e.Image == "" || request.RequestID == "" {
+	if err != nil || roleErr != nil || revisionErr != nil || revisionNumber <= 0 || family == "" || baseARN.Service != "ecs" || baseARN.AccountID != e.AWSAccountID || baseARN.Region != e.Region || roleARN.Service != "iam" || !strings.HasPrefix(roleARN.Resource, "role/") || roleARN.AccountID != e.AWSAccountID || roleARN.Partition != baseARN.Partition || !request.Role.Configured || !request.Role.Ready || !request.Role.CheckedWithAWS || request.Role.AWSAccountID != e.AWSAccountID || request.Role.Region != e.Region || e.DeploymentController != "ECS" || (e.DeploymentStrategy != "ROLLING" && !r.AllowAdvanced) || e.ContainerName == "" || e.Image == "" || request.RequestID == "" {
 		return nil, nil, "", fmt.Errorf("registration requires reviewed native Rolling intent, pinned base revision and matching deployer role")
+	}
+	if e.DeploymentStrategy != "ROLLING" {
+		if err := validateAdvancedIntent(e); err != nil {
+			return nil, nil, "", err
+		}
 	}
 	client, err := r.ClientFor(ctx, request.Role)
 	if err != nil {

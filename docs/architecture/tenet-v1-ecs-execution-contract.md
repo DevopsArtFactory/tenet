@@ -70,9 +70,9 @@ behind a mutable tag; use a digest for reproducible reviewed content.
 Adding the explicit `ecs` block selects native ECS intent. Native non-rolling
 strategies are never implicitly mapped to CodeDeploy. Optional reviewed
 [advanced traffic inputs](ecs-native-advanced-inputs.md) bind ALB routing,
-Canary/Linear percentages, bake times, alarms and Lambda hooks. Live execution,
-monitoring and rollback remain tracked in [#1801](https://github.com/DevopsArtFactory/tenet/issues/1801);
-recording strategy/configuration intent does not authorize a traffic shift.
+Canary/Linear percentages, bake times, alarms and Lambda hooks. Manual execution, monitoring and native rollback are connected behind the
+additional [advanced execution opt-in](../runbooks/ecs-native-recovery.md).
+Recording strategy/configuration intent alone does not authorize a traffic shift.
 
 Manifests without the block retain their legacy read-only interpretation:
 `ecsRolling` for Rolling and `ecsCodeDeploy` for the other ECS strategies. Existing
@@ -430,11 +430,11 @@ percentages, explicit zero bake times, routing roles/targets, alarms and Lambda
 hooks. They also verify deployment/revision correlation, traffic/lifecycle
 response decoding and the native `StopServiceDeployment(ROLLBACK)` request.
 
-This dependency prerequisite does not enable advanced execution. The live
-executor and automatic Git reconciler still accept Rolling only. Manifest
-configuration, routing preflight, restartable advanced observation and rollback
-remain tracked by #1801; do not route native advanced plans through Rolling or
-legacy CodeDeploy handlers. The initial hook contract will use Lambda hooks;
+The SDK upgrade alone does not enable advanced execution. Manual native
+execution and recovery require the separate advanced flag and use dedicated
+handlers; the automatic Git reconciler remains Rolling-only. Do not route native
+advanced plans through Rolling or legacy CodeDeploy handlers.
+The initial hook contract uses Lambda hooks;
 newer Pause/Continue deployment APIs are not covered by this SDK pin.
 
 Reference: [ECS SDK changelog](https://github.com/aws/aws-sdk-go-v2/blob/service/ecs/v1.66.0/service/ecs/CHANGELOG.md).

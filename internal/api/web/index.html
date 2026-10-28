@@ -10473,8 +10473,9 @@
       const applyExecutionReadinessLabel = (record, readinessOverride = null) => {
         if (hasNativeECSExecution(record)) {
           if (record.status === 'queued') return record.error ? 'Execution blocked' : 'Approved · awaiting executor';
-          if (record.status === 'succeeded') return record.ecsRuntime?.state === 'converged' ? (record.recovery ? 'Previous revision verified' : 'Deployment verified') : 'Execution completed';
-          if (record.status === 'failed') return record.recovery ? 'Recovery failed' : 'Execution failed';
+          if (record.nativeRollbackRequestId) return 'Recovery requested';
+          if (record.status === 'succeeded') return record.ecsRuntime?.state === 'converged' ? ((record.recovery || record.nativeRollback) ? 'Previous revision verified' : 'Deployment verified') : 'Execution completed';
+          if (record.status === 'failed') return (record.recovery || record.nativeRollback) ? 'Recovery failed' : 'Execution failed';
           return 'ECS execution active';
         }
         switch (applyExecutionReadinessState(record, readinessOverride)) {
@@ -10852,6 +10853,8 @@
           ...queuedApplyClaimRows(record),
           ...ecsRuntimeRows(record),
           ...(record.recovery ? [['Recovery of', record.recovery.applyId], ['Recovery policy', record.recovery.automatic ? 'Approved automatic recovery' : 'Explicit operator recovery']] : []),
+          ...(record.nativeRollback ? [['Recovery of', record.nativeRollback.parentApplyId], ['Recovery source', record.nativeRollback.sourceTaskDefinitionArn]] : []),
+          ...(record.nativeRollbackRequestId ? [['Recovery Apply', record.nativeRollbackRequestId]] : []),
           ...(record.retryOf ? [['Retry of', record.retryOf]] : []),
           ...applyExecutionReadinessRows(record),
         ].forEach(([label, value, className]) => {
@@ -10864,7 +10867,8 @@
         const links = createElement('div', 'row-links row-links-shell');
         if (record?.deploymentName && record?.id) {
           links.append(createNavLink(buildPageURL('plan', { deployment: record.deploymentName, applyId: record.id }), 'Open plan/apply workspace', '_self'));
-          if (record.recovery?.applyId || record.retryOf) links.append(createNavLink(buildPageURL('plan', { deployment: record.deploymentName, applyId: record.recovery?.applyId || record.retryOf }), 'Original failed deployment', '_self'));
+          if (record.recovery?.applyId || record.nativeRollback?.parentApplyId || record.retryOf) links.append(createNavLink(buildPageURL('plan', { deployment: record.deploymentName, applyId: record.recovery?.applyId || record.nativeRollback?.parentApplyId || record.retryOf }), record.nativeRollback ? 'Original deployment' : 'Original failed deployment', '_self'));
+          if (record.nativeRollbackRequestId) links.append(createNavLink(buildPageURL('plan', { deployment: record.deploymentName, applyId: record.nativeRollbackRequestId }), 'View recovery Apply', '_self'));
         }
         if (record?.id) {
           const previewState = appliesMonitorExecutionPreviewState(state, record.id);
@@ -12375,17 +12379,41 @@
             applySection.append(createNavLink(buildPageURL('plan', { deployment: detail.name, applyId: activeApplyRecord.recovery.applyId }), 'Original failed deployment', '_self'));
           }
           if (activeApplyRecord?.retryOf) applySection.append(createNavLink(buildPageURL('plan', { deployment: detail.name, applyId: activeApplyRecord.retryOf }), 'Original failed deployment', '_self'));
-          if (activeApplyRecord?.status === 'failed' && activeApplyRecord.principal && !activeApplyRecord.recovery) {
-            const baseline = activeApplyRecord.operations?.find((operation) => operation.kind === 'UpdateECSService')?.ecsCheckpoint?.result?.previousService;
+          if (activeApplyRecord?.nativeRollback) {
+            applySection.append(createElement('div', 'detail-state', `Native recovery of Apply ${activeApplyRecord.nativeRollback.parentApplyId}. The source revision must pass current traffic, task and ALB health checks.`));
+            applySection.append(createNavLink(buildPageURL('plan', { deployment: detail.name, applyId: activeApplyRecord.nativeRollback.parentApplyId }), 'Original deployment', '_self'));
+            if (['succeeded', 'failed'].includes(activeApplyRecord.status)) {
+              const retry = createElement('button', 'toolbar-button', 'Approve retry of Git intent');
+              retry.type = 'button';
+              retry.disabled = operatorContextState.context?.ecsExecutionEnabled !== true || operatorContextState.context?.ecsAdvancedExecutionEnabled !== true || typeof applyState?.onRecovery !== 'function';
+              retry.addEventListener('click', () => { if (!retry.disabled) applyState.onRecovery('retry', activeApplyRecord.nativeRollback.parentApplyId); });
+              applySection.append(retry);
+            }
+          }
+          if (activeApplyRecord?.nativeRollbackRequestId) {
+            applySection.append(createElement('div', 'detail-state', 'Forward tracking was handed to a separate recovery Apply. Inspect that Apply for the AWS rollback outcome.'));
+            applySection.append(createNavLink(buildPageURL('plan', { deployment: detail.name, applyId: activeApplyRecord.nativeRollbackRequestId }), 'View recovery Apply', '_self'));
+          }
+          const updateOperation = activeApplyRecord?.operations?.find((operation) => operation.kind === 'UpdateECSService');
+          const nativeAdvanced = Boolean(updateOperation?.ecs?.deploymentStrategy && updateOperation.ecs.deploymentStrategy !== 'ROLLING');
+          const updateResult = updateOperation?.ecsCheckpoint?.result;
+          const baseline = updateResult?.previousService;
+          const ownedNativeSource = nativeAdvanced && updateOperation?.ecsCheckpoint?.state === 'complete' && updateOperation.ecsCheckpoint.mutationAuthorizedAt && !updateResult?.nativeService?.noOpDeploymentArn && updateResult?.serviceDeploymentArn && updateResult?.previousServiceRevisionArn && updateResult?.nativeService?.sourceRevisions?.some((source) => source.arn === updateResult.previousServiceRevisionArn && source.taskDefinitionArn === updateResult.previousTaskDefinitionArn);
+          if (activeApplyRecord?.principal && !activeApplyRecord.recovery && !activeApplyRecord.nativeRollback && !activeApplyRecord.nativeRollbackRequestId && (activeApplyRecord.status === 'failed' || (nativeAdvanced && activeApplyRecord.status === 'running'))) {
             const recoveryActions = createElement('div', 'row-links');
-            [['rollback', 'Restore previous revision'], ['retry', 'Approve retry of Git intent']].forEach(([action, label]) => {
+            const actions = [['rollback', nativeAdvanced ? 'Roll back ECS deployment' : 'Restore previous revision']];
+            if (activeApplyRecord.status === 'failed') actions.push(['retry', 'Approve retry of Git intent']);
+            actions.forEach(([action, label]) => {
               const button = createElement('button', 'toolbar-button', label);
               button.type = 'button';
-              button.disabled = operatorContextState.context?.ecsExecutionEnabled !== true || typeof applyState?.onRecovery !== 'function' || (action === 'rollback' && !baseline);
+              button.disabled = operatorContextState.context?.ecsExecutionEnabled !== true || (nativeAdvanced && operatorContextState.context?.ecsAdvancedExecutionEnabled !== true) || typeof applyState?.onRecovery !== 'function' || (action === 'rollback' && !(nativeAdvanced ? ownedNativeSource : baseline));
               button.addEventListener('click', () => { if (!button.disabled) applyState.onRecovery(action); });
               recoveryActions.append(button);
             });
-            applySection.append(createElement('div', 'detail-state', baseline ? `Restore target: ${baseline.taskDefinitionArn} · ${metricValue(baseline.desiredCount)} tasks · rolling bounds ${metricValue(baseline.minimumHealthyPercent)}/${metricValue(baseline.maximumPercent)}. Recovery preserves this failed deployment record.` : 'No persisted previous service baseline is available for rollback. An explicit retry approves another attempt of the same Git intent.'));
+            const recoveryMessage = nativeAdvanced
+              ? (ownedNativeSource ? `ECS rollback source: ${updateResult.previousTaskDefinitionArn} · ${metricValue(baseline?.desiredCount)} tasks. AWS stop acceptance is followed by source health verification.` : 'Rollback requires an owned deployment and its captured source revision; an adopted deployment cannot authorize a stop.')
+              : (baseline ? `Restore target: ${baseline.taskDefinitionArn} · ${metricValue(baseline.desiredCount)} tasks · rolling bounds ${metricValue(baseline.minimumHealthyPercent)}/${metricValue(baseline.maximumPercent)}. Recovery preserves this failed deployment record.` : 'No persisted previous service baseline is available for rollback. An explicit retry approves another attempt of the same Git intent.');
+            applySection.append(createElement('div', 'detail-state', recoveryMessage + (nativeAdvanced && operatorContextState.context?.ecsAdvancedExecutionEnabled !== true ? ' Native advanced execution is disabled on this server.' : '')));
             applySection.append(recoveryActions);
           }
           const applyWriteActions = createOperatorWriteAuthRequiredActions(applyState);
@@ -13493,9 +13521,11 @@
                     onReloadApply: (applyId) => loadApplyRequestRecord(applyId),
                     onReloadPreflight: (applyId) => loadApplyPreflightRecord(applyId),
                     onReloadExecutionPreview: (applyId) => loadApplyExecutionPreviewRecord(applyId),
-                    onRecovery: async (action) => {
-                      const parentId = applyState.record?.id;
-                      if (!parentId || applyState.status !== 'failed' || !['rollback', 'retry'].includes(action)) return;
+                    onRecovery: async (action, recoveryParentId) => {
+                      const parentId = recoveryParentId || applyState.record?.id;
+                      const recordStatus = applyState.record?.status;
+                      const validParentRetry = action === 'retry' && recoveryParentId === applyState.record?.nativeRollback?.parentApplyId && ['succeeded', 'failed'].includes(recordStatus);
+                      if (!parentId || !['rollback', 'retry'].includes(action) || (!validParentRetry && recordStatus !== 'failed' && !(action === 'rollback' && recordStatus === 'running'))) return;
                       applyState = { ...applyState, status: 'loading', request: 'create', recoveryAction: action, error: null };
                       renderPlanWorkspace();
                       try {

@@ -2,7 +2,7 @@
 
 Tenet is a repository-driven deployment control plane for multi-account AWS environments. It brings declared deployment intent, runtime status, rollout progress, and resource evidence into one operator UI for **EC2 and ECS**.
 
-**Status: early-stage.** Tenet can inspect AWS resources, create deployment plans, and execute explicitly approved **native ECS Rolling** updates behind a separate live-execution opt-in. The default local demo remains safe for inspection. Rolling rollback and explicit retry are supported with separate audit outcomes. GitHub reconciliation supports manual plans and explicitly enabled automatic Rolling sync/self-heal. Advanced native traffic strategies are still in progress; see the [ECS execution guide](docs/architecture/tenet-v1-ecs-execution-contract.md#enabling-reviewed-rolling-execution).
+**Status: early-stage.** Tenet can inspect AWS resources, create deployment plans, and execute explicitly approved **native ECS Rolling** updates behind a separate live-execution opt-in. The default local demo remains safe for inspection. Rolling rollback and explicit retry are supported with separate audit outcomes. GitHub reconciliation supports manual plans and explicitly enabled automatic Rolling sync/self-heal. Native Blue-Green, Canary and Linear support explicit manual execution and separate recovery behind an additional opt-in; see the [native recovery guide](docs/runbooks/ecs-native-recovery.md) and the [ECS execution guide](docs/architecture/tenet-v1-ecs-execution-contract.md#enabling-reviewed-rolling-execution).
 
 ## What it does
 
@@ -67,7 +67,8 @@ Use `make smoke-docker` when changing the Compose stack or its runtime behavior.
 
 - [ECS Git reconciliation](docs/runbooks/ecs-git-reconciliation.md) — manual plans, scoped automatic sync, drift and operational boundaries.
 - [ECS Rolling recovery](docs/runbooks/ecs-rolling-recovery.md) — explicit/approved automatic rollback, failed-intent holds, and retries.
-- [Native advanced traffic inputs](docs/architecture/ecs-native-advanced-inputs.md) — reviewed ALB, Canary/Linear, bake, alarm and Lambda-hook settings; execution still in progress.
+- [Native advanced traffic inputs](docs/architecture/ecs-native-advanced-inputs.md) — reviewed ALB, Canary/Linear, bake, alarm and Lambda-hook settings.
+- [Native ECS Apply and recovery](docs/runbooks/ecs-native-recovery.md) — advanced execution opt-in, durable ownership handoff and operator rollback.
 - [ECS native execution input contract](docs/architecture/tenet-v1-ecs-execution-contract.md) — explicit targets, pinned task definitions, native strategies, and reviewed plan inputs.
 
 | Guide | Covers |

@@ -216,6 +216,13 @@ func ecsReadiness(record Record, checkedAt string) ExecutionReadiness {
 		checkedAt = record.ECSRuntime.ObservedAt
 		evidence = append(evidence, "Runtime reason: "+record.ECSRuntime.Reason)
 	}
+	if record.NativeRollback != nil {
+		summary = "Native recovery of Apply " + record.NativeRollback.ParentApplyID + ": " + summary
+	}
+	if record.NativeRollbackRequestID != "" {
+		summary = "Forward tracking handed to recovery Apply " + record.NativeRollbackRequestID + "; inspect that Apply for the AWS outcome."
+		state = string(record.Status)
+	}
 	if record.Recovery != nil {
 		summary = "Rolling recovery of failed Apply " + record.Recovery.ApplyID + ": " + summary
 	}
@@ -231,6 +238,10 @@ func nativeECSPreflight(record Record, operation Operation, role *DeployerRoleRe
 		resourceType = "taskDefinition"
 		resourceName = operation.ECS.BaseTaskDefinitionARN
 		capability = "ecs:RegisterTaskDefinition"
+	case NativeRollbackOperationKind:
+		resourceType = "ecsServiceDeployment"
+		resourceName = operation.Target
+		capability = "ecs:StopServiceDeployment"
 	case string(reconcile.StepUpdateECSService):
 		capability = "ecs:UpdateService"
 	}

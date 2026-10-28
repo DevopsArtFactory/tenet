@@ -2,9 +2,10 @@
 
 This is the input/plan prerequisite for #1801. Blue-Green, Canary and Linear can
 now carry a validated `ecs.advanced` policy through compilation, desired
-identity, plan persistence and Apply projection. Live execution, monitoring and
-rollback for these strategies are still gated off; the production executor and
-automatic reconciler continue to accept Rolling only.
+identity, plan persistence and Apply projection. Manual execution, monitoring and
+operator rollback are connected behind the additional advanced-execution opt-in.
+Automatic reconciliation remains Rolling-only. See the [runtime and recovery
+runbook](../runbooks/ecs-native-recovery.md) for enablement and ownership semantics.
 
 Use the complete [advanced example repository](../../examples/ecs-native-advanced-repo)
 for all three strategies. Its account, role and resource identifiers are fixtures;
@@ -25,7 +26,7 @@ use. No resource is provisioned by reading or planning these examples.
 | Time bounds | Each bake value is 0–1440 minutes; total configured traffic/bake schedule is at most 24 hours |
 | Alarms | Optional enabled block with 1–10 unique CloudWatch alarm names and explicit ECS rollback choice |
 | Hooks | Same-placement Lambda function pinned to a positive numeric version, explicit IAM role and supported stages |
-| Automatic sync | Unsupported for advanced strategies until execution/monitoring/rollback integration is verified |
+| Automatic sync | Rolling-only; advanced strategies require explicit operator approval |
 
 Omit alarms/hooks to review no alarms/hooks. Zero bake times are explicit values,
 not missing settings. A Canary block is invalid on Blue-Green/Linear and vice
@@ -89,9 +90,9 @@ selects only reviewed ARNs. Permission denial, incomplete data and cancelled
 contexts fail closed. Source/observer credentials are never reused as execution
 credentials, including same-account preflight.
 
-This helper is a prerequisite and remains unwired to production advanced writes
-until service-update, observation and rollback handlers are complete. The
-existing live flags still enable Rolling only.
+The helper is connected to advanced execution. The existing live flags enable
+Rolling; advanced strategies additionally require
+`TENET_AWS_ENABLE_ECS_ADVANCED_EXECUTION=true`.
 
 References: [ALB prerequisites](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/alb-resources-for-blue-green.html)
 and [ELB IAM action scopes](https://docs.aws.amazon.com/service-authorization/latest/reference/list_elbv2.html).
@@ -133,8 +134,8 @@ Current RBAC, durable ownership and the final mutation callback remain separate
 execution gates. External writers must coordinate on the same service: AWS does
 not expose an UpdateService compare-and-swap token.
 
-Production advanced execution remains disabled until the observation and
-rollback integration is complete. These handlers are verified through fake SDK
+Production advanced execution remains disabled by default and requires the
+additional explicit advanced opt-in. These handlers are verified through fake SDK
 clients and local HTTP serialization fixtures; no real AWS deployment was run.
 
 ## Native observation prerequisite
@@ -167,8 +168,8 @@ and triggered alarms are durable evidence; meaningful changes enter audit while
 timestamp-only polls do not. The existing monitor shows lifecycle and configured
 traffic with unknown values preserved rather than rendered as zero.
 
-Production advanced execution remains gated until operator-triggered native
-rollback and executor integration are verified. Current tests use fake SDK/HTTP
+Production advanced execution uses the opt-in and ownership protocol described
+in the runtime runbook. Current tests use fake SDK/HTTP
 clients and do not change a real AWS service.
 
 ## Native rollback request prerequisite
@@ -198,9 +199,9 @@ blind resend. A rollback state naming a different source revision is rejected.
 A stop response or reconciled rollback status confirms request acceptance only.
 Even `ROLLBACK_SUCCESSFUL` must be combined with current source traffic, task and
 ALB health by the recovery observer before an operator can call it recovered.
-This prerequisite does not expose a native rollback endpoint or enable advanced
-production execution. Durable recovery-child handoff, recovery observation and
-executor/API integration are the next pieces; Rolling recovery is unchanged.
+The rollback endpoint now creates a separately authorized recovery child with
+durable ownership handoff and observation; see the runtime runbook. Rolling
+recovery is unchanged.
 Tests use injected SDK clients and local HTTP fixtures; no AWS mutation was run.
 
 References: [StopServiceDeployment](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_StopServiceDeployment.html),
@@ -234,5 +235,5 @@ The recovery observation has its own persisted deadline, which is not extended
 on restart. It never modifies the original forward Apply or calls a mutation
 API. Fake SDK tests cover all three strategies, source/forward attribution,
 partial progress, missing health evidence, failures, supersession and restart.
-Production advanced writes remain gated until durable child-apply ownership and
-executor/API integration are verified; no actual AWS rollout was performed.
+Production advanced writes require the additional opt-in and use durable
+child-Apply ownership handoff; no actual AWS rollout was performed.

@@ -183,6 +183,7 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 	}
 	if ecsExecutionEnabled() {
 		options.ECSExecutionEnabled = true
+		options.ECSAdvancedExecutionEnabled = ecsAdvancedExecutionEnabled()
 		options.RequireAuthenticatedIdentity = true
 		options.RequireOperatorRoleForRead = true
 		options.RequireOperatorRoleForWrite = true

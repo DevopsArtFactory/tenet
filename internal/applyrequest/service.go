@@ -38,6 +38,8 @@ type DeployerRoleReadinessProvider func(context.Context, DeployerRoleTarget) (De
 
 // Service derives and persists immutable apply requests from ready plan previews.
 type Service struct {
+	PrepareNativeRollback func(context.Context, Record, ECSNativeRollback) error
+
 	AuthorizeCreate       func(context.Context, Record) (*ExecutionPrincipal, error)
 	RollbackTarget        func(context.Context, Record) (*domain.ECSDeploymentIntent, error)
 	CreateRetryPlan       func(context.Context, string) (planpreview.Record, error)
@@ -128,7 +130,7 @@ func (s Service) create(ctx context.Context, planID, retryOf string) (CreateResu
 		if err != nil {
 			return CreateResult{}, err
 		}
-		if parent.Status != StatusFailed || parent.Recovery != nil || len(parent.Operations) != 3 || len(record.Operations) != 3 || !reflect.DeepEqual(parent.Operations[0].ECS, record.Operations[0].ECS) {
+		if !ecsRetryableParent(parent) || len(parent.Operations) != 3 || len(record.Operations) != 3 || !reflect.DeepEqual(parent.Operations[0].ECS, record.Operations[0].ECS) {
 			return CreateResult{}, ErrSourceFingerprintConflict
 		}
 		record.RetryDeploymentID = failedDeploymentID(parent)
@@ -559,6 +561,9 @@ func (s Service) Transition(ctx context.Context, id string, request TransitionRe
 	}
 
 	change := func(record Record) (Record, error) {
+		if record.NativeRollback != nil {
+			return Record{}, fmt.Errorf("%w: native recovery is owned by its executor", ErrInvalidState)
+		}
 		for _, operation := range record.Operations {
 			if operation.ECSCheckpoint != nil {
 				return Record{}, fmt.Errorf("%w: live ECS requests are advanced by their owning executor", ErrInvalidState)
@@ -669,6 +674,7 @@ func stableRecordID(record Record) (string, error) {
 	// changes.
 	payload := struct {
 		RetryDeploymentID string              `json:"retryDeploymentId,omitempty"`
+		NativeRollback    *ECSNativeRollback  `json:"nativeRollback,omitempty"`
 		Recovery          *ECSRecovery        `json:"recovery,omitempty"`
 		RetryOf           string              `json:"retryOf,omitempty"`
 		Principal         *ExecutionPrincipal `json:"principal,omitempty"`
@@ -677,7 +683,7 @@ func stableRecordID(record Record) (string, error) {
 		Source            SourceContext       `json:"source"`
 	}{
 		RetryDeploymentID: record.RetryDeploymentID,
-		Recovery:          record.Recovery, RetryOf: record.RetryOf,
+		NativeRollback:    record.NativeRollback, Recovery: record.Recovery, RetryOf: record.RetryOf,
 		Principal:      record.Principal,
 		PlanID:         record.PlanID,
 		DeploymentName: record.DeploymentName,
