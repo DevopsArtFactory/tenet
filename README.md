@@ -2,7 +2,7 @@
 
 Tenet is a repository-driven deployment control plane for multi-account AWS environments. It brings declared deployment intent, runtime status, rollout progress, and resource evidence into one operator UI for **EC2 and ECS**.
 
-**Status: early-stage.** Tenet can inspect AWS resources, create deployment plans, and execute explicitly approved **native ECS Rolling** updates behind a separate live-execution opt-in. The default local demo remains safe for inspection. Rolling rollback and explicit retry are supported with separate audit outcomes. GitHub reconciliation supports manual plans and explicitly enabled automatic Rolling sync/self-heal. Native Blue-Green, Canary and Linear support explicit manual execution and separate recovery behind an additional opt-in; see the [native recovery guide](docs/runbooks/ecs-native-recovery.md) and the [ECS execution guide](docs/architecture/tenet-v1-ecs-execution-contract.md#enabling-reviewed-rolling-execution).
+**Status: early-stage.** Tenet can inspect AWS resources, create deployment plans, and execute reviewed **native ECS Rolling, Blue-Green, Canary and Linear** deployments behind a separate live-execution opt-in. The default local demo remains safe for inspection. Rolling rollback and explicit retry are supported with separate audit outcomes. GitHub reconciliation supports manual plans and explicitly enabled automatic native sync. Blue-Green, Canary and Linear require the additional advanced opt-in; self-heal remains Rolling-only. Native advanced strategies also support separate operator recovery; see the [native recovery guide](docs/runbooks/ecs-native-recovery.md) and the [ECS execution guide](docs/architecture/tenet-v1-ecs-execution-contract.md#enabling-reviewed-rolling-execution).
 
 ## What it does
 

@@ -24,8 +24,11 @@ operator permission and deployment scope. Actor attribution headers do not
 provide execution authority. All ECS and ALB clients assume the verified target
 account deployer role, including same-account calls.
 
-Automatic Git sync/self-heal remains Rolling-only. Advanced execution currently
-requires an explicit operator approval. The advanced flag enables both new work
+Advanced execution accepts explicit operator approval or separately enabled
+[Git-change automatic sync](ecs-git-reconciliation.md#opt-in-to-automatic-sync).
+Automation additionally requires the configured scoped service subject and each
+deployment's `syncPolicy.mode: automatic`. Self-heal remains Rolling-only.
+The advanced flag enables both new work
 and recovery/observation for these strategies; disabling live execution pauses
 Tenet's processing and does not stop a deployment already running in AWS.
 

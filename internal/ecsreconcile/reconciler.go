@@ -25,18 +25,19 @@ type Drift struct {
 // Reconciler only creates reviewed control-plane records. The existing ECS
 // executor remains the sole owner of AWS mutation and convergence checkpoints.
 type Reconciler struct {
-	Enabled      bool
-	Automatic    bool
-	LiveECS      bool
-	SubjectID    string
-	Interval     time.Duration
-	Logger       *slog.Logger
-	LoadCatalog  func(context.Context) (manifest.Catalog, error)
-	Plans        planpreview.Store
-	ListPlans    func(context.Context) ([]planpreview.Record, error)
-	Applies      applyrequest.Service
-	Statuses     statusstore.Store
-	ObserveDrift func(context.Context, domain.Deployment, applyrequest.Record) (Drift, error)
+	Enabled       bool
+	Automatic     bool
+	LiveECS       bool
+	AllowAdvanced bool
+	SubjectID     string
+	Interval      time.Duration
+	Logger        *slog.Logger
+	LoadCatalog   func(context.Context) (manifest.Catalog, error)
+	Plans         planpreview.Store
+	ListPlans     func(context.Context) ([]planpreview.Record, error)
+	Applies       applyrequest.Service
+	Statuses      statusstore.Store
+	ObserveDrift  func(context.Context, domain.Deployment, applyrequest.Record) (Drift, error)
 }
 
 func (r Reconciler) Run(ctx context.Context) error {
@@ -88,7 +89,13 @@ func (r Reconciler) RunOnce(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if deployment.ECS == nil || deployment.ECS.DeploymentController != "ECS" || deployment.ECS.DeploymentStrategy != "ROLLING" {
+		if deployment.ECS == nil || deployment.ECS.DeploymentController != "ECS" {
+			continue
+		}
+
+		switch deployment.ECS.DeploymentStrategy {
+		case "ROLLING", "BLUE_GREEN", "CANARY", "LINEAR":
+		default:
 			continue
 		}
 
@@ -124,8 +131,11 @@ func (r Reconciler) reconcileDeployment(ctx context.Context, compiled manifest.C
 			return err
 		}
 	}
-	if !r.Automatic || !r.LiveECS || !r.Applies.EnableAWSApply || r.SubjectID == "" || intent.SyncMode != "automatic" {
+	if !r.Automatic || !r.LiveECS || !r.Applies.EnableAWSApply || r.SubjectID == "" || intent.SyncMode != "automatic" || (intent.DeploymentStrategy != "ROLLING" && !r.AllowAdvanced) {
 		return nil
+	}
+	if intent.DeploymentStrategy != "ROLLING" && (intent.Advanced == nil || intent.SelfHeal) {
+		return fmt.Errorf("advanced automatic sync requires reviewed traffic configuration and selfHeal disabled")
 	}
 	if r.Applies.AuthorizeCreate == nil {
 		return fmt.Errorf("automatic sync requires a trusted authorization provider")
@@ -169,7 +179,7 @@ func (r Reconciler) reconcileDeployment(ctx context.Context, compiled manifest.C
 			}
 			superseded = append(superseded, record)
 		}
-		if len(record.Operations) == 3 && record.Operations[0].ECS != nil && record.Status == applyrequest.StatusSucceeded && record.ECSRuntime != nil && record.ECSRuntime.State == "converged" {
+		if record.Recovery == nil && record.NativeRollback == nil && record.NativeRollbackRequestID == "" && len(record.Operations) == 3 && record.Operations[0].ECS != nil && record.Status == applyrequest.StatusSucceeded && record.ECSRuntime != nil && record.ECSRuntime.State == "converged" {
 			successes = append(successes, record)
 			if record.Source.LastVerifiedApplyID != "" {
 				parentVerified[record.Source.LastVerifiedApplyID] = true

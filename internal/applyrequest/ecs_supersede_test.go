@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
 
@@ -76,5 +77,52 @@ func TestAutomationPauseStopsMutationsButAllowsReadOnlyVerification(t *testing.T
 	}
 	if blocked.handler.calls.Load() != 0 || hasECSCheckpoints(blocked.stored(t)) {
 		t.Fatal("paused automation wrote a checkpoint or AWS mutation")
+	}
+}
+
+func TestAdvancedSupersessionPreservesRecoveryAndAmbiguousWrites(t *testing.T) {
+	for _, strategy := range []string{"BLUE_GREEN", "CANARY", "LINEAR"} {
+		t.Run(strategy, func(t *testing.T) {
+			f := newECSFixture(t)
+			r := f.record
+			for i := range r.Operations {
+				r.Operations[i].ECS.DeploymentStrategy = strategy
+				r.Operations[i].ECS.Advanced = &domain.ECSAdvancedConfiguration{}
+			}
+			if !CanSupersedeECS(r) {
+				t.Fatal("unstarted native update cannot be replaced")
+			}
+			r.Operations[1].ECSCheckpoint = &ECSCheckpoint{State: "in_flight", MutationGuarded: true, MutationAuthorizedAt: "sent"}
+			if CanSupersedeECS(r) {
+				t.Fatal("native accepted/uncertain write was replaceable")
+			}
+			r.Operations[1].ECSCheckpoint = nil
+			r.NativeRollback = &ECSNativeRollback{ParentApplyID: "parent"}
+			if CanSupersedeECS(r) {
+				t.Fatal("native recovery was replaceable")
+			}
+			r.NativeRollback = nil
+			r.NativeRollbackRequestID = "recovery-child"
+			if CanSupersedeECS(r) {
+				t.Fatal("handed-off forward owner was replaceable")
+			}
+			r.NativeRollbackRequestID = ""
+			r.Recovery = &ECSRecovery{ApplyID: "parent"}
+			if CanSupersedeECS(r) {
+				t.Fatal("recovery was replaceable")
+			}
+		})
+	}
+}
+
+func TestSupersessionRestoresStoredAutomationApprovalContext(t *testing.T) {
+	principal := &ExecutionPrincipal{Automatic: true, Identity: requestactor.AuthenticatedIdentity{ID: "ecs-sync", Authenticated: true}}
+	ctx := principalContext(context.Background(), principal)
+	if !AutomaticApprovalFromContext(ctx) || requestactor.AuthenticatedIdentityFromContext(ctx).ID != "ecs-sync" {
+		t.Fatal("stored automation identity lost its approval context")
+	}
+	principal.Automatic = false
+	if AutomaticApprovalFromContext(principalContext(ctx, principal)) {
+		t.Fatal("human approval inherited an automation context")
 	}
 }
