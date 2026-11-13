@@ -103,6 +103,10 @@ jobs:
             if test -s "$TENET_EMULATOR_STATE/emulator_credentials" && curl --silent --noproxy '*' --max-time 1 --cacert "$TENET_EMULATOR_STATE/ca.pem" https://127.0.0.1:19297/ -o /dev/null; then
               break
             fi
+            if [[ "$attempt" == 60 ]]; then
+              echo "AWS Emulator did not become ready on loopback" >&2
+              exit 1
+            fi
             sleep 1
           done
           go test -tags awsemulator -run '^TestNativeEmulatorRollback$' -count=1 -v ./internal/ecsexecution

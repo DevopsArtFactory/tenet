@@ -137,8 +137,14 @@ func TestNativeEmulatorRollback(t *testing.T) {
 			var forward string
 			for _, item := range history {
 				if aws.ToString(item.ServiceDeploymentArn) != aws.ToString(before[0].ServiceDeploymentArn) {
+					if forward != "" {
+						t.Fatal("multiple new deployments appeared")
+					}
 					forward = aws.ToString(item.ServiceDeploymentArn)
 				}
+			}
+			if forward == "" {
+				t.Fatal("missing new deployment ARN")
 			}
 			d, err := describeNativeDeployment(ctx, client, forward, r)
 			emulatorCheck(t, err)
