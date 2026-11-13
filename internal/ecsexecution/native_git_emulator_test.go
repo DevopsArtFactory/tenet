@@ -45,6 +45,7 @@ func emulatorGit(t *testing.T, dir string, args ...string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
 func emulatorManifest(t *testing.T, dir, kind string, doc any) {
 	t.Helper()
 	folder := filepath.Join(dir, kind)
@@ -62,7 +63,12 @@ type emulatorNetwork struct {
 func TestNativeEmulatorGitRecovery(t *testing.T) {
 	raw, err := manifestfs.Load("../../examples/ecs-native-advanced-repo")
 	emulatorCheck(t, err)
+	remaining := map[spec.StrategyType]bool{spec.StrategyTypeBlueGreen: true, spec.StrategyTypeCanary: true, spec.StrategyTypeLinear: true}
 	for _, d := range raw.Deployments {
+		if !remaining[d.Strategy.Type] {
+			t.Fatalf("unexpected or duplicate strategy %s", d.Strategy.Type)
+		}
+		delete(remaining, d.Strategy.Type)
 		t.Run(string(d.Strategy.Type), func(t *testing.T) {
 			var net emulatorNetwork
 			cmd := exec.CommandContext(t.Context(), "python3", "../../tests/ecs-native-integration/emulator_network.py")
@@ -72,6 +78,9 @@ func TestNativeEmulatorGitRecovery(t *testing.T) {
 			emulatorCheck(t, json.Unmarshal(out, &net))
 			emulatorGitRecovery(t, net, raw.Accounts[0], raw.Environments[0], d)
 		})
+	}
+	if len(remaining) != 0 {
+		t.Fatalf("missing catalog strategies: %v", remaining)
 	}
 }
 
@@ -84,7 +93,14 @@ func emulatorGitRecovery(t *testing.T, net emulatorNetwork, account spec.Account
 	cluster, err := client.CreateCluster(ctx, &ecs.CreateClusterInput{ClusterName: &net.Name})
 	emulatorCheck(t, err)
 	d.Image = "docker.io/library/nginx@sha256:" + strings.Repeat("a", 64)
-	td, err := client.RegisterTaskDefinition(ctx, &ecs.RegisterTaskDefinitionInput{Family: &net.Name, NetworkMode: types.NetworkModeAwsvpc, RequiresCompatibilities: []types.Compatibility{types.CompatibilityFargate}, Cpu: aws.String("256"), Memory: aws.String("512"), ContainerDefinitions: []types.ContainerDefinition{{Name: aws.String("web"), Image: &d.Image, PortMappings: []types.PortMapping{{ContainerPort: aws.Int32(8080)}}}}})
+	td, err := client.RegisterTaskDefinition(ctx, &ecs.RegisterTaskDefinitionInput{
+		Family: &net.Name, NetworkMode: types.NetworkModeAwsvpc,
+		RequiresCompatibilities: []types.Compatibility{types.CompatibilityFargate},
+		Cpu:                     aws.String("256"), Memory: aws.String("512"),
+		ContainerDefinitions: []types.ContainerDefinition{{
+			Name: aws.String("web"), Image: &d.Image, PortMappings: []types.PortMapping{{ContainerPort: aws.Int32(8080)}},
+		}},
+	})
 	emulatorCheck(t, err)
 	account.AWSAccountID = "000000000000"
 	account.RoleARN = "arn:aws:iam::000000000000:role/deployer"
@@ -130,7 +146,20 @@ func emulatorGitRecovery(t *testing.T, net emulatorNetwork, account spec.Account
 	config, err := advancedAWSConfig(*intent)
 	emulatorCheck(t, err)
 	baselineCount := int32(d.Capacity.Desired)
-	_, err = client.CreateService(ctx, &ecs.CreateServiceInput{Cluster: &e.ClusterARN, ServiceName: &d.Name, TaskDefinition: &e.BaseTaskDefinitionARN, DesiredCount: &baselineCount, LaunchType: types.LaunchTypeFargate, DeploymentController: &types.DeploymentController{Type: types.DeploymentControllerTypeEcs}, SchedulingStrategy: types.SchedulingStrategyReplica, DeploymentConfiguration: config, NetworkConfiguration: &types.NetworkConfiguration{AwsvpcConfiguration: &types.AwsVpcConfiguration{Subnets: net.Subnets, SecurityGroups: []string{net.Security}, AssignPublicIp: types.AssignPublicIpEnabled}}, LoadBalancers: []types.LoadBalancer{{ContainerName: &e.ContainerName, ContainerPort: aws.Int32(8080), TargetGroupArn: &route.TargetGroupARN, AdvancedConfiguration: &types.AdvancedConfiguration{AlternateTargetGroupArn: &route.AlternateTargetGroupARN, ProductionListenerRule: &net.Rule, RoleArn: &route.InfrastructureRoleARN}}}})
+	_, err = client.CreateService(ctx, &ecs.CreateServiceInput{
+		Cluster: &e.ClusterARN, ServiceName: &d.Name, TaskDefinition: &e.BaseTaskDefinitionARN,
+		DesiredCount: &baselineCount, LaunchType: types.LaunchTypeFargate, SchedulingStrategy: types.SchedulingStrategyReplica,
+		DeploymentController: &types.DeploymentController{Type: types.DeploymentControllerTypeEcs}, DeploymentConfiguration: config,
+		NetworkConfiguration: &types.NetworkConfiguration{AwsvpcConfiguration: &types.AwsVpcConfiguration{
+			Subnets: net.Subnets, SecurityGroups: []string{net.Security}, AssignPublicIp: types.AssignPublicIpEnabled,
+		}},
+		LoadBalancers: []types.LoadBalancer{{
+			ContainerName: &e.ContainerName, ContainerPort: aws.Int32(8080), TargetGroupArn: &route.TargetGroupARN,
+			AdvancedConfiguration: &types.AdvancedConfiguration{
+				AlternateTargetGroupArn: &route.AlternateTargetGroupARN, ProductionListenerRule: &net.Rule, RoleArn: &route.InfrastructureRoleARN,
+			},
+		}},
+	})
 	emulatorCheck(t, err)
 	r := applyrequest.ECSOperationRequest{Intent: *intent}
 	var baselineRevision string
@@ -210,10 +239,16 @@ func emulatorGitRecovery(t *testing.T, net emulatorNetwork, account spec.Account
 		return c.Deployments[0].ECS, nil
 	}, Handlers: map[string]applyrequest.ECSOperationHandler{
 		string(reconcile.StepRegisterECSTaskDefinition): Registration{AllowAdvanced: true, ClientFor: emulatorProvider[RegistrationClient](client), CheckCapabilities: check},
-		string(reconcile.StepUpdateECSService):          StrategyHandler{Advanced: update}, string(reconcile.StepVerifyServiceStability): StrategyHandler{Advanced: observe},
-		applyrequest.NativeRollbackOperationKind: NativeRollbackOperation{NativeRollback: stop}, applyrequest.NativeCapacityRestoreOperationKind: NativeCapacityRestore{NativeRollback: stop, ObserveRouting: routing.Observe, Now: clock},
+		string(reconcile.StepUpdateECSService):          StrategyHandler{Advanced: update},
+		string(reconcile.StepVerifyServiceStability):    StrategyHandler{Advanced: observe},
+		applyrequest.NativeRollbackOperationKind:        NativeRollbackOperation{NativeRollback: stop},
+		applyrequest.NativeCapacityRestoreOperationKind: NativeCapacityRestore{NativeRollback: stop, ObserveRouting: routing.Observe, Now: clock},
 	}}}
-	records := func() []applyrequest.Record { rows, err := service.Store.List(ctx); emulatorCheck(t, err); return rows }
+	records := func() []applyrequest.Record {
+		rows, err := service.Store.List(ctx)
+		emulatorCheck(t, err)
+		return rows
+	}
 	emulatorCheck(t, loop.RunOnce(ctx))
 	if len(records()) != 0 {
 		t.Fatal("manual baseline created an Apply")
@@ -290,9 +325,16 @@ func emulatorGitRecovery(t *testing.T, net emulatorNetwork, account spec.Account
 			live = describe()
 			deployment, err := describeNativeDeployment(ctx, client, forward.ServiceDeploymentARN, r)
 			emulatorCheck(t, err)
-			if parent.Status != applyrequest.StatusFailed || parent.NativeRollbackRequestID != child.ID || !child.NativeRollback.Automatic || child.NativeRollback.ParentApplyID != parentID || child.NativeRollback.SourceRevisionARN != baselineRevision || child.NativeRollback.DesiredCount != baselineCount || deployment.Status != types.ServiceDeploymentStatusRollbackSuccessful || deployment.Rollback == nil || aws.ToString(deployment.Rollback.ServiceRevisionArn) != baselineRevision || live.DesiredCount != baselineCount || aws.ToString(live.TaskDefinition) != e.BaseTaskDefinitionARN {
-				t.Fatal("automatic recovery did not restore the captured source and count")
+			if parent.Status != applyrequest.StatusFailed || parent.ECSRuntime == nil || parent.ECSRuntime.Reason != "native_alarm_triggered" || parent.NativeRollbackRequestID != child.ID || child.NativeRollback.ParentApplyID != parentID || !child.NativeRollback.Automatic {
+				t.Fatal("failed Git Apply did not hand off to automatic recovery")
 			}
+			if child.NativeRollback.SourceRevisionARN != baselineRevision || child.NativeRollback.DesiredCount != baselineCount || deployment.Status != types.ServiceDeploymentStatusRollbackSuccessful || deployment.Rollback == nil || aws.ToString(deployment.Rollback.ServiceRevisionArn) != baselineRevision {
+				t.Fatal("rollback did not restore the captured service revision")
+			}
+			if live.DesiredCount != baselineCount || aws.ToString(live.TaskDefinition) != e.BaseTaskDefinitionARN || child.ECSRuntime == nil || child.ECSRuntime.Reason != "native_source_recovered" || child.ECSRuntime.HealthyCount != baselineCount {
+				t.Fatal("restored workload or healthy task count differs from the baseline")
+			}
+			t.Logf("%s: failed Apply %s, recovered by %s; desired count %d -> %d -> %d", candidateSHA, parentID, child.ID, baselineCount, d.Capacity.Desired, live.DesiredCount)
 			emulatorCheck(t, loop.RunOnce(ctx))
 			tick()
 			if len(records()) != 2 {
