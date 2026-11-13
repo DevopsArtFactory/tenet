@@ -237,8 +237,7 @@ func emulatorGitRecovery(t *testing.T, net emulatorNetwork, account spec.Account
 	parent, err := service.Get(ctx, parentID)
 	emulatorCheck(t, err)
 	if parent.Status != applyrequest.StatusRunning || parent.Operations[1].ECSCheckpoint == nil || parent.Operations[1].ECSCheckpoint.Result.ServiceDeploymentARN == "" {
-		b, _ := json.Marshal(parent)
-		t.Fatalf("forward update not accepted: %s", b)
+		t.Fatalf("forward update not accepted: %s %v", parent.Status, parent.Details)
 	}
 	forward := parent.Operations[1].ECSCheckpoint.Result
 	describe := func() types.Service {
@@ -303,8 +302,7 @@ func emulatorGitRecovery(t *testing.T, net emulatorNetwork, account spec.Account
 		}
 		if time.Now().After(deadline) || child.Status == applyrequest.StatusFailed {
 			for _, row := range rows {
-				b, _ := json.Marshal(row)
-				t.Logf("%s", b)
+				t.Logf("Apply %s: %s, %+v, %v", row.ID, row.Status, row.ECSRuntime, row.Details)
 			}
 			t.Fatal("automatic recovery did not converge")
 		}

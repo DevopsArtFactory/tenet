@@ -2,6 +2,7 @@ package ecsexecution
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -159,18 +160,8 @@ func (h NativeRollback) observe(ctx context.Context, r applyrequest.ECSOperation
 	if err != nil {
 		return nil, nil, err
 	}
-	found := false
-	for _, brief := range history {
-		if aws.ToString(brief.ServiceDeploymentArn) == t.DeploymentARN {
-			found = true
-			continue
-		}
-		if brief.CreatedAt == nil || !brief.CreatedAt.Before(*deployment.CreatedAt) || !nativeTerminal(brief.Status) {
-			return nil, nil, fmt.Errorf("intervening or ambiguous native deployment prevents rollback")
-		}
-	}
-	if !found {
-		return nil, nil, fmt.Errorf("rollback deployment missing from current history")
+	if err := checkNativeRollbackHistory(ctx, client, r, deployment, history, t); err != nil {
+		return nil, nil, err
 	}
 	for _, ref := range []struct{ revision, task string }{{t.ForwardRevisionARN, t.ForwardTaskDefinitionARN}, {t.SourceRevisionARN, t.SourceTaskDefinitionARN}} {
 		revision, err := describeNativeRevision(ctx, client, ref.revision, r)
@@ -182,6 +173,44 @@ func (h NativeRollback) observe(ctx context.Context, r applyrequest.ECSOperation
 		}
 	}
 	return client, deployment, nil
+}
+
+var errRollbackSuperseded = errors.New("intervening or ambiguous native deployment prevents rollback")
+
+// A rollback may start a companion deployment of the prior immutable revision.
+// Bind at most one such row to the rollback instant and the exact reverse
+// revision pair. A later redeploy of even the same workload is unrelated.
+func checkNativeRollbackHistory(ctx context.Context, client NativeDeploymentClient, r applyrequest.ECSOperationRequest, forward *types.ServiceDeployment, history []types.ServiceDeploymentBrief, target NativeRollbackTarget) error {
+	found, companion := false, false
+	for _, brief := range history {
+		arn := aws.ToString(brief.ServiceDeploymentArn)
+		if arn == target.DeploymentARN {
+			found = true
+			continue
+		}
+		if brief.CreatedAt == nil {
+			return fmt.Errorf("native recovery deployment ordering unavailable")
+		}
+		if brief.CreatedAt.Before(*forward.CreatedAt) && nativeTerminal(brief.Status) {
+			continue
+		}
+		rb := forward.Rollback
+		if companion || !nativeRollbackAccepted(forward, target) || rb == nil || rb.StartedAt == nil || !brief.CreatedAt.Equal(*rb.StartedAt) || !brief.CreatedAt.After(*forward.CreatedAt) || aws.ToString(brief.TargetServiceRevisionArn) != target.SourceRevisionARN {
+			return errRollbackSuperseded
+		}
+		other, err := describeNativeDeployment(ctx, client, arn, r)
+		if err != nil {
+			return err
+		}
+		if other.CreatedAt == nil || !other.CreatedAt.Equal(*rb.StartedAt) || other.Rollback != nil || aws.ToString(other.TargetServiceRevision.Arn) != target.SourceRevisionARN || len(other.SourceServiceRevisions) != 1 || aws.ToString(other.SourceServiceRevisions[0].Arn) != target.ForwardRevisionARN || (other.Status != types.ServiceDeploymentStatusPending && other.Status != types.ServiceDeploymentStatusInProgress && other.Status != types.ServiceDeploymentStatusSuccessful) {
+			return errRollbackSuperseded
+		}
+		companion = true
+	}
+	if !found {
+		return fmt.Errorf("rollback deployment missing from current history")
+	}
+	return nil
 }
 
 func nativeStopChecks(r applyrequest.ECSOperationRequest, target NativeRollbackTarget) []applyrequest.OperationExecutionCapabilityCheck {
