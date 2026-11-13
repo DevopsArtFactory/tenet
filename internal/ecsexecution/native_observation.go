@@ -2,6 +2,7 @@ package ecsexecution
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -196,21 +197,11 @@ func (h NativeObservation) reconcile(ctx context.Context, r applyrequest.ECSOper
 		if err != nil {
 			return observationUnavailable(result, err), nil
 		}
-		found := false
-		for _, brief := range history {
-			if aws.ToString(brief.ServiceDeploymentArn) == rollback.DeploymentARN {
-				found = true
-				continue
+		if err := checkNativeRollbackHistory(ctx, client, r, deployment, history, *rollback); err != nil {
+			if errors.Is(err, errRollbackSuperseded) {
+				return observedFailure(result, "native_rollback_superseded", err.Error()), nil
 			}
-			if brief.CreatedAt == nil {
-				return observationUnavailable(result, fmt.Errorf("native recovery deployment ordering unavailable")), nil
-			}
-			if !brief.CreatedAt.Before(*deployment.CreatedAt) || !nativeTerminal(brief.Status) {
-				return observedFailure(result, "native_rollback_superseded", "Intervening or concurrent native deployment prevents attributing current health to this recovery."), nil
-			}
-		}
-		if !found {
-			return observationUnavailable(result, fmt.Errorf("native recovery deployment missing from history")), nil
+			return observationUnavailable(result, err), nil
 		}
 	}
 	if !validNativePercent(deployment.TargetServiceRevision.RequestedProductionTrafficWeight) {

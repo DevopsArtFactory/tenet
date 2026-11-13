@@ -109,7 +109,7 @@ jobs:
             fi
             sleep 1
           done
-          go test -tags awsemulator -run '^TestNativeEmulatorRollback$' -count=1 -v ./internal/ecsexecution
+          go test -tags awsemulator -run '^TestNativeEmulator' -count=1 -v ./internal/ecsexecution
 
   docker-smoke-scope:
     name: Docker smoke scope
