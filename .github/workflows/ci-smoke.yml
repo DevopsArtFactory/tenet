@@ -65,6 +65,52 @@ jobs:
       - name: Test offline export, evidence collector and test app
         run: python3 -m unittest discover -s tests/ecs-native-integration -v
 
+  ecs-emulator:
+    name: Native ECS rollback (AWS Emulator)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download and verify the AWS Emulator LTS package
+        working-directory: ${{ runner.temp }}
+        run: |
+          url=https://downloads.aws.com/aws-emulator/packages/aws-emulator/LTS/latest/aws-emulator_amd64.deb
+          curl -fsSL --retry 3 "$url" -o emulator.deb
+          curl -fsSL --retry 3 "$url.sig" -o emulator.deb.sig
+          curl -fsSL --retry 3 https://downloads.aws.com/keys/gpg/current.asc -o aws.asc
+          gpg --batch --dearmor --output publisher.gpg aws.asc
+          gpgv --keyring "$PWD/publisher.gpg" --status-fd 1 emulator.deb.sig emulator.deb > verification.txt
+          # VALIDSIG ends with the primary signing key fingerprint.
+          awk '$2 == "VALIDSIG" && $NF == "98BCF336A3BE53B734E967C52E5BF49BD940F624" {ok=1} END {exit !ok}' verification.txt
+          dpkg-deb -f emulator.deb Version
+          dpkg-deb -x emulator.deb emulator
+
+      - name: Deploy, roll back and restore capacity for all native strategies
+        env:
+          TENET_EMULATOR_STATE: ${{ runner.temp }}/ecs-home/.aws/emulator/19297
+        run: |
+          mkdir -p "$RUNNER_TEMP/ecs-home"
+          HOME="$RUNNER_TEMP/ecs-home" "$RUNNER_TEMP/emulator/opt/aws-emulator/bin/aws-emulator" -b 127.0.0.1 -p 19297 --telemetry off &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            kill -0 "$pid"
+            if test -s "$TENET_EMULATOR_STATE/emulator_credentials" && curl --silent --noproxy '*' --max-time 1 --cacert "$TENET_EMULATOR_STATE/ca.pem" https://127.0.0.1:19297/ -o /dev/null; then
+              break
+            fi
+            if [[ "$attempt" == 60 ]]; then
+              echo "AWS Emulator did not become ready on loopback" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          go test -tags awsemulator -run '^TestNativeEmulatorRollback$' -count=1 -v ./internal/ecsexecution
+
   docker-smoke-scope:
     name: Docker smoke scope
     runs-on: ubuntu-latest
