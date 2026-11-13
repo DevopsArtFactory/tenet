@@ -32,7 +32,7 @@ func emulatorCheck(t *testing.T, err error) {
 }
 
 // Use only the credentials and CA minted by this local emulator process.
-func emulatorClient(t *testing.T) *ecs.Client {
+func emulatorConfig(t *testing.T) aws.Config {
 	t.Helper()
 	dir := os.Getenv("TENET_EMULATOR_STATE")
 	if dir == "" {
@@ -57,15 +57,15 @@ func emulatorClient(t *testing.T) *ecs.Client {
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		Timeout:       10 * time.Second,
 	}
-	return ecs.New(ecs.Options{
+	return aws.Config{
 		BaseEndpoint: aws.String("https://127.0.0.1:19297"), Region: "ap-northeast-2",
 		Credentials: credentials.StaticCredentialsProvider{Value: profile.Credentials},
-		HTTPClient:  client, Retryer: aws.NopRetryer{},
-	})
+		HTTPClient:  client, Retryer: func() aws.Retryer { return aws.NopRetryer{} },
+	}
 }
 
 func TestNativeEmulatorRollback(t *testing.T) {
-	client := emulatorClient(t)
+	client := ecs.NewFromConfig(emulatorConfig(t))
 	ctx := t.Context()
 	name := fmt.Sprintf("tenet-%d", time.Now().UnixNano())
 	cluster, err := client.CreateCluster(ctx, &ecs.CreateClusterInput{ClusterName: &name})
