@@ -61,24 +61,33 @@ Offline checks:
 python3 -m unittest discover -s tests/ecs-native-integration -v
 ```
 
-## Native ECS API checks in CI
+## Native ECS recovery in CI
 
-The CI Smoke job **Native ECS rollback (AWS Emulator)** starts the signed AWS
-Emulator LTS Debian package on loopback and logs the package version. It runs
-the Go SDK against each strategy in Tenet's example catalog, captures the
-initial service revision, task definition and count, deploys a new workload
-and count, waits for rollback of that deployment to the captured revision and
-verifies the count-only update restores the captured count.
+The **Native ECS rollback (AWS Emulator)** job runs two tests for blue/green,
+canary and linear. The SDK test checks ECS deployment history, rollback and
+count-only updates directly. The Git test creates a temporary repository and
+an emulated Fargate service with two healthy baseline tasks. A second commit
+enables automatic sync, selects a missing image and sets the count to four
+(blue/green and linear) or one (canary).
 
-To repeat against a fresh local emulator listening on port 19297, set
-`TENET_EMULATOR_STATE` to its generated directory containing `ca.pem` and
-`emulator_credentials`, then run from the repository root:
+Tenet reconciles that commit, registers the task definition and applies the
+service update. After ECS reports an image pull failure on the candidate, the
+test injects the configured alarm into the deployment observation. Tenet then
+creates the recovery Apply, requests rollback and restores the previous count.
+The test checks the failed parent and successful child, the original service
+revision and task definition, two healthy source tasks, and configured ALB
+routing. A further reconcile must leave exactly those two Applies.
+
+The Git checkout, IAM readiness fixture and injected alarm keep this test
+independent of GitHub and AWS accounts. ECS operations and ALB observations use
+the emulator's HTTPS loopback endpoint, CA and credentials. Live IAM policy
+evaluation, CloudWatch metric delivery and HTTP traffic distribution are covered
+by the separate sandbox scenarios.
+
+With Git, Python 3, AWS CLI v2 and Go installed, start a fresh emulator on port
+19297 and set `TENET_EMULATOR_STATE` to its directory containing `ca.pem` and
+`emulator_credentials`. Run the following from the repository root.
 
 ```sh
-go test -tags awsemulator -run '^TestNativeEmulatorRollback$' -count=1 -v ./internal/ecsexecution
+go test -tags awsemulator -run '^TestNativeEmulator' -count=1 -v ./internal/ecsexecution
 ```
-
-The SDK client uses a fixed HTTPS loopback endpoint and only the emulator's CA
-and credentials. These checks exercise the ECS API and Tenet's deployment and
-revision readers. Git-triggered Apply, ALB traffic and healthy running tasks
-remain in the live sandbox scenario matrix.

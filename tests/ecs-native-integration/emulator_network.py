@@ -46,6 +46,9 @@ def create_network():
     groups = [elb('create-target-group', Name=name + color, Protocol='HTTP', Port=8080, HealthCheckIntervalSeconds=5, HealthyThresholdCount=2, HealthCheckTimeoutSeconds=2,
                   TargetType='ip', VpcId=vpc)['TargetGroups'][0]['TargetGroupArn']
               for color in ['-blue', '-green']]
+    for group in groups:
+        elb('modify-target-group-attributes', TargetGroupArn=group, Attributes=[
+            {'Key': 'deregistration_delay.timeout_seconds', 'Value': '1'}])
     listener = elb('create-listener', LoadBalancerArn=lb['LoadBalancerArn'], Protocol='HTTP',
                    Port=80, DefaultActions=[{'Type': 'forward', 'TargetGroupArn': groups[0]}])
     targets = [{'TargetGroupArn': arn, 'Weight': weight} for arn, weight in zip(groups, [100, 0])]

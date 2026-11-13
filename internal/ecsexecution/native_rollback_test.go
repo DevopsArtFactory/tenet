@@ -308,3 +308,45 @@ func TestNativeRollbackCancelledContextCannotSend(t *testing.T) {
 		t.Fatal("cancelled rollback mutated AWS", err)
 	}
 }
+
+func TestNativeRollbackRequiresUniqueReverseDeploymentAtRollbackStart(t *testing.T) {
+	for _, scenario := range []string{"matching", "later", "wrong-source", "second-companion", "missing-forward", "unreadable"} {
+		t.Run(scenario, func(t *testing.T) {
+			client, _, request, target, _ := nativeRollbackFixture(t, "CANARY")
+			forward := client.deployments[target.DeploymentARN]
+			started := forward.CreatedAt.Add(time.Minute)
+			forward.Status = types.ServiceDeploymentStatusRollbackSuccessful
+			forward.Rollback = &types.Rollback{StartedAt: &started, ServiceRevisionArn: &target.SourceRevisionARN}
+			arn := target.DeploymentARN + "-rollback"
+			record := types.ServiceDeployment{
+				ServiceDeploymentArn: &arn, ServiceArn: forward.ServiceArn, ClusterArn: forward.ClusterArn,
+				CreatedAt: &started, Status: types.ServiceDeploymentStatusSuccessful,
+				TargetServiceRevision:  &types.ServiceRevisionSummary{Arn: &target.SourceRevisionARN},
+				SourceServiceRevisions: []types.ServiceRevisionSummary{{Arn: &target.ForwardRevisionARN}},
+			}
+			brief := types.ServiceDeploymentBrief{ServiceDeploymentArn: &arn, CreatedAt: &started, TargetServiceRevisionArn: &target.SourceRevisionARN, Status: record.Status}
+			history := []types.ServiceDeploymentBrief{{ServiceDeploymentArn: &target.DeploymentARN}}
+			switch scenario {
+			case "later":
+				later := started.Add(time.Second)
+				brief.CreatedAt = &later
+			case "wrong-source":
+				record.SourceServiceRevisions = nil
+			case "second-companion":
+				second := brief
+				second.ServiceDeploymentArn = aws.String(arn + "-second")
+				history = append(history, brief)
+				brief = second
+			case "missing-forward":
+				history = nil
+			case "unreadable":
+				client.readError = errors.New("temporary failure")
+			}
+			client.deployments[arn] = record
+			err := checkNativeRollbackHistory(t.Context(), client, request, &forward, append(history, brief), target)
+			if (err == nil) != (scenario == "matching") || scenario == "unreadable" && !errors.Is(err, client.readError) {
+				t.Fatalf("unexpected rollback attribution: %v", err)
+			}
+		})
+	}
+}
