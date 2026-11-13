@@ -60,3 +60,25 @@ Offline checks:
 ```sh
 python3 -m unittest discover -s tests/ecs-native-integration -v
 ```
+
+## Native ECS API checks in CI
+
+The CI Smoke job **Native ECS rollback (AWS Emulator)** starts the signed AWS
+Emulator LTS Debian package on loopback and logs the package version. It runs
+the Go SDK against each strategy in Tenet's example catalog, captures the
+initial service revision, task definition and count, deploys a new workload
+and count, waits for rollback of that deployment to the captured revision and
+verifies the count-only update restores the captured count.
+
+To repeat against a fresh local emulator listening on port 19297, set
+`TENET_EMULATOR_STATE` to its generated directory containing `ca.pem` and
+`emulator_credentials`, then run from the repository root:
+
+```sh
+go test -tags awsemulator -run '^TestNativeEmulatorRollback$' -count=1 -v ./internal/ecsexecution
+```
+
+The SDK client uses a fixed HTTPS loopback endpoint and only the emulator's CA
+and credentials. These checks exercise the ECS API and Tenet's deployment and
+revision readers. Git-triggered Apply, ALB traffic and healthy running tasks
+remain in the live sandbox scenario matrix.
