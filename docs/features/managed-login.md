@@ -86,3 +86,22 @@ versioned session format prevents an old cookie from retaining an unverified
 email grant until expiry. Upgrade all API replicas together: old binaries still
 accept the old session format. No manual identity-store edits are required;
 successful login replaces the stored profile, including removal of stale email.
+
+### Login backpressure and state retention
+
+The file-backed state store retains at most 1,024 unexpired login records and
+accepts at most 120 new login records per rolling minute. Both limits apply to
+all providers and API processes using the same shared store path. A successful
+callback consumes its record without resetting the initiation quota. Consumed
+records remain until their original expiry (normally 10 minutes), and the next
+login prunes expired records under the same process-safe lock. Existing pending
+logins are not evicted to admit new ones. Pre-upgrade files over the limit stop
+accepting new records until expiry makes room; expired records are not an audit
+log and should not be used for long-term security evidence.
+
+An overloaded login endpoint returns HTTP 429 with `Retry-After: 60`, without
+issuing an OAuth redirect or binding cookie. Retry after that interval; capacity
+may remain exhausted until pending records expire. Login `returnUrl` is limited
+to 2,048 bytes to bound each stored callback path. This shared-store backpressure
+bounds growth, but does not replace ingress rate limiting against sustained
+request floods. Independent state paths have independent limits.

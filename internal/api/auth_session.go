@@ -180,7 +180,7 @@ func handleProviderLogin(w http.ResponseWriter, r *http.Request, cfg authSession
 	if returnURL == "" {
 		returnURL = "/"
 	}
-	if !safeInAppReturnURL(returnURL) {
+	if len(returnURL) > 2048 || !safeInAppReturnURL(returnURL) {
 		http.Error(w, "returnUrl must be a safe in-app path", http.StatusBadRequest)
 		return
 	}
@@ -197,6 +197,11 @@ func handleProviderLogin(w http.ResponseWriter, r *http.Request, cfg authSession
 		CreatedAt: now,
 		ExpiresAt: now.Add(cfg.stateTTL()),
 	}); err != nil {
+		if errors.Is(err, authstate.ErrCapacity) || errors.Is(err, authstate.ErrRateLimited) {
+			w.Header().Set("Retry-After", "60")
+			http.Error(w, "too many login requests; retry later", http.StatusTooManyRequests)
+			return
+		}
 		http.Error(w, "failed to create OAuth callback state", http.StatusServiceUnavailable)
 		return
 	}

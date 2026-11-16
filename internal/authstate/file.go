@@ -52,7 +52,8 @@ func (s FileStore) Get(ctx context.Context, token string) (State, error) {
 	return state, err
 }
 
-// Save creates or replaces one callback state by token.
+// Save creates or replaces one callback state by token, pruning expired records
+// and enforcing shared capacity and login-rate limits under the same file lock.
 func (s FileStore) Save(ctx context.Context, state State) (State, error) {
 	if s.Path == "" {
 		return State{}, fmt.Errorf("file auth state store path is required")
@@ -70,9 +71,36 @@ func (s FileStore) Save(ctx context.Context, state State) (State, error) {
 	if err != nil {
 		return State{}, err
 	}
+	now := authStateNow().UTC()
+	if state.Expired(now) {
+		return State{}, ErrExpired
+	}
+	kept := states[:0]
+	recent := 0
+	for _, existing := range states {
+		if existing.Expired(now) {
+			continue
+		}
+		kept = append(kept, existing)
+		if existing.CreatedAt.After(now.Add(-time.Minute)) {
+			recent++
+		}
+	}
+	if len(kept) != len(states) {
+		if err := saveUnlocked(s.Path, kept); err != nil {
+			return State{}, err
+		}
+	}
+	states = kept
 	if _, idx, err := findState(states, state.Token); err == nil {
 		states[idx] = state
 	} else if errors.Is(err, ErrNotFound) {
+		if len(states) >= maxStoredStates {
+			return State{}, ErrCapacity
+		}
+		if recent >= maxLoginsPerMinute {
+			return State{}, ErrRateLimited
+		}
 		states = append(states, state)
 	} else {
 		return State{}, err
@@ -83,8 +111,8 @@ func (s FileStore) Save(ctx context.Context, state State) (State, error) {
 	return state, nil
 }
 
-// Consume marks a callback state as used and returns it. Consumed and expired
-// states are preserved on disk so operators can diagnose callback failures.
+// Consume marks a callback state as used and returns it. Consumed records remain
+// until expiry; a later Save prunes them along with other expired records.
 func (s FileStore) Consume(ctx context.Context, token string) (State, error) {
 	if s.Path == "" {
 		return State{}, fmt.Errorf("file auth state store path is required")

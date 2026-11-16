@@ -16,6 +16,7 @@ func TestFileStoreSaveGetAndList(t *testing.T) {
 	store := NewFileStore(path)
 	ctx := context.Background()
 	created := time.Date(2026, 5, 3, 1, 2, 3, 0, time.UTC)
+	setAuthStateNow(t, created)
 
 	states, err := store.List(ctx)
 	if err != nil {
@@ -90,7 +91,7 @@ func TestFileStoreConsumeExpiredAndNotFound(t *testing.T) {
 	created := time.Date(2026, 5, 3, 3, 0, 0, 0, time.UTC)
 	setAuthStateNow(t, created.Add(10*time.Minute))
 
-	if _, err := store.Save(ctx, State{Token: "expired", Provider: "github", CreatedAt: created, ExpiresAt: created.Add(5 * time.Minute)}); err != nil {
+	if err := Save(path, []State{{Token: "expired", Provider: "github", CreatedAt: created, ExpiresAt: created.Add(5 * time.Minute)}}); err != nil {
 		t.Fatalf("save expired state: %v", err)
 	}
 	if _, err := store.Consume(ctx, "expired"); !errors.Is(err, ErrExpired) {
