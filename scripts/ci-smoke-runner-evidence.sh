@@ -9,7 +9,7 @@ Collect GitHub Actions CI Smoke runner-start evidence for a workflow run.
 Use --summary or --markdown to print a concise Markdown block for PR/issue comments.
 
 The report includes:
-  - run summary with workflow name, event, branch, status/conclusion, head SHA, attempt, timestamps, and URL
+  - run summary with workflow name, run ID, event, branch, status/conclusion, head SHA, attempt, timestamps, and URL
   - compact Runner-start verdict for likely pre-runner blockers
   - Actions jobs API output with job IDs, runner_id, runner_name, and steps[]
   - failed workflow logs when GitHub exposes them (missing logs are reported, not fatal)
@@ -170,6 +170,7 @@ print_markdown_summary() {
 
   printf '### CI Smoke runner-start evidence\n\n'
   printf -- '- Run: %s\n' "$url"
+  printf -- '- Run ID: `%s`\n' "$run_id"
   printf -- '- Workflow: `%s` (`%s`)\n' "$workflow_name" "$run_name"
   printf -- '- Event: `%s`\n' "$event"
   printf -- '- Status: `%s` / conclusion `%s`\n' "$status" "$conclusion"
