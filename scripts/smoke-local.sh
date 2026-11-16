@@ -2,6 +2,10 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+source "$ROOT/scripts/test-aws-env.sh"
+# Local smoke exercises the safe apply handoff, never the live AWS executor.
+export TENET_AWS_ENABLE_ECS_EXECUTION=false
+export TENET_AWS_ENABLE_ECS_ADVANCED_EXECUTION=false
 HOST=${TENET_API_HOST:-127.0.0.1}
 PORT=${TENET_API_PORT:-$(python3 - <<'PY'
 import socket
