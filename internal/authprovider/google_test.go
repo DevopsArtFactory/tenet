@@ -93,10 +93,11 @@ func TestGoogleProviderUser(t *testing.T) {
 			t.Fatalf("Accept = %q", got)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"sub":     "google-sub-123",
-			"email":   "operator@example.com",
-			"name":    "Google Operator",
-			"profile": "https://profiles.google.com/operator",
+			"sub":            "google-sub-123",
+			"email":          "operator@example.com",
+			"email_verified": true,
+			"name":           "Google Operator",
+			"profile":        "https://profiles.google.com/operator",
 		})
 	}))
 	defer server.Close()

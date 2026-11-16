@@ -28,6 +28,7 @@ const (
 	defaultAuthSessionCookieSameSite = "Lax"
 	defaultAuthStateTTL              = 10 * time.Minute
 	defaultAuthSessionTTL            = 12 * time.Hour
+	currentAuthSessionVersion        = 1
 )
 
 type authSessionConfig struct {
@@ -135,6 +136,7 @@ func requestHasForwardedHeaderProtoHTTPS(r *http.Request) bool {
 }
 
 type authSessionClaims struct {
+	Version  int       `json:"version"`
 	Provider string    `json:"provider"`
 	Subject  string    `json:"subject"`
 	Name     string    `json:"name,omitempty"`
@@ -389,6 +391,8 @@ func signAuthSessionClaims(claims authSessionClaims, secret string) (string, err
 	if strings.TrimSpace(secret) == "" {
 		return "", fmt.Errorf("auth session secret is required")
 	}
+	// Invalidate sessions issued before verified OIDC email enforcement.
+	claims.Version = currentAuthSessionVersion
 	payload, err := json.Marshal(claims)
 	if err != nil {
 		return "", err
@@ -414,7 +418,7 @@ func parseAuthSessionClaims(value, secret string, now time.Time) (authSessionCla
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		return authSessionClaims{}, false
 	}
-	if strings.TrimSpace(claims.Provider) == "" || strings.TrimSpace(claims.Subject) == "" || !claims.Expires.After(now.UTC()) {
+	if claims.Version != currentAuthSessionVersion || strings.TrimSpace(claims.Provider) == "" || strings.TrimSpace(claims.Subject) == "" || !claims.Expires.After(now.UTC()) {
 		return authSessionClaims{}, false
 	}
 	return claims, true

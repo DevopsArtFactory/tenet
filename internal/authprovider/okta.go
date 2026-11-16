@@ -212,7 +212,7 @@ func (p *OktaOIDCProvider) User(ctx context.Context, accessToken string) (Identi
 	var payload struct {
 		Subject       string `json:"sub"`
 		Email         string `json:"email"`
-		EmailVerified *bool  `json:"email_verified"`
+		EmailVerified bool   `json:"email_verified"`
 		Name          string `json:"name"`
 		Preferred     string `json:"preferred_username"`
 		Profile       string `json:"profile"`
@@ -225,7 +225,7 @@ func (p *OktaOIDCProvider) User(ctx context.Context, accessToken string) (Identi
 		return Identity{}, fmt.Errorf("Okta OIDC userinfo response did not include sub")
 	}
 	email := strings.TrimSpace(payload.Email)
-	if payload.EmailVerified != nil && !*payload.EmailVerified {
+	if !payload.EmailVerified {
 		email = ""
 	}
 	login := strings.TrimSpace(payload.Preferred)

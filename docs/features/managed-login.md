@@ -69,4 +69,20 @@ Local and Docker smoke intentionally cover the out-of-box disabled managed-login
 
 ### Browser-bound login transactions
 
-Login sets a short-lived, host-only, HttpOnly, SameSite=Lax cookie signed with the session secret. The callback must present that cookie before the server consumes OAuth state or exchanges a code. A callback opened in a different browser, with missing cookies, or after a newer login replaced the cookie is rejected; start login again in the intended browser. Successful login clears the binding cookie. HTTPS deployments must enable secure cookies. Existing login sessions remain valid after upgrading, but pending login transactions must be restarted.
+Login sets a short-lived, host-only, HttpOnly, SameSite=Lax cookie signed with the session secret. The callback must present that cookie before the server consumes OAuth state or exchanges a code. A callback opened in a different browser, with missing cookies, or after a newer login replaced the cookie is rejected; start login again in the intended browser. Successful login clears the binding cookie. HTTPS deployments must enable secure cookies. Pending login transactions must be restarted after upgrading.
+
+### Verified OIDC email and session upgrade
+
+Google and Okta email-based RBAC grants require a boolean `email_verified: true`
+from the provider's userinfo endpoint. Missing, null or false verification removes
+the email from the persisted identity and session. Login still succeeds with the
+stable provider subject, so explicit `google:<sub>` or `okta_oidc:<sub>` policy
+grants continue to work. A preferred username is display data, not a verified
+email grant.
+
+Upgrading to verified-email enforcement invalidates all previously issued Tenet
+session cookies, including GitHub sessions. Users must sign in again; the new
+versioned session format prevents an old cookie from retaining an unverified
+email grant until expiry. Upgrade all API replicas together: old binaries still
+accept the old session format. No manual identity-store edits are required;
+successful login replaces the stored profile, including removal of stale email.

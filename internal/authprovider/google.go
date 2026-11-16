@@ -217,11 +217,12 @@ func (p *GoogleProvider) User(ctx context.Context, accessToken string) (Identity
 		return Identity{}, fmt.Errorf("Google OIDC userinfo request returned %s: %s", resp.Status, operatorBody(body))
 	}
 	var payload struct {
-		Subject string `json:"sub"`
-		Email   string `json:"email"`
-		Name    string `json:"name"`
-		Profile string `json:"profile"`
-		Picture string `json:"picture"`
+		Subject       string `json:"sub"`
+		EmailVerified bool   `json:"email_verified"`
+		Email         string `json:"email"`
+		Name          string `json:"name"`
+		Profile       string `json:"profile"`
+		Picture       string `json:"picture"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return Identity{}, fmt.Errorf("decode Google OIDC userinfo response: %w", err)
@@ -229,12 +230,16 @@ func (p *GoogleProvider) User(ctx context.Context, accessToken string) (Identity
 	if strings.TrimSpace(payload.Subject) == "" {
 		return Identity{}, fmt.Errorf("Google OIDC userinfo response did not include sub")
 	}
+	email := strings.TrimSpace(payload.Email)
+	if !payload.EmailVerified {
+		email = ""
+	}
 	return Identity{
 		Provider: GoogleProviderName,
 		ID:       payload.Subject,
-		Login:    payload.Email,
+		Login:    firstNonEmptyString(email, payload.Subject),
 		Name:     payload.Name,
-		Email:    payload.Email,
+		Email:    email,
 		URL:      firstNonEmptyString(payload.Profile, payload.Picture),
 	}, nil
 }
