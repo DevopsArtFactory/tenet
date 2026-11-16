@@ -447,8 +447,8 @@ func TestManagedLoginFeatureGuideDocs(t *testing.T) {
 		"does not revoke provider tokens, clear GitHub/Google/Okta sessions, or sign out an upstream trusted front door",
 		"Trusted front-door identity wins over the session cookie only when header trust is explicitly enabled",
 		"Managed login authenticates the browser operator; it does not grant Tenet roles or deployment access by itself.",
-		"Repository-backed RBAC policy diagnostics can explain how users or groups map to Tenet roles and deployment/project/environment scopes",
-		"route enforcement still depends on Tenet's trusted role and deployment/project/environment authorization settings",
+		"That policy maps authenticated identities or groups to roles and deployment/project/environment scopes",
+		"A valid login without a matching grant is denied",
 	} {
 		if !strings.Contains(doc, fragment) {
 			t.Fatalf("expected managed-login guide to include %q", fragment)

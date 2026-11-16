@@ -9,8 +9,9 @@ recovery and emulator tests as the documented baseline.
 
 ## Current starting point
 
-Repository settings checked on 2026-11-16 show private visibility, an empty About
-description and homepage, and disabled Discussions. The latest published release
+Repository settings checked on 2026-11-16 still show private visibility and
+disabled Discussions. About now contains the ECS GitOps description, README
+homepage and AWS/ECS/GitOps topics. The latest published release
 was `v0.1.154`, dated 2026-07-17, at the initial review. The next candidate is
 `v0.2.0-rc.1`; its [release notes](../releases/v0.2.0-rc.1.md) describe the ECS
 execution baseline and security migration. Select its commit only after all
@@ -73,10 +74,11 @@ Apache-2.0 license file. [GitHub licensing guidance](https://docs.github.com/en/
 
 ## Establish maintainership
 
-Confirm who will handle issues, releases and vulnerability reports. Test delivery
-to the addresses currently listed in `SECURITY.md` and `CODE_OF_CONDUCT.md`.
-Make the 72-hour acknowledgment commitment in `SECURITY.md` match the team's
-actual support capacity.
+Confirm who will handle issues, releases and vulnerability reports. The maintainer
+has confirmed `yj.jung5078@gmail.com` as the contact in `SECURITY.md` and
+`CODE_OF_CONDUCT.md`; the former organization mailboxes were not functional.
+No fixed response SLA is promised. GitHub private vulnerability reporting is the
+preferred security channel once enabled, with email as a fallback.
 
 Define which release lines receive fixes and how users report unsupported
 configurations. Add reproducible startup and test commands to contributor
@@ -140,3 +142,22 @@ Create an annotated `v0.2.0-rc.1` tag at that exact commit, push the tag, and us
 archive, `SOURCE_COMMIT`, `SHA256SUMS` and the reviewed release notes. Do not move
 an existing release tag. A candidate must not become the recommended stable
 release until the outstanding live validation and public-readiness gates pass.
+
+## Verify repository settings before public announcement
+
+Run `python3 scripts/check-public-readiness.py` while authenticated as a repository
+administrator. It performs read-only GitHub API checks and fails closed when a
+setting is missing or cannot be inspected. A private repository will intentionally
+fail this public-announcement gate; do not change visibility just to make it pass.
+
+Require pull requests, up-to-date branches and the Fast smoke, Docker smoke scope,
+Docker smoke, ECS fixture validation (no AWS), Native ECS rollback (AWS Emulator),
+and Go vulnerability scan checks on `main`. Enforce the rule for administrators,
+disable force pushes/deletions, and use equivalent active rulesets if the
+organization manages policies centrally. The checker inspects classic branch
+protection; a ruleset-only configuration needs an explicit manual review.
+
+Some private repository plans do not support these settings. In that case, enable
+and verify them at the authorized public transition, then verify anonymous access
+to the reporting form and release assets. This checklist does not itself change
+visibility, send email, or publish a release.

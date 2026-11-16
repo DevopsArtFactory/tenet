@@ -48,6 +48,9 @@ jobs:
       - name: Syntax-check runner evidence helper
         run: bash -n scripts/ci-smoke-runner-evidence.sh
 
+      - name: Test public readiness checker
+        run: python3 -m unittest discover -s tests -p 'test_public_readiness.py' -v
+
       - name: Verify source release packaging
         run: |
           bash -n scripts/release-source.sh
