@@ -66,3 +66,7 @@ Use focused Go tests for route/session/env wiring and provider helpers:
 - `go test ./internal/authprovider ./internal/authidentity ./internal/authstate`
 
 Local and Docker smoke intentionally cover the out-of-box disabled managed-login runtime unless OAuth/OIDC settings are supplied. Local fake-provider router tests and the embedded UI harness cover active GitHub, Google Workspace, and Okta OIDC sign-in/sign-out flows without live GitHub, Google, or Okta credentials. The fake logout path must keep `/auth/logout?returnUrl=...` in the same shell, clear only Tenet's signed `tenet_session` cookie, and avoid claiming provider-token revocation or upstream front-door sign-out.
+
+### Browser-bound login transactions
+
+Login sets a short-lived, host-only, HttpOnly, SameSite=Lax cookie signed with the session secret. The callback must present that cookie before the server consumes OAuth state or exchanges a code. A callback opened in a different browser, with missing cookies, or after a newer login replaced the cookie is rejected; start login again in the intended browser. Successful login clears the binding cookie. HTTPS deployments must enable secure cookies. Existing login sessions remain valid after upgrading, but pending login transactions must be restarted.

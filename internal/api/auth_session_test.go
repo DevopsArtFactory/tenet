@@ -130,6 +130,9 @@ func managedLoginCallbackCookie(t *testing.T, router http.Handler, mutateCallbac
 	}
 	callbackURL := "/auth/callback/github?state=" + url.QueryEscape(state) + "&code=code-123"
 	callbackReq := httptest.NewRequest(http.MethodGet, callbackURL, nil)
+	for _, cookie := range loginResp.Result().Cookies() {
+		callbackReq.AddCookie(cookie)
+	}
 	if mutateCallback != nil {
 		mutateCallback(callbackReq)
 	}
@@ -139,7 +142,7 @@ func managedLoginCallbackCookie(t *testing.T, router http.Handler, mutateCallbac
 		t.Fatalf("expected callback 302, got %d: %s", callbackResp.Code, callbackResp.Body.String())
 	}
 	cookies := callbackResp.Result().Cookies()
-	if len(cookies) != 1 || cookies[0].Name != "tenet_session" {
+	if len(cookies) != 2 || cookies[0].Name != "tenet_session" {
 		t.Fatalf("expected one tenet_session cookie, got %#v", cookies)
 	}
 	return cookies[0]
@@ -170,6 +173,9 @@ func TestManagedGitHubLoginCallbackCreatesSessionAndAuthenticatedContext(t *test
 	}
 
 	callbackReq := httptest.NewRequest(http.MethodGet, "/auth/callback/github?state="+url.QueryEscape(state)+"&code=code-123", nil)
+	for _, cookie := range loginResp.Result().Cookies() {
+		callbackReq.AddCookie(cookie)
+	}
 	callbackResp := httptest.NewRecorder()
 	router.ServeHTTP(callbackResp, callbackReq)
 	if callbackResp.Code != http.StatusFound {
@@ -179,7 +185,7 @@ func TestManagedGitHubLoginCallbackCreatesSessionAndAuthenticatedContext(t *test
 		t.Fatalf("expected safe in-app redirect, got %q", got)
 	}
 	cookies := callbackResp.Result().Cookies()
-	if len(cookies) != 1 || cookies[0].Name != "tenet_session" || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteLaxMode {
+	if len(cookies) != 2 || cookies[0].Name != "tenet_session" || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteLaxMode {
 		t.Fatalf("expected one HttpOnly SameSite=Lax tenet_session cookie, got %#v", cookies)
 	}
 	if len(provider.exchangedCodes) != 1 || provider.exchangedCodes[0] != "code-123" {
@@ -204,6 +210,9 @@ func TestManagedGitHubLoginCallbackCreatesSessionAndAuthenticatedContext(t *test
 	}
 
 	reuseReq := httptest.NewRequest(http.MethodGet, "/auth/callback/github?state="+url.QueryEscape(state)+"&code=code-456", nil)
+	for _, cookie := range loginResp.Result().Cookies() {
+		reuseReq.AddCookie(cookie)
+	}
 	reuseResp := httptest.NewRecorder()
 	router.ServeHTTP(reuseResp, reuseReq)
 	if reuseResp.Code != http.StatusBadRequest || !strings.Contains(reuseResp.Body.String(), authstate.ErrConsumed.Error()) {
@@ -274,6 +283,9 @@ func TestManagedGoogleOIDCLoginCallbackCreatesSessionAndAuthenticatedContext(t *
 	}
 
 	callbackReq := httptest.NewRequest(http.MethodGet, "/auth/callback/google?state="+url.QueryEscape(state)+"&code=google-code-123", nil)
+	for _, cookie := range loginResp.Result().Cookies() {
+		callbackReq.AddCookie(cookie)
+	}
 	callbackResp := httptest.NewRecorder()
 	router.ServeHTTP(callbackResp, callbackReq)
 	if callbackResp.Code != http.StatusFound {
@@ -340,6 +352,9 @@ func TestManagedOktaOIDCLoginCallbackCreatesSessionAndAuthenticatedContext(t *te
 	}
 
 	callbackReq := httptest.NewRequest(http.MethodGet, "/auth/callback/okta/oidc?state="+url.QueryEscape(state)+"&code=okta-code-123", nil)
+	for _, cookie := range loginResp.Result().Cookies() {
+		callbackReq.AddCookie(cookie)
+	}
 	callbackResp := httptest.NewRecorder()
 	router.ServeHTTP(callbackResp, callbackReq)
 	if callbackResp.Code != http.StatusFound {
