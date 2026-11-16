@@ -1158,7 +1158,7 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 		"`TENET_REPO_ROOT` remains the filesystem-mode input when you want a local checkout; it is not a universal runtime requirement.",
 		"The AWS central-control-plane Terraform bootstrap can optionally inject a Secrets Manager-backed `TENET_REPO_SYNC_TOKEN` into its two repo-sync sidecars with `repo_sync_token_secret_arn`.",
 		"Leaving that ARN unset preserves anonymous public clone behavior.",
-		"If you plan to use the AWS central-control-plane Terraform bootstrap, do the preflight before `terraform apply`: it builds and pushes the current local Tenet checkout from the machine running apply, requires Terraform 1.5+, Docker Buildx, and AWS CLI v2 with working credentials, and expects you to verify that `repo_url` and `repo_branch` are reachable from that machine first, for example with `git ls-remote --heads <repo_url> <repo_branch>`.",
+		"If you plan to use the AWS central-control-plane Terraform bootstrap, do the preflight before `terraform apply`: it builds and pushes the current local Tenet checkout from the machine running apply, requires Terraform 1.7+, Docker Buildx, and AWS CLI v2 with working credentials, and expects you to verify that `repo_url` and `repo_branch` are reachable from that machine first, for example with `git ls-remote --heads <repo_url> <repo_branch>`.",
 	} {
 		if !strings.Contains(operatorContractsDoc, fragment) {
 			t.Fatalf("expected operator contracts doc desired-state source contract to include %q", fragment)
@@ -1179,7 +1179,7 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 		"Leave `repo_sync_token_secret_arn` unset for public repos; the repo-sync sidecars keep using anonymous HTTPS clone/fetch.",
 		"If you use the shipped Terraform bootstrap, run this operator preflight on the same machine before `terraform apply`:",
 		"`terraform apply` builds and pushes the current local Tenet checkout from that machine, so run it from the repo checkout you intend to ship",
-		"Terraform 1.5+ is installed",
+		"Terraform 1.7+ is installed",
 		"Docker Buildx is installed and working locally",
 		"AWS CLI v2 is installed and your current shell has working AWS credentials for this deployment",
 		"verify that `repo_url` and `repo_branch` are reachable from the current machine before apply, for example `git ls-remote --heads <repo_url> <repo_branch>`",
@@ -1209,7 +1209,7 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 		"## Preflight before `terraform apply`",
 		"Run this checklist on the same machine that will run `terraform apply`:",
 		"`terraform apply` builds and pushes the current local Tenet checkout from that machine, so run it from the repo checkout you intend to ship",
-		"Terraform 1.5+ is installed",
+		"Terraform 1.7+ is installed",
 		"Docker Buildx is installed and working locally",
 		"AWS CLI v2 is installed and your current shell has working AWS credentials for this deployment",
 		"verify that `repo_url` and `repo_branch` are reachable from the current machine before apply, for example `git ls-remote --heads <repo_url> <repo_branch>`:",

@@ -11,9 +11,14 @@ variable "vpc_cidr" {
 }
 
 variable "operator_cidr_blocks" {
-  description = "CIDR blocks allowed to reach the ALB on port 80. Narrow this for real deployments."
+  description = "Explicit IPv4 CIDRs allowed to reach the HTTPS ALB; unrestricted ingress is rejected."
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  validation {
+    condition = length(var.operator_cidr_blocks) > 0 && alltrue([
+      for cidr in var.operator_cidr_blocks : can(cidrnetmask(cidr)) && try(tonumber(split("/", cidr)[1]) > 0, false)
+    ])
+    error_message = "Set nonempty, valid IPv4 operator CIDRs with a prefix longer than /0."
+  }
 }
 
 variable "repo_url" {
@@ -129,5 +134,56 @@ variable "tags" {
   default = {
     ManagedBy = "terraform"
     Project   = "tenet"
+  }
+}
+
+variable "alb_internal" {
+  description = "Keep the ALB private by default. Operators need VPN or equivalent VPC connectivity."
+  type        = bool
+  default     = true
+}
+
+variable "hostname" {
+  description = "DNS hostname covered by the ACM certificate; point it at the ALB after deployment."
+  type        = string
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$", var.hostname)) && strcontains(var.hostname, ".")
+    error_message = "Set a DNS hostname without scheme, port, or path."
+  }
+}
+
+variable "certificate_arn" {
+  description = "Existing ACM certificate ARN for the HTTPS listener in the deployment region."
+  type        = string
+  validation {
+    condition     = can(regex("^arn:[^:]+:acm:[^:]+:[0-9]{12}:certificate/", var.certificate_arn))
+    error_message = "An ACM certificate ARN is required."
+  }
+}
+
+variable "github_oauth_client_id" {
+  description = "GitHub OAuth application client ID; callback is https://hostname/auth/callback/github."
+  type        = string
+  validation {
+    condition     = length(trimspace(var.github_oauth_client_id)) > 0
+    error_message = "A GitHub OAuth client ID is required."
+  }
+}
+
+variable "github_oauth_client_secret_arn" {
+  description = "Secrets Manager ARN containing the GitHub OAuth client secret as a plain string."
+  type        = string
+  validation {
+    condition     = can(regex("^arn:[^:]+:secretsmanager:[^:]+:[0-9]{12}:secret:", var.github_oauth_client_secret_arn))
+    error_message = "An OAuth client secret ARN is required."
+  }
+}
+
+variable "auth_session_secret_arn" {
+  description = "Secrets Manager ARN containing a cryptographically random session signing secret (at least 32 bytes)."
+  type        = string
+  validation {
+    condition     = can(regex("^arn:[^:]+:secretsmanager:[^:]+:[0-9]{12}:secret:", var.auth_session_secret_arn))
+    error_message = "A session signing secret ARN is required."
   }
 }
