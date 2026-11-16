@@ -9,7 +9,7 @@ services. EC2 support includes catalog, planning and inspection.
 
 Start with the [local walkthrough](docs/guides/getting-started.md), then follow
 [ECS GitOps setup](docs/guides/ecs-gitops.md) for login, IAM, manifests, manual
-approval and automatic sync.
+approval and automatic sync. The [v0.2.0-rc.1 candidate notes](docs/releases/v0.2.0-rc.1.md) describe upgrade requirements and validation limits.
 
 | Capability | Availability |
 | --- | --- |
