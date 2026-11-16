@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/DevopsArtFactory/tenet/internal/authidentity"
 	"github.com/DevopsArtFactory/tenet/internal/authprovider"
@@ -355,11 +356,16 @@ func respondAuthStateConsumeError(w http.ResponseWriter, err error) {
 }
 
 func safeInAppReturnURL(raw string) bool {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
+	// Browsers treat backslashes as URL separators and discard some controls.
+	// Check both the supplied URL and its decoded path before redirecting.
+	if strings.Contains(raw, `\`) || strings.IndexFunc(raw, unicode.IsControl) >= 0 {
+		return false
+	}
+	parsed, err := url.Parse(raw)
 	if err != nil || parsed == nil {
 		return false
 	}
-	if parsed.IsAbs() || parsed.Host != "" || strings.HasPrefix(parsed.Path, "//") {
+	if parsed.IsAbs() || parsed.Host != "" || strings.HasPrefix(parsed.Path, "//") || strings.Contains(parsed.Path, `\`) || strings.IndexFunc(parsed.Path, unicode.IsControl) >= 0 {
 		return false
 	}
 	return strings.HasPrefix(parsed.Path, "/")
