@@ -445,7 +445,7 @@ func TestManagedLoginFeatureGuideDocs(t *testing.T) {
 		"HTTPS request evidence or trusted `X-Forwarded-Proto: https` / `Forwarded: proto=https` evidence",
 		"Logout clears only Tenet's signed `tenet_session` cookie",
 		"does not revoke provider tokens, clear GitHub/Google/Okta sessions, or sign out an upstream trusted front door",
-		"Trusted front-door identity still wins when trusted headers are present",
+		"Trusted front-door identity wins over the session cookie only when header trust is explicitly enabled",
 		"Managed login authenticates the browser operator; it does not grant Tenet roles or deployment access by itself.",
 		"Repository-backed RBAC policy diagnostics can explain how users or groups map to Tenet roles and deployment/project/environment scopes",
 		"route enforcement still depends on Tenet's trusted role and deployment/project/environment authorization settings",

@@ -1916,7 +1916,7 @@ func TestManagedLoginGuideDocumentsProviderRoutesAndVerificationContract(t *test
 		"sessionCookieSecureForRequest",
 		"sessionCookieSecureSources",
 		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=true`",
-		"Trusted front-door identity still wins when trusted headers are present",
+		"Trusted front-door identity wins over the session cookie only when header trust is explicitly enabled",
 		"`go test ./internal/api ./cmd/tenet-api`",
 		"`go test ./internal/authprovider ./internal/authidentity ./internal/authstate`",
 		"Local and Docker smoke intentionally cover the out-of-box disabled managed-login runtime",

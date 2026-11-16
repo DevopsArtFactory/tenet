@@ -733,15 +733,15 @@ func TestNewAPIOptionsIncludesAuthenticatedIdentityConfigFromEnv(t *testing.T) {
 	}
 }
 
-func TestNewAPIOptionsReadAuthorizationEnforcementAlsoTrustsAuthenticatedHeaders(t *testing.T) {
+func TestNewAPIOptionsReadAuthorizationDoesNotTrustAuthenticatedHeaders(t *testing.T) {
 	t.Setenv("TENET_API_TRUST_AUTHENTICATED_HEADERS", "")
 	t.Setenv("TENET_API_ENFORCE_AUTHENTICATED_IDENTITY", "")
 	t.Setenv("TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION", "true")
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
 
-	if !options.TrustAuthenticatedHeaders {
-		t.Fatalf("expected deployment read authorization to enable trusted authenticated headers, got %+v", options)
+	if options.TrustAuthenticatedHeaders {
+		t.Fatalf("deployment read authorization must not enable trusted authenticated headers, got %+v", options)
 	}
 	if options.RequireAuthenticatedIdentity {
 		t.Fatalf("expected operator write authentication to remain disabled, got %+v", options)
@@ -759,8 +759,8 @@ func TestNewAPIOptionsRoleAuthorizationAlsoRequiresAuthenticatedIdentity(t *test
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
 
-	if !options.TrustAuthenticatedHeaders {
-		t.Fatalf("expected operator role authorization to enable trusted authenticated headers, got %+v", options)
+	if options.TrustAuthenticatedHeaders {
+		t.Fatalf("operator role authorization must not enable trusted authenticated headers, got %+v", options)
 	}
 	if !options.RequireAuthenticatedIdentity {
 		t.Fatalf("expected operator role authorization to require authenticated identity, got %+v", options)

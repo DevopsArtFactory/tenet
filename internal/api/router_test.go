@@ -596,6 +596,7 @@ func TestRouterControllerRefreshAuthGuards(t *testing.T) {
 	t.Run("unauthenticated when identity is enforced", func(t *testing.T) {
 		publisher := &recordingControllerRefreshPublisher{}
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:    true,
 			BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireAuthenticatedIdentity: true,
 			GitHubWebhookDesiredStateSource: githubwebhook.DesiredStateSourceConfig{
@@ -4543,6 +4544,7 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 
 		providerCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			OverviewApplications: func(context.Context) ([]catalog.ApplicationOverview, error) {
@@ -4931,6 +4933,7 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 
 	t.Run("overview applications collection filters allowed deployments", func(t *testing.T) {
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			OverviewApplications: func(context.Context) ([]catalog.ApplicationOverview, error) {
@@ -4999,6 +5002,7 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 	t.Run("immutable plan preview reads honor deployment authorization", func(t *testing.T) {
 		providerCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			PlanPreview: func(context.Context, string) (planpreview.Record, error) {
@@ -5065,6 +5069,7 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 	t.Run("immutable apply request reads honor deployment authorization", func(t *testing.T) {
 		providerCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
@@ -6700,6 +6705,7 @@ func TestRouterOverviewAccountsDeploymentReadAuthorization(t *testing.T) {
 	t.Run("collection unauthenticated", func(t *testing.T) {
 		providerCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			OverviewAccounts: func(context.Context) ([]catalog.AccountOverview, error) {
@@ -6725,6 +6731,7 @@ func TestRouterOverviewAccountsDeploymentReadAuthorization(t *testing.T) {
 
 	t.Run("collection filters visible deployments and recomputes counts", func(t *testing.T) {
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			OverviewAccounts: func(context.Context) ([]catalog.AccountOverview, error) {
@@ -6796,6 +6803,7 @@ func TestRouterOverviewAccountsDeploymentReadAuthorization(t *testing.T) {
 
 	t.Run("collection returns empty array when allowlist has no matches", func(t *testing.T) {
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			OverviewAccounts: func(context.Context) ([]catalog.AccountOverview, error) {
@@ -6824,6 +6832,7 @@ func TestRouterOverviewAccountsDeploymentReadAuthorization(t *testing.T) {
 	t.Run("account detail forbidden when scope has no authorized deployments", func(t *testing.T) {
 		providerCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			OverviewAccount: func(_ context.Context, awsAccountID string) (catalog.AccountOverviewDetail, error) {
@@ -6858,6 +6867,7 @@ func TestRouterOverviewAccountsDeploymentReadAuthorization(t *testing.T) {
 
 	t.Run("account detail filters visible deployments and recomputes counts", func(t *testing.T) {
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			OverviewAccount: func(_ context.Context, awsAccountID string) (catalog.AccountOverviewDetail, error) {
@@ -6906,6 +6916,7 @@ func TestRouterOverviewAccountsDeploymentReadAuthorization(t *testing.T) {
 	t.Run("group detail forbidden when scope has no authorized deployments", func(t *testing.T) {
 		providerCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			OverviewProjectEnvironment: func(_ context.Context, accountID, appRef, environmentRef string) (catalog.ProjectEnvironmentOverviewDetail, error) {
@@ -6942,6 +6953,7 @@ func TestRouterOverviewAccountsDeploymentReadAuthorization(t *testing.T) {
 
 	t.Run("group detail filters visible deployments and recomputes counts", func(t *testing.T) {
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			OverviewProjectEnvironment: func(_ context.Context, accountID, appRef, environmentRef string) (catalog.ProjectEnvironmentOverviewDetail, error) {
@@ -7825,6 +7837,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		var overviewCalls int
 		var resourceLogCalls int
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
@@ -8941,6 +8954,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		var overviewCalls int
 		var inspectionCalls int
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
@@ -11384,6 +11398,7 @@ func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
 
 	t.Run("unauthenticated when operator auth is enforced", func(t *testing.T) {
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:    true,
 			BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireAuthenticatedIdentity: true,
 			CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {
@@ -11440,6 +11455,7 @@ func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
 	t.Run("write role requirement enables trusted role parsing", func(t *testing.T) {
 		providerCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:   true,
 			BuildInfo:                   buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireOperatorRoleForWrite: true,
 			CreateDeploymentPlanPreview: func(_ context.Context, deploymentName string, req planpreview.CreateRequest) (planpreview.CreateResult, error) {
@@ -11496,6 +11512,7 @@ func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
 	t.Run("deployment authorization short-circuits unauthorized create", func(t *testing.T) {
 		providerCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {
@@ -11527,6 +11544,7 @@ func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
 	t.Run("deployment authorization allows authorized create", func(t *testing.T) {
 		providerCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			CreateDeploymentPlanPreview: func(_ context.Context, deploymentName string, req planpreview.CreateRequest) (planpreview.CreateResult, error) {
@@ -11747,6 +11765,7 @@ func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
 	t.Run("project environment authorization allows scoped create", func(t *testing.T) {
 		providerCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
@@ -11781,6 +11800,7 @@ func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
 	t.Run("project environment authorization fails closed without catalog placement", func(t *testing.T) {
 		providerCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {
@@ -12343,6 +12363,7 @@ func TestRouterCreateApplyRequestStatusCodes(t *testing.T) {
 
 	t.Run("unauthenticated when operator auth is enforced", func(t *testing.T) {
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:    true,
 			BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireAuthenticatedIdentity: true,
 			CreateApplyRequest: func(context.Context, string) (applyrequest.CreateResult, error) {
@@ -12409,6 +12430,7 @@ func TestRouterCreateApplyRequestStatusCodes(t *testing.T) {
 		planLookupCalls := 0
 		createCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			PlanPreview: func(context.Context, string) (planpreview.Record, error) {
@@ -12448,6 +12470,7 @@ func TestRouterCreateApplyRequestStatusCodes(t *testing.T) {
 		planLookupCalls := 0
 		createCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			PlanPreview: func(context.Context, string) (planpreview.Record, error) {
@@ -12483,6 +12506,7 @@ func TestRouterCreateApplyRequestStatusCodes(t *testing.T) {
 		planLookupCalls := 0
 		createCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
@@ -13057,6 +13081,7 @@ func TestRouterApplyRequestCollection(t *testing.T) {
 
 	t.Run("deployment authorization filters queued records to visible deployments", func(t *testing.T) {
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			ApplyRequests: func(context.Context, applyrequest.ListQuery) ([]applyrequest.Record, error) {
@@ -13085,6 +13110,7 @@ func TestRouterApplyRequestCollection(t *testing.T) {
 	t.Run("deployment authorization requires identity before provider", func(t *testing.T) {
 		providerCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			ApplyRequests: func(context.Context, applyrequest.ListQuery) ([]applyrequest.Record, error) {
@@ -13333,6 +13359,7 @@ func TestRouterClaimApplyRequest(t *testing.T) {
 		applyLookupCalls := 0
 		claimCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
@@ -13532,6 +13559,7 @@ func TestRouterHeartbeatApplyRequest(t *testing.T) {
 		applyLookupCalls := 0
 		heartbeatCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
@@ -13743,6 +13771,7 @@ func TestRouterTransitionApplyRequest(t *testing.T) {
 
 	t.Run("unauthenticated when operator auth is enforced", func(t *testing.T) {
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:    true,
 			BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireAuthenticatedIdentity: true,
 			TransitionApplyRequest: func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error) {
@@ -13809,6 +13838,7 @@ func TestRouterTransitionApplyRequest(t *testing.T) {
 		applyLookupCalls := 0
 		transitionCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
@@ -13845,6 +13875,7 @@ func TestRouterTransitionApplyRequest(t *testing.T) {
 		applyLookupCalls := 0
 		transitionCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
@@ -13884,6 +13915,7 @@ func TestRouterTransitionApplyRequest(t *testing.T) {
 		applyLookupCalls := 0
 		transitionCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
@@ -13922,6 +13954,7 @@ func TestRouterTransitionApplyRequest(t *testing.T) {
 	t.Run("deployment authorization preserves not found after auth passes", func(t *testing.T) {
 		applyLookupCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
@@ -13953,6 +13986,7 @@ func TestRouterTransitionApplyRequest(t *testing.T) {
 	t.Run("deployment authorization allows authorized transition and preserves invalid body", func(t *testing.T) {
 		applyLookupCalls := 0
 		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
 			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
 			RequireDeploymentReadAuthorization: true,
 			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
