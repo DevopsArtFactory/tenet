@@ -70,7 +70,7 @@ func main() {
 	enforceOperatorRoleAuthorization := operatorWriteRoleAuthorizationEnforced()
 	enforceDeploymentReadAuthorization := operatorDeploymentReadAuthorizationEnforced()
 	enforceRepositoryPolicyAuthorization := repositoryPolicyAuthorizationEnforced()
-	trustAuthenticatedHeaders := trustedAuthenticatedHeadersEnabled() || enforceAuthenticatedIdentity || enforceOperatorRoleAuthorization || enforceDeploymentReadAuthorization || enforceRepositoryPolicyAuthorization
+	trustAuthenticatedHeaders := trustedAuthenticatedHeadersEnabled()
 	webhookConfigured := strings.TrimSpace(os.Getenv("TENET_GITHUB_WEBHOOK_SECRET")) != ""
 	authRuntime := authRuntimeDiagnosticFromEnv()
 	redisAddr := os.Getenv("TENET_REDIS_ADDR")
@@ -170,7 +170,7 @@ func newAPIOptionsWithCatalogSource(info buildinfo.Info, source apiCatalogSource
 func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCatalogSource, store statusstore.Store, planStorePath string, applyStorePath string) api.Options {
 	options := api.Options{
 		BuildInfo:                          info,
-		TrustAuthenticatedHeaders:          trustedAuthenticatedHeadersEnabled() || operatorWriteAuthenticationEnforced() || operatorWriteRoleAuthorizationEnforced() || operatorDeploymentReadAuthorizationEnforced() || repositoryPolicyAuthorizationEnforced(),
+		TrustAuthenticatedHeaders:          trustedAuthenticatedHeadersEnabled(),
 		RequireAuthenticatedIdentity:       operatorWriteAuthenticationEnforced() || operatorWriteRoleAuthorizationEnforced(),
 		RequireOperatorRoleForRead:         operatorWriteRoleAuthorizationEnforced() && operatorDeploymentReadAuthorizationEnforced(),
 		RequireOperatorRoleForWrite:        operatorWriteRoleAuthorizationEnforced(),

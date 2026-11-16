@@ -3699,7 +3699,7 @@ func NewRouter(options Options) http.Handler {
 	handler = panicRecoveryMiddleware(logger, handler)
 	handler = requestTimeoutMiddleware(options.RequestTimeout, handler)
 	handler = requestLoggingMiddleware(logger, handler)
-	handler = requestActorMiddleware(options.TrustAuthenticatedHeaders || options.RequireAuthenticatedIdentity || options.RequireOperatorRoleForRead || options.RequireOperatorRoleForWrite || options.RequireDeploymentReadAuthorization || options.AuthorizeWithRepositoryPolicy, authSession, handler)
+	handler = requestActorMiddleware(options.TrustAuthenticatedHeaders, authSession, handler)
 	handler = requestIDMiddleware(handler)
 	return handler
 }

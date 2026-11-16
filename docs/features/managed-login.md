@@ -52,7 +52,9 @@ If an operator remains signed in at the IdP or the external front door after `/a
 
 ## Trusted front door and policy
 
-Trusted front-door identity still wins when trusted headers are present. Enable `TENET_API_TRUST_AUTHENTICATED_HEADERS=true` and the enforcement toggles only on API instances reachable exclusively through a front door that authenticates callers and strips spoofable inbound `X-Tenet-Authenticated-*`, `X-Tenet-Authorized-*`, and trusted-alias `X-User-*` headers before forwarding trusted values.
+Authentication and RBAC enforcement flags, including live ECS execution, do not enable header trust. Keep `TENET_API_TRUST_AUTHENTICATED_HEADERS=false` for managed-login-only installations; request-supplied identity, role, group, and scope headers are ignored. Upgrading proxy-based installations that previously relied on enforcement flags implicitly enabling header trust requires setting this flag explicitly.
+
+Trusted front-door identity wins over the session cookie only when header trust is explicitly enabled. Enable `TENET_API_TRUST_AUTHENTICATED_HEADERS=true` only on API instances reachable exclusively through a front door that authenticates callers and strips spoofable inbound `X-Tenet-Authenticated-*`, `X-Tenet-Authorized-*`, and trusted-alias `X-User-*` headers before forwarding trusted values.
 
 Managed login authenticates the browser operator; it does not grant Tenet roles or deployment access by itself. Repository-backed RBAC policy diagnostics can explain how users or groups map to Tenet roles and deployment/project/environment scopes, but route enforcement still depends on Tenet's trusted role and deployment/project/environment authorization settings. Treat policy diagnostics as evidence for front-door/RBAC wiring until policy-derived route enforcement is explicitly enabled in a future change.
 
