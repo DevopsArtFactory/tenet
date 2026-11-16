@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/DevopsArtFactory/tenet/internal/filelock"
 )
 
 var authStateNow = time.Now
@@ -59,6 +61,11 @@ func (s FileStore) Save(ctx context.Context, state State) (State, error) {
 	if err != nil {
 		return State{}, err
 	}
+	unlock, err := filelock.Acquire(ctx, s.Path, true)
+	if err != nil {
+		return State{}, err
+	}
+	defer unlock()
 	states, err := s.List(ctx)
 	if err != nil {
 		return State{}, err
@@ -70,7 +77,7 @@ func (s FileStore) Save(ctx context.Context, state State) (State, error) {
 	} else {
 		return State{}, err
 	}
-	if err := Save(s.Path, states); err != nil {
+	if err := saveUnlocked(s.Path, states); err != nil {
 		return State{}, err
 	}
 	return state, nil
@@ -82,6 +89,11 @@ func (s FileStore) Consume(ctx context.Context, token string) (State, error) {
 	if s.Path == "" {
 		return State{}, fmt.Errorf("file auth state store path is required")
 	}
+	unlock, err := filelock.Acquire(ctx, s.Path, true)
+	if err != nil {
+		return State{}, err
+	}
+	defer unlock()
 	states, err := s.List(ctx)
 	if err != nil {
 		return State{}, err
@@ -99,7 +111,7 @@ func (s FileStore) Consume(ctx context.Context, token string) (State, error) {
 	}
 	state.ConsumedAt = &now
 	states[idx] = state
-	if err := Save(s.Path, states); err != nil {
+	if err := saveUnlocked(s.Path, states); err != nil {
 		return State{}, err
 	}
 	return state, nil
@@ -127,6 +139,15 @@ func Load(path string) ([]State, error) {
 
 // Save writes OAuth callback states to a JSON file in deterministic token order.
 func Save(path string, states []State) error {
+	unlock, err := filelock.Acquire(context.Background(), path, true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return saveUnlocked(path, states)
+}
+
+func saveUnlocked(path string, states []State) error {
 	normalized := make([]State, 0, len(states))
 	for idx, state := range states {
 		record, err := normalizeState(state)
