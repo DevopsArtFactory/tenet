@@ -19,6 +19,17 @@ var ErrExpired = errors.New("auth state expired")
 // ErrConsumed reports that the OAuth callback state has already been consumed.
 var ErrConsumed = errors.New("auth state already consumed")
 
+// ErrCapacity reports that the shared store has no room for another login.
+var ErrCapacity = errors.New("auth state capacity reached")
+
+// ErrRateLimited reports too many login initiations in the shared store.
+var ErrRateLimited = errors.New("auth state login rate exceeded")
+
+const (
+	maxStoredStates    = 1024
+	maxLoginsPerMinute = 120
+)
+
 // State is Tenet's normalized OAuth callback state record. It is intentionally
 // small groundwork for future browser/OAuth flows; it is not a Tenet-managed
 // browser session and is not wired into trusted-front-door authorization.
