@@ -7972,6 +7972,12 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
           startTime: '2026-05-05T07:26:00Z',
           endTime: '2026-05-05T07:31:00Z',
           description: 'Launching another instance without a provider activity id',
+        }, {
+          statusCode: 'Successful',
+          progress: 50,
+          startTime: '2026-05-05T07:26:00Z',
+          endTime: '2026-05-05T07:31:00Z',
+          description: 'Launching another instance without a provider activity id',
         }],
         instancesScope: { requestedLimit: limit, effectiveLimit: limit, returnedInstanceCount: limit === 25 ? 1 : 10, truncationStatus: limit === 25 ? 'not_truncated' : 'truncated' },
         instances: [{ instanceId: 'i-abc123', availabilityZone: 'ap-northeast-2a', lifecycleState: 'InService', healthStatus: 'Healthy', protectedFromScaleIn: true, weightedCapacity: '1', ec2Instance: { instanceState: 'running', instanceType: 'm6i.large', imageId: 'ami-host123', privateIpAddress: '10.0.1.24', publicIpAddress: '<img src=x onerror=1>', subnetId: 'subnet-abc123', vpcId: 'vpc-abc123', launchTime: '2026-05-05T07:30:00Z' } }],
@@ -8007,15 +8013,22 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!asgSupportedText.includes('Description · Launching a new EC2 instance: i-abc123')) throw new Error('expected ASG inspection to render scaling activity description');
   if (!asgSupportedText.includes('Status message · Instance launched successfully')) throw new Error('expected ASG inspection to render scaling activity status message');
   if (!asgSupportedText.includes('Share scaling activity')) throw new Error('expected ASG inspection to render scaling activity share handoff');
-  const asgScalingActivityRows = collectNodes(asgSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'LI' && node.id === 'asg-scaling-activity-act-123');
-  if (asgScalingActivityRows.length !== 1) throw new Error('expected ASG scaling activity to expose a stable provider row anchor, got ' + asgScalingActivityRows.length);
-  const fallbackActivityRows = collectNodes(asgSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'LI' && node.id === 'asg-scaling-activity-2026-05-05t07-26-00z-2026-05-05t07-31-00z-successful-launching-another-instance-without-a-provider-activity-id-row-2');
-  if (fallbackActivityRows.length !== 1) throw new Error('expected ASG scaling activity without provider id to expose a discriminator-backed row anchor, got ' + fallbackActivityRows.length);
+  const asgScalingActivityRows = collectNodes(asgSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'LI' && typeof node.id === 'string' && node.id.startsWith('asg-scaling-activity-'));
+  const expectedASGScalingActivityAnchors = [
+    'asg-scaling-activity-act-123',
+    'asg-scaling-activity-2026-05-05t07-26-00z-2026-05-05t07-31-00z-successful-launching-another-instance-without-a-provider-activity-id-row-2',
+    'asg-scaling-activity-2026-05-05t07-26-00z-2026-05-05t07-31-00z-successful-launching-another-instance-without-a-provider-activity-id-row-3',
+  ];
+  const asgScalingActivityRowIDs = asgScalingActivityRows.map((node) => node.id);
+  if (JSON.stringify(asgScalingActivityRowIDs) !== JSON.stringify(expectedASGScalingActivityAnchors)) throw new Error('expected stable unique ASG anchors for provider IDs and duplicate provider-id-missing activities, got ' + JSON.stringify(asgScalingActivityRowIDs));
   const asgScalingActivityShareLinks = collectNodes(asgSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Share scaling activity');
-  if (asgScalingActivityShareLinks.length !== 2) throw new Error('expected two ASG scaling activity share links, got ' + asgScalingActivityShareLinks.length);
-  if (asgScalingActivityShareLinks[0].target !== '_self') throw new Error('expected ASG scaling activity share link to stay inside embedded UI');
-  if (asgScalingActivityShareLinks[0].rel) throw new Error('expected ASG scaling activity share link to avoid new-tab rel attributes');
-  if (asgScalingActivityShareLinks[0].href !== '/?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=candidateAutoScalingGroup%3A%3Apayments-api-prod-candidate%3A%3ACandidate+capacity#asg-scaling-activity-act-123') throw new Error('expected ASG scaling activity share link to preserve resource route and activity anchor, got ' + asgScalingActivityShareLinks[0].href);
+  if (asgScalingActivityShareLinks.length !== expectedASGScalingActivityAnchors.length) throw new Error('expected one ASG scaling activity share link per row, got ' + asgScalingActivityShareLinks.length);
+  const asgResourceRoute = '/?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=candidateAutoScalingGroup%3A%3Apayments-api-prod-candidate%3A%3ACandidate+capacity';
+  asgScalingActivityShareLinks.forEach((link, index) => {
+    if (link.target !== '_self') throw new Error('expected ASG scaling activity share link ' + index + ' to stay inside embedded UI');
+    if (link.rel) throw new Error('expected ASG scaling activity share link ' + index + ' to avoid new-tab rel attributes');
+    if (link.href !== asgResourceRoute + '#' + expectedASGScalingActivityAnchors[index]) throw new Error('expected ASG scaling activity share link ' + index + ' to preserve resource route and its row anchor, got ' + link.href);
+  });
   if (!asgSupportedText.includes('Instances')) throw new Error('expected ASG inspection to render instances section');
   if (!asgSupportedText.includes('Lifecycle state · InService')) throw new Error('expected ASG inspection to render lifecycle state');
   if (!asgSupportedText.includes('Protected from scale-in · True')) throw new Error('expected ASG inspection to render protected-from-scale-in');
