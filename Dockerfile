@@ -1,12 +1,12 @@
-FROM golang:1.27.2-alpine AS builder
+FROM golang:1.27.4-alpine AS builder
 WORKDIR /src
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/tenet-api ./cmd/tenet-api
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/tenet-controller ./cmd/tenet-controller
 
-FROM alpine:3.20 AS runtime
+FROM alpine:3.24.4 AS runtime
 RUN adduser -D -H -u 10001 tenet
 WORKDIR /app
 COPY --from=builder /out/tenet-api /usr/local/bin/tenet-api
