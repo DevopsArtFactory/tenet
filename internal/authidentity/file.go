@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/DevopsArtFactory/tenet/internal/filelock"
 )
 
 var authIdentityNow = time.Now
@@ -60,6 +62,11 @@ func (s FileStore) Upsert(ctx context.Context, identity Identity) (Identity, err
 	if err != nil {
 		return Identity{}, err
 	}
+	unlock, err := filelock.Acquire(ctx, s.Path, true)
+	if err != nil {
+		return Identity{}, err
+	}
+	defer unlock()
 	identities, err := s.List(ctx)
 	if err != nil {
 		return Identity{}, err
@@ -76,7 +83,7 @@ func (s FileStore) Upsert(ctx context.Context, identity Identity) (Identity, err
 	} else {
 		return Identity{}, err
 	}
-	if err := Save(s.Path, identities); err != nil {
+	if err := saveUnlocked(s.Path, identities); err != nil {
 		return Identity{}, err
 	}
 	return identity, nil
@@ -104,6 +111,15 @@ func Load(path string) ([]Identity, error) {
 
 // Save writes auth identities to a JSON file in deterministic key order.
 func Save(path string, identities []Identity) error {
+	unlock, err := filelock.Acquire(context.Background(), path, true)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return saveUnlocked(path, identities)
+}
+
+func saveUnlocked(path string, identities []Identity) error {
 	normalized := make([]Identity, 0, len(identities))
 	for idx, identity := range identities {
 		record, err := normalizeIdentity(identity)
