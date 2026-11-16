@@ -1126,7 +1126,7 @@ func TestAuthToggleDocsUseReadableBooleanExamples(t *testing.T) {
 	}
 }
 
-func TestLocalRuntimeDocsSeparateShippedWriteRoutesFromDeferredAWSMutation(t *testing.T) {
+func TestLocalRuntimeDocsDescribeLocalDemoAndOptInECSExecution(t *testing.T) {
 	localRuntimeText := readTextFile(t, "architecture/tenet-v1-local-runtime.md")
 
 	for _, fragment := range []string{
@@ -1137,16 +1137,24 @@ func TestLocalRuntimeDocsSeparateShippedWriteRoutesFromDeferredAWSMutation(t *te
 		"`POST /v1/applies/{applyId}/transitions`",
 		"`TENET_AWS_ENABLE_APPLY=true` queued local-safe handoff",
 		"without AWS mutation",
-		"live AWS observation/execution adapters",
-		"real mutation executor loops",
+		"## Current execution scope",
+		"registration, service updates, observation and recovery are available",
+		"separate execution flags and authenticated repository-scoped authorization",
+		"GitHub reconciliation supports explicit manual and automatic modes",
 	} {
 		if !strings.Contains(localRuntimeText, fragment) {
-			t.Fatalf("expected local runtime docs to separate shipped write routes from deferred AWS mutation via %q", fragment)
+			t.Fatalf("expected local runtime docs to describe local demo and opt-in ECS execution via %q", fragment)
 		}
 	}
 
-	if strings.Contains(localRuntimeText, "- write APIs") {
-		t.Fatal("expected deferred work docs not to describe generic write APIs as deferred")
+	for _, stale := range []string{
+		"- write APIs",
+		"This slice deliberately does not introduce live AWS reconciliation yet",
+		"This does not yet enable an automatic Git deployment loop",
+	} {
+		if strings.Contains(localRuntimeText, stale) {
+			t.Fatalf("local runtime docs retain outdated execution scope: %q", stale)
+		}
 	}
 }
 
