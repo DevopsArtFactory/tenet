@@ -202,6 +202,18 @@ func handleProviderLogin(w http.ResponseWriter, r *http.Request, cfg authSession
 		http.Error(w, fmt.Sprintf("failed to build %s authorization URL", providerLabel), http.StatusServiceUnavailable)
 		return
 	}
+	// Bind this authorization transaction to the browser that started it. The
+	// cookie is signed separately from the public state parameter.
+	http.SetCookie(w, &http.Cookie{
+		Name:     cfg.cookieName() + "_oauth_state",
+		Value:    cfg.stateBinding(token),
+		Path:     "/",
+		Expires:  now.Add(cfg.stateTTL()),
+		MaxAge:   int(cfg.stateTTL().Seconds()),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   cfg.secureCookie(r),
+	})
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
 
@@ -221,6 +233,11 @@ func handleProviderCallback(w http.ResponseWriter, r *http.Request, cfg authSess
 	code := strings.TrimSpace(r.URL.Query().Get("code"))
 	if code == "" {
 		http.Error(w, "OAuth callback code is required", http.StatusBadRequest)
+		return
+	}
+	binding, err := r.Cookie(cfg.cookieName() + "_oauth_state")
+	if err != nil || !hmac.Equal([]byte(binding.Value), []byte(cfg.stateBinding(stateToken))) {
+		http.Error(w, "OAuth callback does not match this browser's login request", http.StatusBadRequest)
 		return
 	}
 	state, err := cfg.StateStore.Consume(r.Context(), stateToken)
@@ -281,6 +298,15 @@ func handleProviderCallback(w http.ResponseWriter, r *http.Request, cfg authSess
 		SameSite: http.SameSiteLaxMode,
 		Secure:   cfg.secureCookie(r),
 	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     cfg.cookieName() + "_oauth_state",
+		Path:     "/",
+		Expires:  time.Unix(0, 0).UTC(),
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   cfg.secureCookie(r),
+	})
 	http.Redirect(w, r, state.ReturnURL, http.StatusFound)
 }
 
@@ -337,6 +363,12 @@ func safeInAppReturnURL(raw string) bool {
 		return false
 	}
 	return strings.HasPrefix(parsed.Path, "/")
+}
+
+func (cfg authSessionConfig) stateBinding(token string) string {
+	mac := hmac.New(sha256.New, []byte(cfg.SessionSecret))
+	mac.Write([]byte("tenet-oauth-browser-state:" + token))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
 func newAuthStateToken() (string, error) {
