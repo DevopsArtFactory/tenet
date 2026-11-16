@@ -2,7 +2,24 @@
 
 Tenet is a repository-driven deployment control plane for multi-account AWS environments. It brings declared deployment intent, runtime status, rollout progress, and resource evidence into one operator UI for **EC2 and ECS**.
 
-**Status: early-stage.** Tenet can inspect AWS resources, create deployment plans, and execute reviewed **native ECS Rolling, Blue-Green, Canary and Linear** deployments behind a separate live-execution opt-in. The default local demo remains safe for inspection. Rollback and explicit retry retain separate audit outcomes; automatic failure recovery requires `ecs.rollbackOnFailure: true`. GitHub reconciliation supports manual plans and explicitly enabled automatic native sync, including desired-count changes. Blue-Green, Canary and Linear require the additional advanced opt-in; all four strategies support separately enabled self-heal after a verified Apply. Native advanced strategies also support separate recovery of the captured source revision and pre-update count; see the [native recovery guide](docs/runbooks/ecs-native-recovery.md) and the [ECS execution guide](docs/architecture/tenet-v1-ecs-execution-contract.md#enabling-reviewed-rolling-execution).
+**Status: early-stage.** Tenet executes reviewed native ECS Rolling, Blue-Green,
+Canary and Linear deployments behind a separate live-execution opt-in. GitHub
+sync, optional self-heal and automatic failure recovery work with existing ECS
+services. EC2 support includes catalog, planning and inspection.
+
+Start with the [local walkthrough](docs/guides/getting-started.md), then follow
+[ECS GitOps setup](docs/guides/ecs-gitops.md) for login, IAM, manifests, manual
+approval and automatic sync.
+
+| Capability | Availability |
+| --- | --- |
+| Local UI and plans | Sample manifests and recorded status; AWS credentials optional for the walkthrough |
+| Native ECS execution | Existing services, pinned base task definitions and authenticated, scoped approval |
+| Blue-Green / Canary / Linear | Additional advanced opt-in and supported ALB/IPv4 bindings |
+| Git sync, self-heal and automatic rollback | Separate per-installation/per-deployment opt-ins |
+| Restart and recovery verification | AWS Emulator CI checks durable recovery and single mutation calls |
+| Live AWS qualification | Sandbox scenarios prepared; live evidence remains pending |
+| Execution storage | Persistent local plan/Apply files with OS locks |
 
 ## What it does
 
@@ -13,6 +30,9 @@ Tenet is a repository-driven deployment control plane for multi-account AWS envi
 - Supports optional managed login, repository-backed RBAC, and signed GitHub webhook refresh handoffs in GitHub + Redis mode.
 
 ## Run locally
+
+The [step-by-step guide](docs/guides/getting-started.md) covers cloning, expected
+results, the UI, a first plan, Compose and troubleshooting.
 
 Requires Go 1.27.2 or later. From the repository root:
 
@@ -65,11 +85,15 @@ Use `make smoke-docker` when changing the Compose stack or its runtime behavior.
 
 ## Documentation
 
+- [Getting started](docs/guides/getting-started.md) — run the demo, understand the UI and create a plan.
+- [ECS GitOps setup](docs/guides/ecs-gitops.md) — configure a real manifest repository, login, IAM, approvals and automation.
+- [Public release preparation](docs/guides/public-release.md) — maintainer decisions, validation evidence and publication steps.
 - [ECS Git reconciliation](docs/runbooks/ecs-git-reconciliation.md) — manual plans, scoped automatic sync, drift and operational boundaries.
 - [ECS Rolling recovery](docs/runbooks/ecs-rolling-recovery.md) — explicit/approved automatic rollback, failed-intent holds, and retries.
 - [Native advanced traffic inputs](docs/architecture/ecs-native-advanced-inputs.md) — reviewed ALB, Canary/Linear, bake, alarm and Lambda-hook settings.
 - [Native ECS Apply and recovery](docs/runbooks/ecs-native-recovery.md) — advanced execution opt-in, durable ownership handoff and operator rollback.
-- [AWS ECS integration preparation](docs/runbooks/ecs-native-integration.md) — sandbox IaC and E2E scenarios; CI uses a mocked AWS provider without creating resources.
+- [AWS ECS integration preparation](docs/runbooks/ecs-native-integration.md) — sandbox IaC and live E2E scenarios; offline Terraform checks and AWS Emulator CI.
+- [AWS Emulator tests](tests/ecs-native-integration/README.md#native-ecs-recovery-in-ci) — Git-to-Apply, rollback, count restoration and simulated worker restarts.
 - [ECS native execution input contract](docs/architecture/tenet-v1-ecs-execution-contract.md) — explicit targets, pinned task definitions, native strategies, and reviewed plan inputs.
 
 | Guide | Covers |

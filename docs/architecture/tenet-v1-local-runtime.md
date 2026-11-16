@@ -210,15 +210,17 @@ The `make docker-up` preflight intentionally fails fast when `localhost:8080` is
 
 Leave `TENET_AWS_ENABLE_APPLY` unset for the default disabled immutable apply contract. Set `TENET_AWS_ENABLE_APPLY=true make docker-up` when you want the same local stack to create queued immutable apply records on a fresh plan/apply pair and then let the local-safe executor claim and advance that new `applyId`; that opt-in remains read-only and does not contact AWS.
 
-## Deferred work
+## Current execution scope
 
-This slice deliberately does not introduce live AWS reconciliation yet. The next layers still needed are:
+The local demo uses fixtures and the local executor stub. Live native ECS
+registration, service updates, observation and recovery are available with the
+separate execution flags and authenticated repository-scoped authorization.
+GitHub reconciliation supports explicit manual and automatic modes.
 
-- controller-owned reconciliation loops based on the abstract planner
-- durable runtime history beyond a single status file
-- live AWS observation/execution adapters
-- real mutation executor loops that turn reviewed apply operations into AWS changes
-
+Start with the [ECS setup guide](../guides/ecs-gitops.md) for the current setup
+sequence. The [execution contract](tenet-v1-ecs-execution-contract.md) and
+[Git reconciliation runbook](../runbooks/ecs-git-reconciliation.md) describe
+persistence, authorization, supported fields and ownership.
 
 The smoke helper still runs `docker compose down --remove-orphans` even on failure so local cleanup stays deterministic.
 
@@ -231,4 +233,6 @@ GitHub catalog with a configured repository/ref and versioned RBAC policy. It
 resolves that ref once per snapshot and fetches manifest/policy files by immutable
 commit SHA. See the [ECS execution contract](tenet-v1-ecs-execution-contract.md#enabling-reviewed-rolling-execution)
 for live flags, authenticated approval, role checks and source correlation.
-This does not yet enable an automatic Git deployment loop.
+Automatic execution additionally requires the global Git sync opt-in, a scoped
+automation subject and per-deployment automatic mode. See the
+[Git reconciliation runbook](../runbooks/ecs-git-reconciliation.md).
