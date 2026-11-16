@@ -3698,6 +3698,9 @@ func NewRouter(options Options) http.Handler {
 	})
 
 	handler := requestBodyLimitMiddleware(mux)
+	// Reject cross-origin browser writes, including requests from same-site sibling hosts.
+	// Non-browser clients still require the route's normal authentication.
+	handler = http.NewCrossOriginProtection().Handler(handler)
 	handler = panicRecoveryMiddleware(logger, handler)
 	handler = requestTimeoutMiddleware(options.RequestTimeout, handler)
 	handler = requestLoggingMiddleware(logger, handler)

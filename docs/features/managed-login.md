@@ -44,6 +44,27 @@ Managed login issues a signed `tenet_session` cookie with `HttpOnly`, `SameSite=
 
 Use `GET /v1/operator/context` and inspect `authRuntime.tenetManagedLogin` to diagnose cookie behavior. The fields `sessionCookieSecureOverride`, `sessionCookieSecureForRequest`, and `sessionCookieSecureSources` tell you whether the final cookie decision came from an explicit override, direct HTTPS, or trusted forwarded-proto evidence. Local HTTP development can legitimately report a non-secure cookie when the override and HTTPS evidence are absent.
 
+## Browser write protection
+
+Tenet rejects unsafe cross-origin browser requests with `403 Forbidden` before
+Plan, Apply or other write handlers run. This includes requests from sibling
+subdomains (`Sec-Fetch-Site: same-site`), even when a valid session cookie or
+trusted front-door identity is present. `SameSite=Lax` cookies alone do not
+provide that boundary.
+
+The API uses Go's `http.CrossOriginProtection`: modern browsers are checked via
+`Sec-Fetch-Site`; requests without that header are checked by comparing the
+`Origin` host and port to `Host`. Keep the UI and API on the same origin. Reverse
+proxies must preserve the original `Host`, `Origin` and `Sec-Fetch-Site` headers;
+`X-Forwarded-Host` is not an override for this check. Use HTTPS at the front door.
+There is no cross-origin allowlist or route bypass.
+
+Safe GET/HEAD/OPTIONS requests remain available, including provider login
+callbacks with their one-time OAuth state checks. Non-browser clients without
+`Origin` and `Sec-Fetch-Site` continue to use the normal route authentication and
+RBAC checks. GitHub webhook deliveries continue to require their HMAC signature.
+This protection does not authenticate a caller or replace authorization.
+
 ## Logout boundary
 
 Logout clears only Tenet's signed `tenet_session` cookie with matching path, secure, HttpOnly, and SameSite attributes, then redirects to a validated in-app `returnUrl`. It does not revoke provider tokens, clear GitHub/Google/Okta sessions, or sign out an upstream trusted front door. Provider access tokens are used only for callback profile lookup and must not be persisted in identity/session stores or returned through diagnostics.
