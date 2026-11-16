@@ -21,7 +21,7 @@ Project maintainers are responsible for clarifying and enforcing these standards
 This Code of Conduct applies within all project spaces and when an individual is officially representing the project in public spaces.
 
 ## Reporting
-To report unacceptable behavior, contact the maintainers at **opensource@devopsartfactory.com**.
+To report unacceptable behavior, contact the maintainers at [yj.jung5078@gmail.com](mailto:yj.jung5078@gmail.com).
 All reports will be reviewed and investigated promptly and fairly.
 
 ## Enforcement
