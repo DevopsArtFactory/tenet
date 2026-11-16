@@ -34,7 +34,7 @@ approval and automatic sync.
 The [step-by-step guide](docs/guides/getting-started.md) covers cloning, expected
 results, the UI, a first plan, Compose and troubleshooting.
 
-Requires Go 1.27.2 or later. From the repository root:
+Requires Go 1.27.4 or later. From the repository root:
 
 ```bash
 TENET_CATALOG_SOURCE=filesystem \

@@ -12,7 +12,7 @@ catalog, planning and inspection workflows.
 ## Prerequisites
 
 Use Linux or macOS with Git and Go matching the version in
-[go.mod](../../go.mod), currently 1.27.2. The UI is embedded in the Go API server.
+[go.mod](../../go.mod), currently 1.27.4. The UI is embedded in the Go API server.
 A separate Node.js build is unnecessary.
 
 The alternative Compose setup requires Docker, Docker Compose v2 and Make.
