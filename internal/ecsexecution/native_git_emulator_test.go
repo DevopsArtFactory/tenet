@@ -69,27 +69,33 @@ func TestNativeEmulatorGitRecovery(t *testing.T) {
 			t.Fatalf("unexpected or duplicate strategy %s", d.Strategy.Type)
 		}
 		delete(remaining, d.Strategy.Type)
-		t.Run(string(d.Strategy.Type), func(t *testing.T) {
-			var net emulatorNetwork
-			cmd := exec.CommandContext(t.Context(), "python3", "../../tests/ecs-native-integration/emulator_network.py")
-			cmd.Stderr = os.Stderr
-			out, err := cmd.Output()
-			emulatorCheck(t, err)
-			emulatorCheck(t, json.Unmarshal(out, &net))
-			emulatorGitRecovery(t, net, raw.Accounts[0], raw.Environments[0], d)
-		})
+		for _, restart := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/restart=%t", d.Strategy.Type, restart), func(t *testing.T) {
+				var network emulatorNetwork
+				cmd := exec.CommandContext(t.Context(), "python3", "../../tests/ecs-native-integration/emulator_network.py")
+				cmd.Stderr = os.Stderr
+				out, err := cmd.Output()
+				emulatorCheck(t, err)
+				emulatorCheck(t, json.Unmarshal(out, &network))
+				// The scenario mutates its desired state while committing to Git.
+				data, err := json.Marshal(d)
+				emulatorCheck(t, err)
+				var deployment spec.DeploymentSpec
+				emulatorCheck(t, json.Unmarshal(data, &deployment))
+				emulatorGitRecovery(t, network, raw.Accounts[0], raw.Environments[0], deployment, restart)
+			})
+		}
 	}
 	if len(remaining) != 0 {
 		t.Fatalf("missing catalog strategies: %v", remaining)
 	}
 }
 
-func emulatorGitRecovery(t *testing.T, net emulatorNetwork, account spec.AccountSpec, environment spec.EnvironmentSpec, d spec.DeploymentSpec) {
+func emulatorGitRecovery(t *testing.T, net emulatorNetwork, account spec.AccountSpec, environment spec.EnvironmentSpec, d spec.DeploymentSpec, restart bool) {
 	t.Helper()
 	ctx := t.Context()
 	cfg := emulatorConfig(t)
 	client := ecs.NewFromConfig(cfg)
-	lb := elb.NewFromConfig(cfg)
 	cluster, err := client.CreateCluster(ctx, &ecs.CreateClusterInput{ClusterName: &net.Name})
 	emulatorCheck(t, err)
 	d.Image = "docker.io/library/nginx@sha256:" + strings.Repeat("a", 64)
@@ -182,68 +188,78 @@ func emulatorGitRecovery(t *testing.T, net emulatorNetwork, account spec.Account
 		}
 		return nil
 	}
-	routing := ALBReadiness{ClientFor: emulatorProvider[ALBClient](lb), CheckCapabilities: check}
-	health := ALBTargetHealth{ClientFor: emulatorProvider[TargetHealthClient](lb), CheckCapabilities: check}
-	update := AdvancedService{ClientFor: emulatorProvider[NativeServiceClient](client), CheckCapabilities: check, ObserveRouting: routing.Observe}
-	stop := NativeRollback{ClientFor: emulatorProvider[NativeRollbackClient](client), CheckCapabilities: check}
 	now := time.Now().UTC()
 	clock := func() time.Time { return now }
-	alarm := &emulatorFailedImageAlarm{Client: client, name: e.Advanced.Alarms.Names[0]}
-	observe := NativeObservation{ClientFor: emulatorProvider[NativeObservationClient](alarm), CheckCapabilities: check, ObserveRouting: routing.Observe, ObserveTargetHealth: health.Observe, Now: clock}
 	stores := t.TempDir()
 	planPath := filepath.Join(stores, "plans.json")
-	plans := planpreview.NewFileStore(planPath)
-	service := applyrequest.Service{Store: applyrequest.NewFileStore(filepath.Join(stores, "applies.json")), LoadPlan: plans.Get, EnableAWSApply: true, Now: clock,
-		CurrentFingerprint: func(ctx context.Context, name string) (string, error) {
+	writes := map[string]int{}
+	generation := 0
+	rebuild := func(alarmDeployment string) (applyrequest.Service, ecsreconcile.Reconciler, applyrequest.Executor, *emulatorFailedImageAlarm) {
+		cfg := emulatorConfig(t)
+		sdk := ecs.NewFromConfig(cfg)
+		client := &emulatorRestartClient{Client: sdk, writes: writes, restart: restart}
+		lb := elb.NewFromConfig(cfg)
+		routing := ALBReadiness{ClientFor: emulatorProvider[ALBClient](lb), CheckCapabilities: check}
+		health := ALBTargetHealth{ClientFor: emulatorProvider[TargetHealthClient](lb), CheckCapabilities: check}
+		update := AdvancedService{ClientFor: emulatorProvider[NativeServiceClient](client), CheckCapabilities: check, ObserveRouting: routing.Observe}
+		stop := NativeRollback{ClientFor: emulatorProvider[NativeRollbackClient](client), CheckCapabilities: check}
+		alarm := &emulatorFailedImageAlarm{Client: sdk, name: e.Advanced.Alarms.Names[0], deployment: alarmDeployment}
+		observe := NativeObservation{ClientFor: emulatorProvider[NativeObservationClient](alarm), CheckCapabilities: check, ObserveRouting: routing.Observe, ObserveTargetHealth: health.Observe, Now: clock}
+		plans := planpreview.NewFileStore(planPath)
+		service := applyrequest.Service{Store: applyrequest.NewFileStore(filepath.Join(stores, "applies.json")), LoadPlan: plans.Get, EnableAWSApply: true, Now: clock,
+			CurrentFingerprint: func(ctx context.Context, name string) (string, error) {
+				c, err := load(ctx)
+				if err != nil {
+					return "", err
+				}
+				detail, err := catalog.BuildDeploymentOverviewDetail(c, nil, name)
+				if err != nil {
+					return "", err
+				}
+				return catalog.DeriveDeploymentSourceFingerprint(detail)
+			},
+			DeployerRoleReadiness: func(context.Context, applyrequest.DeployerRoleTarget) (emulatorRole, error) { return role, nil },
+			AuthorizeCreate: func(ctx context.Context, r applyrequest.Record) (*applyrequest.ExecutionPrincipal, error) {
+				id := requestactor.AuthenticatedIdentityFromContext(ctx)
+				if !id.Authenticated || id.ID != "ecs-sync" || !applyrequest.AutomaticApprovalFromContext(ctx) || r.Source.Git == nil {
+					return nil, applyrequest.ErrExecutionUnauthorized
+				}
+				return &applyrequest.ExecutionPrincipal{Identity: id, Automatic: true}, nil
+			},
+			PrepareNativeRollback: func(ctx context.Context, parent applyrequest.Record, target applyrequest.ECSNativeRollback) error {
+				_, err := stop.Prepare(ctx, applyrequest.ECSOperationRequest{Intent: *parent.Operations[0].ECS, Role: role}, target)
+				return err
+			},
+		}
+		authorize := func(_ context.Context, r applyrequest.Record) error {
+			if r.Principal == nil || !r.Principal.Automatic || r.Principal.Identity.ID != "ecs-sync" {
+				return applyrequest.ErrExecutionUnauthorized
+			}
+			return nil
+		}
+		loop := ecsreconcile.Reconciler{Enabled: true, Automatic: true, LiveECS: true, AllowAdvanced: true, SubjectID: "ecs-sync", LoadCatalog: load, Plans: plans, Applies: service, ListPlans: func(context.Context) ([]planpreview.Record, error) {
+			rows, err := planpreview.Load(planPath)
+			if errors.Is(err, os.ErrNotExist) {
+				return nil, nil
+			}
+			return rows, err
+		}}
+		executor := applyrequest.Executor{Service: service, WorkerID: fmt.Sprintf("emulator-%d", generation), ECS: &applyrequest.ECSExecution{Enabled: true, AllowAdvanced: true, Authorize: authorize, AuthorizeMutation: authorize, CurrentIntent: func(ctx context.Context, _ string) (*domain.ECSDeploymentIntent, error) {
 			c, err := load(ctx)
 			if err != nil {
-				return "", err
+				return nil, err
 			}
-			detail, err := catalog.BuildDeploymentOverviewDetail(c, nil, name)
-			if err != nil {
-				return "", err
-			}
-			return catalog.DeriveDeploymentSourceFingerprint(detail)
-		},
-		DeployerRoleReadiness: func(context.Context, applyrequest.DeployerRoleTarget) (emulatorRole, error) { return role, nil },
-		AuthorizeCreate: func(ctx context.Context, r applyrequest.Record) (*applyrequest.ExecutionPrincipal, error) {
-			id := requestactor.AuthenticatedIdentityFromContext(ctx)
-			if !id.Authenticated || id.ID != "ecs-sync" || !applyrequest.AutomaticApprovalFromContext(ctx) || r.Source.Git == nil {
-				return nil, applyrequest.ErrExecutionUnauthorized
-			}
-			return &applyrequest.ExecutionPrincipal{Identity: id, Automatic: true}, nil
-		},
-		PrepareNativeRollback: func(ctx context.Context, parent applyrequest.Record, target applyrequest.ECSNativeRollback) error {
-			_, err := stop.Prepare(ctx, applyrequest.ECSOperationRequest{Intent: *parent.Operations[0].ECS, Role: role}, target)
-			return err
-		},
+			return c.Deployments[0].ECS, nil
+		}, Handlers: map[string]applyrequest.ECSOperationHandler{
+			string(reconcile.StepRegisterECSTaskDefinition): Registration{AllowAdvanced: true, ClientFor: emulatorProvider[RegistrationClient](client), CheckCapabilities: check},
+			string(reconcile.StepUpdateECSService):          StrategyHandler{Advanced: update},
+			string(reconcile.StepVerifyServiceStability):    StrategyHandler{Advanced: observe},
+			applyrequest.NativeRollbackOperationKind:        NativeRollbackOperation{NativeRollback: stop},
+			applyrequest.NativeCapacityRestoreOperationKind: NativeCapacityRestore{NativeRollback: stop, ObserveRouting: routing.Observe, Now: clock},
+		}}}
+		return service, loop, executor, alarm
 	}
-	authorize := func(_ context.Context, r applyrequest.Record) error {
-		if r.Principal == nil || !r.Principal.Automatic || r.Principal.Identity.ID != "ecs-sync" {
-			return applyrequest.ErrExecutionUnauthorized
-		}
-		return nil
-	}
-	loop := ecsreconcile.Reconciler{Enabled: true, Automatic: true, LiveECS: true, AllowAdvanced: true, SubjectID: "ecs-sync", LoadCatalog: load, Plans: plans, Applies: service, ListPlans: func(context.Context) ([]planpreview.Record, error) {
-		rows, err := planpreview.Load(planPath)
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		return rows, err
-	}}
-	executor := applyrequest.Executor{Service: service, WorkerID: "emulator", ECS: &applyrequest.ECSExecution{Enabled: true, AllowAdvanced: true, Authorize: authorize, AuthorizeMutation: authorize, CurrentIntent: func(ctx context.Context, _ string) (*domain.ECSDeploymentIntent, error) {
-		c, err := load(ctx)
-		if err != nil {
-			return nil, err
-		}
-		return c.Deployments[0].ECS, nil
-	}, Handlers: map[string]applyrequest.ECSOperationHandler{
-		string(reconcile.StepRegisterECSTaskDefinition): Registration{AllowAdvanced: true, ClientFor: emulatorProvider[RegistrationClient](client), CheckCapabilities: check},
-		string(reconcile.StepUpdateECSService):          StrategyHandler{Advanced: update},
-		string(reconcile.StepVerifyServiceStability):    StrategyHandler{Advanced: observe},
-		applyrequest.NativeRollbackOperationKind:        NativeRollbackOperation{NativeRollback: stop},
-		applyrequest.NativeCapacityRestoreOperationKind: NativeCapacityRestore{NativeRollback: stop, ObserveRouting: routing.Observe, Now: clock},
-	}}}
+	service, loop, executor, alarm := rebuild("")
 	records := func() []applyrequest.Record {
 		rows, err := service.Store.List(ctx)
 		emulatorCheck(t, err)
@@ -266,13 +282,65 @@ func emulatorGitRecovery(t *testing.T, net emulatorNetwork, account spec.Account
 		t.Fatalf("expected one Apply for the changed commit: %v", rows)
 	}
 	parentID := rows[0].ID
-	tick := func() { now = now.Add(31 * time.Second); emulatorCheck(t, executor.RunOnce(ctx)) }
-	tick()
-	tick()
-	parent, err := service.Get(ctx, parentID)
-	emulatorCheck(t, err)
-	if parent.Status != applyrequest.StatusRunning || parent.Operations[1].ECSCheckpoint == nil || parent.Operations[1].ECSCheckpoint.Result.ServiceDeploymentARN == "" {
-		t.Fatalf("forward update not accepted: %s %v", parent.Status, parent.Details)
+	tick := func() {
+		now = now.Add(31 * time.Second)
+		interrupted := func() (kind string) {
+			defer func() {
+				if value := recover(); value != nil {
+					crash, ok := value.(emulatorInterrupted)
+					if !ok {
+						panic(value)
+					}
+					kind = string(crash)
+				}
+			}()
+			emulatorCheck(t, executor.RunOnce(ctx))
+			return ""
+		}()
+		if interrupted == "" {
+			return
+		}
+		// Reopen from disk before inspecting the abandoned worker's checkpoint.
+		persisted := applyrequest.NewFileStore(filepath.Join(stores, "applies.json"))
+		rows, err := persisted.List(ctx)
+		emulatorCheck(t, err)
+		found := false
+		for _, record := range rows {
+			for _, op := range record.Operations {
+				cp := op.ECSCheckpoint
+				if op.Kind != interrupted || cp == nil || cp.State != "in_flight" {
+					continue
+				}
+				if cp.MutationAuthorizedAt == "" || cp.Attempts != 1 || record.Claim == nil {
+					t.Fatal("crash did not leave an authorized in-flight checkpoint")
+				}
+				expires, err := time.Parse(time.RFC3339Nano, record.Claim.ExpiresAt)
+				emulatorCheck(t, err)
+				now = expires.Add(time.Second)
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("no durable in-flight checkpoint for %s", interrupted)
+		}
+		signal := alarm.deployment
+		generation++
+		service, loop, executor, alarm = rebuild(signal)
+		emulatorCheck(t, loop.RunOnce(ctx))
+		t.Logf("restarted worker %d after %s acceptance; reopening durable checkpoints", generation, interrupted)
+	}
+	var parent applyrequest.Record
+	for deadline := time.Now().Add(45 * time.Second); ; {
+		tick()
+		parent, err = service.Get(ctx, parentID)
+		emulatorCheck(t, err)
+		if parent.Status == applyrequest.StatusRunning && parent.Operations[1].ECSCheckpoint != nil && parent.Operations[1].ECSCheckpoint.State == "complete" && parent.Operations[1].ECSCheckpoint.Result.ServiceDeploymentARN != "" {
+			break
+		}
+		if parent.Status.IsTerminal() || time.Now().After(deadline) {
+			t.Fatalf("forward update not accepted: %s %v", parent.Status, parent.Details)
+		}
+		time.Sleep(150 * time.Millisecond)
 	}
 	forward := parent.Operations[1].ECSCheckpoint.Result
 	describe := func() types.Service {
@@ -340,6 +408,32 @@ func emulatorGitRecovery(t *testing.T, net emulatorNetwork, account spec.Account
 			if len(records()) != 2 {
 				t.Fatal("reconciliation replayed the failed commit")
 			}
+			expectedWrites := []string{string(reconcile.StepRegisterECSTaskDefinition), string(reconcile.StepUpdateECSService), applyrequest.NativeRollbackOperationKind, applyrequest.NativeCapacityRestoreOperationKind}
+			for _, kind := range expectedWrites {
+				if writes[kind] != 1 {
+					t.Fatalf("%s executed %d times, expected exactly one AWS mutation", kind, writes[kind])
+				}
+			}
+			if restart && generation != len(expectedWrites) {
+				t.Fatalf("only %d restart points exercised", generation)
+			}
+			definitions, err := client.ListTaskDefinitions(ctx, &ecs.ListTaskDefinitionsInput{FamilyPrefix: &net.Name})
+			emulatorCheck(t, err)
+			if len(definitions.TaskDefinitionArns) != 2 || aws.ToString(definitions.NextToken) != "" {
+				t.Fatal("expected only baseline and candidate task definitions")
+			}
+			history, err := listNativeDeployments(ctx, client, r)
+			emulatorCheck(t, err)
+			forwardCount := 0
+			for _, item := range history {
+				if aws.ToString(item.TargetServiceRevisionArn) == forward.ServiceRevisionARN {
+					forwardCount++
+				}
+			}
+			if forwardCount != 1 || len(history) != 3 {
+				t.Fatalf("unexpected deployment history after recovery: %d records, %d forward deployments", len(history), forwardCount)
+			}
+			t.Logf("verified %d restarts, one registration, one forward update, one rollback and one capacity restore", generation)
 			break
 		}
 		if time.Now().After(deadline) || child.Status == applyrequest.StatusFailed {

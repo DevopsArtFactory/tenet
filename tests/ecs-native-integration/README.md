@@ -78,6 +78,20 @@ The test checks the failed parent and successful child, the original service
 revision and task definition, two healthy source tasks, and configured ALB
 routing. A further reconcile must leave exactly those two Applies.
 
+Each strategy runs uninterrupted and with four worker restarts. The restart
+scenario interrupts immediately after ECS accepts task definition registration,
+service update, rollback, and capacity restoration, before Tenet saves the
+response. It verifies an authorized in-flight checkpoint on disk, advances the
+test clock past the abandoned claim's expiry, and rebuilds the reconciler,
+executor, file stores and SDK clients with a new worker ID. Recovery uses the
+saved checkpoint and fresh emulator reads. Each mutation must be called exactly
+once, with only two task definitions and one forward deployment in ECS history.
+
+This simulates worker termination inside the test process using a dedicated
+panic recovered by the harness. It exercises disk recovery and lease takeover;
+OS process signals, startup configuration and filesystem crash durability need
+separate process-level tests.
+
 The Git checkout, IAM readiness fixture and injected alarm keep this test
 independent of GitHub and AWS accounts. ECS operations and ALB observations use
 the emulator's HTTPS loopback endpoint, CA and credentials. Live IAM policy
