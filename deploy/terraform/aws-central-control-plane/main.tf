@@ -77,6 +77,17 @@ locals {
       ]
       environment = [
         { name = "TENET_API_ADDR", value = ":8080" },
+        { name = "TENET_API_TRUST_AUTHENTICATED_HEADERS", value = "false" },
+        { name = "TENET_API_ENFORCE_AUTHENTICATED_IDENTITY", value = "true" },
+        { name = "TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION", value = "true" },
+        { name = "TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION", value = "true" },
+        { name = "TENET_API_AUTHORIZE_WITH_REPOSITORY_RBAC_POLICY", value = "true" },
+        { name = "TENET_AUTH_PROVIDER", value = "github" },
+        { name = "TENET_GITHUB_OAUTH_CLIENT_ID", value = var.github_oauth_client_id },
+        { name = "TENET_GITHUB_OAUTH_REDIRECT_URL", value = "https://${var.hostname}/auth/callback/github" },
+        { name = "TENET_AUTH_SESSION_COOKIE_SECURE", value = "true" },
+        { name = "TENET_AUTH_STATE_STORE_PATH", value = "/workspace/control-plane-state/oauth-states.json" },
+        { name = "TENET_AUTH_IDENTITY_STORE_PATH", value = "/workspace/control-plane-state/oauth-identities.json" },
         { name = "TENET_CATALOG_SOURCE", value = "filesystem" },
         { name = "TENET_REPO_ROOT", value = "/workspace/repo" },
         { name = "TENET_STATUS_BACKEND", value = "redis" },
@@ -85,6 +96,10 @@ locals {
         { name = "TENET_PLAN_STORE_PATH", value = "/workspace/control-plane-state/plan-previews.json" },
         { name = "TENET_APPLY_STORE_PATH", value = "/workspace/control-plane-state/apply-requests.json" },
         { name = "TENET_IMAGE_SOURCE_HASH", value = local.image_source_hash }
+      ]
+      secrets = [
+        { name = "TENET_GITHUB_OAUTH_CLIENT_SECRET", valueFrom = var.github_oauth_client_secret_arn },
+        { name = "TENET_AUTH_SESSION_SECRET", valueFrom = var.auth_session_secret_arn }
       ]
       mountPoints = [
         {
@@ -253,8 +268,8 @@ resource "aws_security_group" "alb" {
   vpc_id      = aws_vpc.this.id
 
   ingress {
-    from_port   = 80
-    to_port     = 80
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = var.operator_cidr_blocks
   }
@@ -338,9 +353,9 @@ resource "aws_security_group" "efs" {
 resource "aws_lb" "api" {
   name               = "${var.name_prefix}-alb"
   load_balancer_type = "application"
-  internal           = false
+  internal           = var.alb_internal
   security_groups    = [aws_security_group.alb.id]
-  subnets            = values(aws_subnet.public)[*].id
+  subnets            = var.alb_internal ? values(aws_subnet.private)[*].id : values(aws_subnet.public)[*].id
 
   tags = merge(local.common_tags, { Name = "${var.name_prefix}-alb" })
 }
@@ -365,10 +380,12 @@ resource "aws_lb_target_group" "api" {
   tags = merge(local.common_tags, { Name = "${var.name_prefix}-api-tg" })
 }
 
-resource "aws_lb_listener" "http" {
+resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_lb.api.arn
-  port              = 80
-  protocol          = "HTTP"
+  port              = 443
+  protocol          = "HTTPS"
+  certificate_arn   = var.certificate_arn
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
 
   default_action {
     type             = "forward"
@@ -524,9 +541,17 @@ resource "aws_iam_role" "runtime" {
   tags = local.common_tags
 }
 
-resource "aws_iam_role_policy_attachment" "runtime_read_only" {
-  role       = aws_iam_role.runtime.name
-  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+resource "aws_iam_role_policy" "execution_auth_secrets" {
+  name = "${var.name_prefix}-auth-secrets"
+  role = aws_iam_role.execution.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = [var.github_oauth_client_secret_arn, var.auth_session_secret_arn]
+    }]
+  })
 }
 
 resource "aws_iam_role_policy" "runtime_assume_observer" {
@@ -606,7 +631,7 @@ resource "aws_ecs_task_definition" "api" {
 
   container_definitions = local.api_container_definitions
 
-  depends_on = [terraform_data.image_build, aws_iam_role_policy_attachment.execution, aws_iam_role_policy_attachment.runtime_read_only, aws_iam_role_policy.execution_repo_sync_secret, aws_efs_mount_target.state]
+  depends_on = [terraform_data.image_build, aws_iam_role_policy_attachment.execution, aws_iam_role_policy.execution_auth_secrets, aws_iam_role_policy.execution_repo_sync_secret, aws_efs_mount_target.state]
 
   tags = local.common_tags
 }
@@ -630,7 +655,7 @@ resource "aws_ecs_task_definition" "controller" {
 
   container_definitions = local.controller_container_definitions
 
-  depends_on = [terraform_data.image_build, aws_iam_role_policy_attachment.execution, aws_iam_role_policy_attachment.runtime_read_only, aws_iam_role_policy.execution_repo_sync_secret]
+  depends_on = [terraform_data.image_build, aws_iam_role_policy_attachment.execution, aws_iam_role_policy.execution_auth_secrets, aws_iam_role_policy.execution_repo_sync_secret]
 
   tags = local.common_tags
 }
@@ -657,7 +682,7 @@ resource "aws_ecs_service" "api" {
     container_port   = 8080
   }
 
-  depends_on = [aws_lb_listener.http]
+  depends_on = [aws_lb_listener.https]
 
   tags = local.common_tags
 }

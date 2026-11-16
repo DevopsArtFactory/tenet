@@ -5,7 +5,7 @@ repo_url             = "https://github.com/DevopsArtFactory/tenet.git"
 # repo_sync_token_secret_arn = "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:tenet/repo-sync-token-AbCdEf"
 repo_branch          = "main"
 image_tag            = "bootstrap"
-operator_cidr_blocks = ["203.0.113.10/32"]
+operator_cidr_blocks = ["10.20.0.0/16"]
 
 # When you already know the target-account observer roles Tenet should use for
 # read-only cross-account inspection, list them here.
@@ -13,3 +13,11 @@ observer_role_arns = [
   "arn:aws:iam::210987654321:role/TenetObserverRole",
   "arn:aws:iam::210987654322:role/TenetObserverRole"
 ]
+
+# Private ALB: connect through VPN/peering and create DNS for this hostname.
+alb_internal = true
+hostname = "tenet.example.com"
+certificate_arn = "arn:aws:acm:ap-northeast-2:123456789012:certificate/00000000-0000-0000-0000-000000000000"
+github_oauth_client_id = "replace-with-github-oauth-client-id"
+github_oauth_client_secret_arn = "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:tenet/oauth-client-AbCdEf"
+auth_session_secret_arn = "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:tenet/session-AbCdEf"

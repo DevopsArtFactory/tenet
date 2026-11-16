@@ -4,9 +4,9 @@ This directory provides a one-touch Terraform bootstrap for a centralized Tenet 
 
 What it provisions:
 - a bootstrap VPC
-- public subnets for the ALB and ECS/Fargate tasks
+- public subnets for ECS/Fargate tasks; an internal ALB in private subnets by default
 - private subnets for Redis and EFS mount targets
-- an ALB for the embedded Tenet UI/API
+- an HTTPS ALB for the embedded Tenet UI/API
 - one ECS cluster
 - one ECS service for `tenet-api`
 - one ECS service for `tenet-controller`
@@ -34,7 +34,7 @@ That means the machine running `terraform apply` must have:
 
 Run this checklist on the same machine that will run `terraform apply`:
 - `terraform apply` builds and pushes the current local Tenet checkout from that machine, so run it from the repo checkout you intend to ship
-- Terraform 1.5+ is installed
+- Terraform 1.7+ is installed
 - Docker Buildx is installed and working locally
 - AWS CLI v2 is installed and your current shell has working AWS credentials for this deployment
 - verify that `repo_url` and `repo_branch` are reachable from the current machine before apply, for example `git ls-remote --heads <repo_url> <repo_branch>`:
@@ -75,10 +75,20 @@ Implemented well by this bootstrap:
 - cross-account read-only setup via `observer_role_arns`
 
 Still intentionally bootstrap-grade:
-- ALB is HTTP-only in this module; TLS/auth can be added in front later
+- HTTPS, GitHub managed login, repository RBAC, and explicit operator CIDRs are required
 - ECS tasks get public IPs to avoid NAT complexity in the first slice
-- the runtime role is attached to AWS `ReadOnlyAccess` for bootstrap convenience rather than a hand-minimized least-privilege policy
+- the runtime role can only mount the state filesystem and assume explicitly listed observer roles; no account-wide `ReadOnlyAccess` attachment is granted
 - this module does not implement live write-side execution; `roleArn` remains part of the Tenet manifest contract, not part of this Terraform runtime yet
+
+## Secure ingress and login prerequisites
+
+Before applying, provide an existing ACM certificate for `hostname`, create a GitHub OAuth application with callback `https://<hostname>/auth/callback/github`, and store its client secret plus a separate random session signing secret (at least 32 bytes) in Secrets Manager. Pass only their ARNs to Terraform. Customer-managed KMS keys also need an appropriate key policy and execution-role decrypt permission; the default Secrets Manager key works with the supplied policy.
+
+The ALB is internal by default: operators need VPN/peering connectivity. Point your DNS hostname at `alb_dns_name`. Set `alb_internal=false` only when intentionally exposing HTTPS to the explicitly allowed operator CIDRs. Port 80 is not opened. The application enforces secure cookies, login and repository RBAC, and ignores caller-supplied authentication headers.
+
+Commit an `rbac/policy.yaml` granting your GitHub subject (`github:<numeric-user-id>`) the required role and deployment/project/environment scopes before signing in. Login alone grants no deployment access. OAuth state and identities persist in the existing EFS state volume. This module configures GitHub login; other Tenet-supported providers require corresponding task environment and secret changes.
+
+Upgrades require these new inputs and replace the HTTP listener. Existing HTTP bookmarks must change to the configured HTTPS hostname. Removal of account-wide read access requires explicit observer-role configuration for same-account inspection too.
 
 ## Quick start
 
@@ -101,9 +111,9 @@ When apply finishes, Terraform prints:
 ## Single-account usage
 
 If you are deploying Tenet and workloads in the same AWS account:
-- leave `observer_role_arns = []` if you do not need cross-account read paths yet
-- narrow `operator_cidr_blocks` to your office/VPN
-- let the ECS runtime role inspect same-account resources directly
+- configure a least-privilege observer role even for same-account workload inspection
+- list that role in `observer_role_arns` and in the desired-state account configuration
+- limit `operator_cidr_blocks` to your VPN network; an empty observer list grants no workload inspection permissions
 
 ## Multi-account usage
 
@@ -147,9 +157,9 @@ observer_role_arns = [
 Use the printed ALB URL or DNS name.
 
 ```bash
-curl -I http://<alb-dns-name>/
-curl http://<alb-dns-name>/healthz
-curl http://<alb-dns-name>/v1/overview/applications
+curl -I https://<configured-hostname>/
+curl https://<configured-hostname>/healthz
+# Sign in through the browser before accessing guarded API routes.
 ```
 
 For cross-account reads, also test a supported resource-detail API route and verify that it either:
@@ -161,3 +171,7 @@ For cross-account reads, also test a supported resource-detail API route and ver
 ```bash
 terraform destroy
 ```
+
+## Offline validation
+
+With Terraform 1.15+ installed, run `terraform init -backend=false`, `terraform validate`, and `terraform test`. The security tests use mocked providers and plan-only runs, so they do not build images or create AWS resources. CI runs these checks for every PR.

@@ -363,7 +363,7 @@ That GitHub mode is read-only for desired state. Both `tenet-api` and `tenet-con
 
 If you use the shipped Terraform bootstrap, run this operator preflight on the same machine before `terraform apply`:
 - `terraform apply` builds and pushes the current local Tenet checkout from that machine, so run it from the repo checkout you intend to ship
-- Terraform 1.5+ is installed
+- Terraform 1.7+ is installed
 - Docker Buildx is installed and working locally
 - AWS CLI v2 is installed and your current shell has working AWS credentials for this deployment
 - verify that `repo_url` and `repo_branch` are reachable from the current machine before apply, for example `git ls-remote --heads <repo_url> <repo_branch>`

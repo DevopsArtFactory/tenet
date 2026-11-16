@@ -71,7 +71,7 @@ func TestAWSCentralControlPlaneRepoSyncPrivateRepoContract(t *testing.T) {
 		`Action   = ["secretsmanager:GetSecretValue"]`,
 		`Resource = var.repo_sync_token_secret_arn`,
 		`secrets = local.repo_sync_token_secrets`,
-		`depends_on = [terraform_data.image_build, aws_iam_role_policy_attachment.execution, aws_iam_role_policy_attachment.runtime_read_only, aws_iam_role_policy.execution_repo_sync_secret`,
+		`depends_on = [terraform_data.image_build, aws_iam_role_policy_attachment.execution, aws_iam_role_policy.execution_auth_secrets, aws_iam_role_policy.execution_repo_sync_secret`,
 	)
 
 	if strings.Count(main, `secrets = local.repo_sync_token_secrets`) != 2 {

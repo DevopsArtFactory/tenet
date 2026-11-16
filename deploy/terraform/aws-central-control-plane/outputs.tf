@@ -4,8 +4,8 @@ output "alb_dns_name" {
 }
 
 output "tenet_url" {
-  description = "HTTP entrypoint for the bootstrap Tenet control plane."
-  value       = "http://${aws_lb.api.dns_name}"
+  description = "HTTPS entrypoint; configure this hostname to resolve to the ALB."
+  value       = "https://${var.hostname}"
 }
 
 output "ecr_repository_url" {
