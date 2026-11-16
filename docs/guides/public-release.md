@@ -11,8 +11,10 @@ recovery and emulator tests as the documented baseline.
 
 Repository settings checked on 2026-11-16 show private visibility, an empty About
 description and homepage, and disabled Discussions. The latest published release
-is `v0.1.154`, dated 2026-07-17. Select a new release baseline containing the
-recent ECS work and make its notes describe that baseline's actual capabilities.
+was `v0.1.154`, dated 2026-07-17, at the initial review. The next candidate is
+`v0.2.0-rc.1`; its [release notes](../releases/v0.2.0-rc.1.md) describe the ECS
+execution baseline and security migration. Select its commit only after all
+security PRs and that commit's CI have passed.
 
 The repository already includes Apache-2.0, contributing guidelines, a code of
 conduct, a security policy, issue/PR templates and CI. These provide a starting
@@ -114,3 +116,27 @@ Use this table in the release issue or notes to record evidence.
 | Public data and licensing | Review owner, reviewed surfaces and resolved findings |
 | Security and support | Confirmed reporting channel, maintainers and supported versions |
 | Distribution | Source/build instructions and any published artifact checksums |
+
+## Package and publish the candidate
+
+Keep repository visibility unchanged while preparing the candidate. Use a source
+commit already on `main` with passing Fast smoke, Docker smoke, ECS fixture,
+AWS Emulator and Go vulnerability checks. Record the run URL in the release body.
+
+```bash
+gh auth switch --hostname github.com --user YoungJinJung
+git fetch origin main
+release_commit=$(git rev-parse origin/main)
+release_dir=$(mktemp -d)
+./scripts/release-source.sh v0.2.0-rc.1 "$release_dir" "$release_commit"
+(cd "$release_dir" && shasum -a 256 -c SHA256SUMS)
+```
+
+The archive contains only the selected commit's tracked files. `SOURCE_COMMIT`
+and checksums identify the distribution; local logs, credentials and uncommitted
+files are excluded. Extract and build/test the archive before publishing.
+Create an annotated `v0.2.0-rc.1` tag at that exact commit, push the tag, and use
+`gh release create --verify-tag --prerelease --latest=false` with the source
+archive, `SOURCE_COMMIT`, `SHA256SUMS` and the reviewed release notes. Do not move
+an existing release tag. A candidate must not become the recommended stable
+release until the outstanding live validation and public-readiness gates pass.

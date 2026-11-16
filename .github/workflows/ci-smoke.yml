@@ -48,6 +48,16 @@ jobs:
       - name: Syntax-check runner evidence helper
         run: bash -n scripts/ci-smoke-runner-evidence.sh
 
+      - name: Verify source release packaging
+        run: |
+          bash -n scripts/release-source.sh
+          release_dir=$(mktemp -d)
+          ./scripts/release-source.sh v0.0.0-ci "$release_dir" "$GITHUB_SHA"
+          (cd "$release_dir" && shasum -a 256 -c SHA256SUMS)
+          test "$(cat "$release_dir/SOURCE_COMMIT")" = "$GITHUB_SHA"
+          tar -xzf "$release_dir/tenet-v0.0.0-ci-source.tar.gz" -C "$release_dir"
+          cmp go.mod "$release_dir/tenet-v0.0.0-ci/go.mod"
+
       - name: Run local smoke test
         run: make smoke-local
 
