@@ -13,6 +13,17 @@ permissions:
 jobs:
   fast-smoke:
     name: Fast smoke
+    # Offline checks must ignore an inherited AWS environment.
+    env:
+      AWS_PROFILE: tenet-test-must-not-exist
+      AWS_ACCESS_KEY_ID: invalid-inherited-test-key
+      AWS_SECRET_ACCESS_KEY: invalid-inherited-test-secret
+      AWS_CONFIG_FILE: /nonexistent/tenet-test-config
+      AWS_SHARED_CREDENTIALS_FILE: /nonexistent/tenet-test-credentials
+      AWS_ENDPOINT_URL: http://127.0.0.1:1
+      AWS_CONTAINER_CREDENTIALS_FULL_URI: http://127.0.0.1:1/credentials
+      AWS_EC2_METADATA_SERVICE_ENDPOINT: http://127.0.0.1:1
+      AWS_EC2_METADATA_DISABLED: "false"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

@@ -81,6 +81,8 @@ go test ./...
 make smoke-local
 ```
 
+Go tests and `make smoke-local` isolate inherited AWS credentials, profiles, endpoints and metadata providers. No personal AWS setup is needed. Tests that need AWS behavior use explicit mocks or the local AWS Emulator.
+
 Use `make smoke-docker` when changing the Compose stack or its runtime behavior. CI scope, helper syntax checks, and runner troubleshooting are documented in the [operator reference](docs/architecture/tenet-v1-operator-reference.md#validation). See [CONTRIBUTING](CONTRIBUTING.md) for contribution guidelines.
 
 ## Documentation
