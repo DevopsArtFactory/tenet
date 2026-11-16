@@ -865,7 +865,7 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 	for _, fragment := range []string{
 		"`source` (stable API token; embedded UI evidence panels translate known values such as `aws_cloudwatch_logs`, `cloudwatch`, `ecs_service`, and `ec2_console` into operator-friendly labels)",
 		"optional `clusterArn` when an ECS service/task recent-log request supplied an accepted cluster selector",
-		"Tenet validates and echoes that selector just like `ecsService`",
+		"then verifies the task's live `group=service:<service name>`",
 		"When a Recent logs or Live inspection payload includes `lookupContext`, the panel labels it as `Provider lookup context`.",
 		"Recent logs shows a compact lookup-context card with a `Lookup path · ...` summary",
 		"`Lookup region`",
@@ -1004,9 +1004,9 @@ func TestResourceUnavailableSmokeMatrixDocsAndScripts(t *testing.T) {
 			docs:   []string{"ECS service recent logs", "`ecsService` with optional `clusterArn`"},
 		},
 		{
-			name:   "ecs task logs unavailable selectors",
-			local:  []string{"ecs_task_resource_logs", "containerName", "cross_account_not_configured", "no_log_source"},
-			docker: []string{"ecs_task_resource_logs", "containerName", "cross_account_not_configured", "no_log_source"},
+			name:   "unverified ecs task reads denied",
+			local:  []string{"for task_route in resource-logs resource-inspection", "containerName", `"$task_status" != "404"`},
+			docker: []string{"for task_route in resource-logs resource-inspection", "containerName", `"$task_status" != "404"`},
 			docs:   []string{"ECS task recent logs", "`ecsTask` with `containerName` and `clusterArn`"},
 		},
 		{

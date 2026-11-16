@@ -361,7 +361,7 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 			}
 			return catalog.BuildDeploymentOverviewEvents(compiled, []statusstore.Snapshot{snapshot}, name)
 		}
-		resourceLookupProvider := newOverviewDeploymentResourceLookupProvider(options.OverviewDeployment, loadObserverRoleARN)
+		resourceLookupProvider := newOverviewDeploymentResourceLookupProvider(options.OverviewDeployment, loadObserverRoleARN, resourceaws.NewClientCache(resourceaws.DefaultClientCacheDeps()).AuthorizeECSTask)
 		options.OverviewDeploymentResourceLogs = newOverviewDeploymentResourceLogsProvider(resourceLookupProvider, resourceLogService)
 		options.OverviewDeploymentResourceInspection = newOverviewDeploymentResourceInspectionProvider(resourceLookupProvider, resourceInspectionService)
 		planService := planpreview.Service{
@@ -998,6 +998,7 @@ func startApplyRequestExecutor(logger *slog.Logger, repoRoot string, applyEnable
 type overviewDeploymentResourceLookupProvider func(context.Context, string, string, string) (resourceLookupRequest, error)
 
 type resourceLookupRequest struct {
+	ClusterARN          string
 	DeploymentName      string
 	ResourceType        string
 	ResourceName        string
@@ -1014,9 +1015,10 @@ type resourceLookupRequest struct {
 func newOverviewDeploymentResourceLookupProvider(
 	loadDetail func(context.Context, string) (catalog.DeploymentOverviewDetail, error),
 	loadObserverRoleARN func(context.Context, string) (string, error),
+	authorizeTask func(context.Context, resourceaws.ECSTaskScope) error,
 ) overviewDeploymentResourceLookupProvider {
 	return func(ctx context.Context, name, resourceType, resourceName string) (resourceLookupRequest, error) {
-		return loadOverviewDeploymentResourceRequest(ctx, loadDetail, loadObserverRoleARN, name, resourceType, resourceName)
+		return loadOverviewDeploymentResourceRequest(ctx, loadDetail, loadObserverRoleARN, authorizeTask, name, resourceType, resourceName)
 	}
 }
 
@@ -1024,6 +1026,7 @@ func loadOverviewDeploymentResourceRequest(
 	ctx context.Context,
 	loadDetail func(context.Context, string) (catalog.DeploymentOverviewDetail, error),
 	loadObserverRoleARN func(context.Context, string) (string, error),
+	authorizeTask func(context.Context, resourceaws.ECSTaskScope) error,
 	name string,
 	resourceType string,
 	resourceName string,
@@ -1040,8 +1043,32 @@ func loadOverviewDeploymentResourceRequest(
 	if err != nil {
 		return resourceLookupRequest{}, err
 	}
+	clusterARN := ""
+	if resourceType == "ecsTask" {
+		notFound := fmt.Errorf("%w: ECS task is not available in this deployment", statusstore.ErrNotFound)
+		if detail.ECS == nil || authorizeTask == nil {
+			return resourceLookupRequest{}, notFound
+		}
+		scope := resourceaws.ECSTaskScope{AccountID: detail.AWSAccountID, Region: detail.Region, ClusterARN: detail.ECS.ClusterARN, ServiceARN: detail.ECS.ServiceARN, TaskARN: resourceName, ObserverRoleARN: observerRoleARN}
+		if err := scope.Validate(); err != nil {
+			return resourceLookupRequest{}, notFound
+		}
+		for _, selected := range []string{resourcelogs.ClusterARNFromContext(ctx), resourceinspection.ClusterARNFromContext(ctx)} {
+			if selected != "" && selected != scope.ClusterARN {
+				return resourceLookupRequest{}, notFound
+			}
+		}
+		if err := authorizeTask(ctx, scope); err != nil {
+			if errors.Is(err, resourceaws.ErrECSTaskScope) {
+				return resourceLookupRequest{}, notFound
+			}
+			return resourceLookupRequest{}, err
+		}
+		clusterARN = scope.ClusterARN
+	}
 	backingResourceType, backingResourceName := resourceLookupBackingResource(detail, resourceType)
 	return resourceLookupRequest{
+		ClusterARN:          clusterARN,
 		DeploymentName:      name,
 		ResourceType:        resourceType,
 		ResourceName:        resourceName,
@@ -1078,7 +1105,7 @@ func newOverviewDeploymentResourceLogsProvider(
 			ObserverRoleARN:     request.ObserverRoleARN,
 			ContainerName:       resourcelogs.ContainerNameFromContext(ctx),
 			InstanceID:          resourcelogs.InstanceIDFromContext(ctx),
-			ClusterARN:          resourcelogs.ClusterARNFromContext(ctx),
+			ClusterARN:          resourceLookupCluster(request.ClusterARN, resourcelogs.ClusterARNFromContext(ctx)),
 			Limit:               limit,
 			RelatedLogRoutes:    request.RelatedLogRoutes,
 		})
@@ -1168,7 +1195,7 @@ func newOverviewDeploymentResourceInspectionProvider(
 			TaskSummaryLimit:         limit,
 			AutoScalingInstanceLimit: limit,
 			InstanceID:               resourceinspection.InstanceIDFromContext(ctx),
-			ClusterARN:               resourceinspection.ClusterARNFromContext(ctx),
+			ClusterARN:               resourceLookupCluster(request.ClusterARN, resourceinspection.ClusterARNFromContext(ctx)),
 			BackingResourceType:      request.BackingResourceType,
 			BackingResourceName:      request.BackingResourceName,
 			ControlAccountID:         request.ControlAccountID,
@@ -1195,7 +1222,7 @@ func newOverviewDeploymentResourceInspectionProvider(
 			result.InstanceID = resourceinspection.InstanceIDFromContext(ctx)
 		}
 		if result.ClusterARN == "" {
-			result.ClusterARN = resourceinspection.ClusterARNFromContext(ctx)
+			result.ClusterARN = resourceLookupCluster(request.ClusterARN, resourceinspection.ClusterARNFromContext(ctx))
 		}
 		if result.BackingResourceType == "" {
 			result.BackingResourceType = strings.TrimSpace(request.BackingResourceType)
@@ -1205,6 +1232,13 @@ func newOverviewDeploymentResourceInspectionProvider(
 		}
 		return result, nil
 	}
+}
+
+func resourceLookupCluster(pinned, selected string) string {
+	if pinned != "" {
+		return pinned
+	}
+	return selected
 }
 
 func deploymentExecutionResource(detail catalog.DeploymentOverviewDetail, resourceType, resourceName string) (domain.RolloutExecutionDetail, bool) {

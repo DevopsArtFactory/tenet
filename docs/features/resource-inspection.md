@@ -16,12 +16,21 @@ deployment, builds the same provider lookup context used by other resource
 evidence routes, and returns an explicit JSON envelope for supported, empty, and
 unavailable states.
 
-`clusterArn` is optional and only meaningful for `resourceType=ecsService` and `resourceType=ecsTask`. When present, Tenet trims and validates the selector as
-an ECS cluster ARN with a 12-digit AWS account ID before provider lookup. Accepted
-selectors are echoed as response-level `clusterArn` on successful and explicit
-unavailable payloads, so saved evidence identifies the cluster-scoped lookup.
-Omit it to preserve Tenet's default ECS cluster discovery behavior. Malformed
-cluster ARNs fail with `400 Bad Request` / `invalid clusterArn query`.
+`clusterArn` is optional for ECS reads. For `ecsService`, it selects a cluster;
+when omitted, the existing service discovery behavior applies. Malformed cluster
+ARNs return `400 Bad Request` before provider lookup.
+
+For `ecsTask`, the deployment must declare trusted `ecs.clusterArn` and
+`ecs.serviceArn` values. Use the full task ARN containing the cluster name;
+bare task IDs and legacy short ARNs are rejected. Tenet checks the ARN's account,
+region and cluster, then verifies the task's live `group=service:<service name>`
+with ECS `DescribeTasks` before reading details or logs. A supplied `clusterArn`
+must match the configured cluster; omitting it uses that configured cluster.
+Missing scope, mismatched selectors, standalone tasks and tasks from another
+service return `404`, without revealing task details. AWS verification failures
+also stop the read. Both running and stopped service tasks can pass this check.
+Legacy deployments without explicit ECS service intent must configure it before
+using task drill-downs.
 
 `limit` is optional and applies only to bounded ECS service task samples and direct Auto Scaling Group instance samples. For `ecsService`, it caps the newest inspected
 running/stopped task summary bridge. For `candidateAutoScalingGroup` and
@@ -249,8 +258,7 @@ task definition, container rows, optional `imageDigest`, optional `runtimeId`,
 optional `awslogs` metadata, optional `networkBindings` evidence from ECS
 `DescribeTasks`, and optional EC2 host facts for ECS-on-EC2 tasks when Tenet can
 resolve and describe the backing instance.
-The same `clusterArn` selector keeps task IDs unambiguous when a parent service
-handoff selected a cluster. The operator-facing ECS task/container labels include
+Task reads use the deployment-bound membership check described above. The operator-facing ECS task/container labels include
 `Last/desired status`, `Health status`, `Stopped reason`, `Container {name} · status`,
 `Container {name} image digest`, `Container {name} runtime ID`,
 `Container {name} exit`, `Container {name} awslogs`, and
