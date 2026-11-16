@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -138,7 +137,7 @@ func main() {
 			}
 		}()
 	}
-	if err := http.ListenAndServe(addr, api.NewRouter(options)); err != nil {
+	if err := newHTTPServer(addr, api.NewRouter(options), requestTimeout).ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }

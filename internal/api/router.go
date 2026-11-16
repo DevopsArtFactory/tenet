@@ -2606,6 +2606,8 @@ func NewRouter(options Options) http.Handler {
 		if err != nil {
 			var validationErr *githubwebhook.ValidationError
 			switch {
+			case errors.Is(err, githubwebhook.ErrBodyTooLarge):
+				http.Error(w, err.Error(), http.StatusRequestEntityTooLarge)
 			case errors.As(err, &validationErr):
 				http.Error(w, validationErr.Error(), http.StatusBadRequest)
 			case isRequestContextError(err):
@@ -3695,7 +3697,7 @@ func NewRouter(options Options) http.Handler {
 		_ = json.NewEncoder(w).Encode(snapshot)
 	})
 
-	handler := http.Handler(mux)
+	handler := requestBodyLimitMiddleware(mux)
 	handler = panicRecoveryMiddleware(logger, handler)
 	handler = requestTimeoutMiddleware(options.RequestTimeout, handler)
 	handler = requestLoggingMiddleware(logger, handler)

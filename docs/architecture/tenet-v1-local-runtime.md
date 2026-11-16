@@ -236,3 +236,16 @@ for live flags, authenticated approval, role checks and source correlation.
 Automatic execution additionally requires the global Git sync opt-in, a scoped
 automation subject and per-deployment automatic mode. See the
 [Git reconciliation runbook](../runbooks/ecs-git-reconciliation.md).
+
+## HTTP resource limits
+
+The API accepts bodies up to 1 MiB. GitHub webhooks have a separate 25 MiB
+limit, enforced before signature verification. Larger requests receive `413`
+without running mutation handlers; chunked bodies are bounded too.
+
+The HTTP server allows 5 seconds for headers (up to 32 KiB), uses
+`TENET_API_REQUEST_TIMEOUT` as the whole-request read deadline, adds 5 seconds
+for writing the response, and closes idle connections after 60 seconds.
+If the application request timeout is disabled with `0`, transport read/write
+limits still use 30/35 seconds. Configure any reverse proxy with compatible
+limits. These bounds do not replace edge-level connection or rate limits.

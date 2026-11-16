@@ -7,12 +7,18 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"path"
 	"strings"
 )
+
+// MaxBodyBytes bounds memory use before webhook signature verification.
+const MaxBodyBytes int64 = 25 << 20
+
+var ErrBodyTooLarge = errors.New("webhook body too large")
 
 const (
 	HeaderDeliveryID = "X-GitHub-Delivery"
@@ -141,9 +147,12 @@ func Decode(ctx context.Context, req Request) (Response, error) {
 		return Response{}, &ValidationError{Message: "webhook secret is required"}
 	}
 
-	body, err := io.ReadAll(req.Body)
+	body, err := io.ReadAll(io.LimitReader(req.Body, MaxBodyBytes+1))
 	if err != nil {
 		return Response{}, &ValidationError{Message: fmt.Sprintf("read webhook body: %v", err)}
+	}
+	if int64(len(body)) > MaxBodyBytes {
+		return Response{}, ErrBodyTooLarge
 	}
 	if len(strings.TrimSpace(string(body))) == 0 {
 		return Response{}, &ValidationError{Message: "webhook body is required"}
