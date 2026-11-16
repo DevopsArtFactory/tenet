@@ -86,27 +86,31 @@ func (s FileStore) Save(ctx context.Context, state State) (State, error) {
 			recent++
 		}
 	}
-	if len(kept) != len(states) {
-		if err := saveUnlocked(s.Path, kept); err != nil {
-			return State{}, err
-		}
-	}
+	pruned := len(kept) != len(states)
 	states = kept
+	var admissionErr error
 	if _, idx, err := findState(states, state.Token); err == nil {
 		states[idx] = state
 	} else if errors.Is(err, ErrNotFound) {
 		if len(states) >= maxStoredStates {
-			return State{}, ErrCapacity
+			admissionErr = ErrCapacity
+		} else if recent >= maxLoginsPerMinute {
+			admissionErr = ErrRateLimited
+		} else {
+			states = append(states, state)
 		}
-		if recent >= maxLoginsPerMinute {
-			return State{}, ErrRateLimited
-		}
-		states = append(states, state)
 	} else {
 		return State{}, err
 	}
+	// Persist cleanup even when a new login is rejected, but never write twice.
+	if admissionErr != nil && !pruned {
+		return State{}, admissionErr
+	}
 	if err := saveUnlocked(s.Path, states); err != nil {
 		return State{}, err
+	}
+	if admissionErr != nil {
+		return State{}, admissionErr
 	}
 	return state, nil
 }

@@ -122,3 +122,27 @@ func TestConcurrentFileStoresEnforceCapacity(t *testing.T) {
 		t.Fatalf("expired records remain: count=%d err=%v", len(got), err)
 	}
 }
+
+func TestFileStorePrunesExpiredRecordsWhenAdmissionIsDenied(t *testing.T) {
+	now := time.Now().UTC()
+	setAuthStateNow(t, now)
+	store := NewFileStore(filepath.Join(t.TempDir(), "states.json"))
+	states := make([]State, maxLoginsPerMinute)
+	for i := range states {
+		states[i] = State{Token: fmt.Sprint(i), Provider: "google", CreatedAt: now, ExpiresAt: now.Add(time.Minute)}
+	}
+	states = append(states, State{Token: "expired", Provider: "google", CreatedAt: now.Add(-time.Hour), ExpiresAt: now})
+	if err := Save(store.Path, states); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Save(t.Context(), State{Token: "rejected", Provider: "google", CreatedAt: now, ExpiresAt: now.Add(time.Minute)}); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("expected rate limit: %v", err)
+	}
+	stored, err := store.List(t.Context())
+	if err != nil || len(stored) != maxLoginsPerMinute {
+		t.Fatalf("cleanup failed: stored=%d err=%v", len(stored), err)
+	}
+	if _, err := store.Get(t.Context(), "rejected"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("rejected record persisted: %v", err)
+	}
+}
