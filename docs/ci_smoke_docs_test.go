@@ -466,7 +466,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 
 	for _, fragment := range []string{
 		"Usage: scripts/ci-smoke-runner-evidence.sh [--summary|--markdown] <run-id>",
-		"run summary with workflow name, event, branch, status/conclusion, head SHA, attempt, timestamps, and URL",
+		"run summary with workflow name, run ID, event, branch, status/conclusion, head SHA, attempt, timestamps, and URL",
 		"Actions jobs API output with job IDs, runner_id, runner_name, and steps[]",
 		"Exit status:",
 		"evidence was collected (missing failed logs are reported, not fatal)",
@@ -475,6 +475,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 		"gh CLI is not installed",
 		"databaseId,name,workflowName,event,status,conclusion,attempt,headBranch,headSha,url,createdAt,updatedAt",
 		"printf -- '- Status: `%s` / conclusion `%s`",
+		"printf -- '- Run ID: `%s`",
 		"printf -- '- Workflow: `%s`",
 		"printf -- '- Event: `%s`",
 		"printf -- '- Head branch: `%s`",
@@ -504,7 +505,7 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 
 	for _, fragment := range []string{
 		"scripts/ci-smoke-runner-evidence.sh --summary <run-id>",
-		"summary includes the workflow/run name, event, branch, status/conclusion, current attempt, created/updated timestamps, and Fast smoke / Docker smoke scope job IDs",
+		"summary includes the workflow/run name, explicit run ID, event, branch, status/conclusion, current attempt, created/updated timestamps, and Fast smoke / Docker smoke scope job IDs",
 		"operators can tell PR-head, `main`, and manual-dispatch reruns apart",
 		"helper exits `0` after collecting evidence even when failed logs are missing",
 		"usage errors, missing `gh`, and GitHub auth/API lookup failures remain non-zero",
