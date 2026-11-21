@@ -338,7 +338,7 @@ func emulatorGitRecovery(t *testing.T, net emulatorNetwork, account spec.Account
 			break
 		}
 		if parent.Status.IsTerminal() || time.Now().After(deadline) {
-			t.Fatalf("forward update not accepted: %s %v", parent.Status, parent.Details)
+			t.Fatalf("forward update not accepted: %s: %s (%v)", parent.Status, parent.Error, parent.Details)
 		}
 		time.Sleep(150 * time.Millisecond)
 	}
