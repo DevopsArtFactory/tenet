@@ -5219,6 +5219,7 @@
         }
       };
       const openApplicationLogs = (deploymentName, sources, initialSource) => {
+        if (document.querySelector('.log-drawer[open]')) return;
         const drawer = createElement('dialog', 'log-drawer');
         drawer.setAttribute('aria-labelledby', 'log-drawer-title');
         const header = createElement('header');
@@ -5227,6 +5228,7 @@
         title.id = 'log-drawer-title';
         heading.append(createElement('small', '', deploymentName), title);
         const close = createElement('button', '', 'Close');
+        close.type = 'button';
         close.onclick = () => drawer.close();
         header.append(heading, close);
         const controls = createElement('div', 'log-controls');
@@ -5252,6 +5254,7 @@
         const status = createElement('span');
         status.setAttribute('role', 'status');
         const refresh = createElement('button', '', 'Refresh logs');
+        refresh.type = 'button';
         footer.append(status, refresh);
         drawer.append(header, controls, output, footer);
         document.body.append(drawer);
@@ -5353,6 +5356,7 @@
         const logSources = allResourceGroups.flatMap((group) => group.resources).filter(resourceSupportsRecentLogs);
         const logsButton = (source) => {
           const button = createElement('button', 'log-trigger', 'Logs');
+          button.type = 'button';
           button.setAttribute('aria-label', source ? `View logs for ${source.name}` : 'View application resource logs');
           button.setAttribute('aria-haspopup', 'dialog');
           button.onclick = () => openApplicationLogs(deploymentName, logSources, source);
