@@ -1,6 +1,6 @@
 # Resource Recent Logs
 
-Tenet now exposes a read-only recent-log slice for resource-detail drill-down pages.
+On the application page, select **Logs** on a resource card to open its recent entries. The header **Logs** button opens the same viewer with a resource selector. The viewer requests up to 100 entries when opened. Filter the loaded entries by message, container, instance or stream, select **Refresh logs** to read again, and press **Esc** to return to the application. The resource detail page also provides source metadata and links to individual entries.
 
 Operator troubleshooting quick-reference: use `docs/runbooks/operator-troubleshooting.md`
 for the route/evidence/state/verification matrix when comparing Recent logs with

@@ -101,6 +101,8 @@ func emulatorGitRecovery(t *testing.T, net emulatorNetwork, account spec.Account
 	d.Image = "docker.io/library/nginx@sha256:" + strings.Repeat("a", 64)
 	td, err := client.RegisterTaskDefinition(ctx, &ecs.RegisterTaskDefinitionInput{
 		Family: &net.Name, NetworkMode: types.NetworkModeAwsvpc,
+		// The candidate uses a private ECR image and inherits this role.
+		ExecutionRoleArn:        aws.String("arn:aws:iam::000000000000:role/tenet-fixture-task-execution"),
 		RequiresCompatibilities: []types.Compatibility{types.CompatibilityFargate},
 		Cpu:                     aws.String("256"), Memory: aws.String("512"),
 		ContainerDefinitions: []types.ContainerDefinition{{
@@ -338,7 +340,7 @@ func emulatorGitRecovery(t *testing.T, net emulatorNetwork, account spec.Account
 			break
 		}
 		if parent.Status.IsTerminal() || time.Now().After(deadline) {
-			t.Fatalf("forward update not accepted: %s %v", parent.Status, parent.Details)
+			t.Fatalf("forward update not accepted: %s: %s (%v)", parent.Status, parent.Error, parent.Details)
 		}
 		time.Sleep(150 * time.Millisecond)
 	}

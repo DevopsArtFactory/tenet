@@ -381,6 +381,23 @@
       }
       #audit-timeline { border: 0; padding: 0; display: grid; gap: 14px; }
       .audit-context { display: grid; gap: 16px; }
+      .log-drawer { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(760px, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; padding: 0; border: 0; color: var(--text); background: var(--panel); box-shadow: -16px 0 60px #182b482b; }
+      .log-drawer[open] { display: flex; flex-direction: column; }
+      .log-drawer::backdrop { background: rgba(17,30,49,.4); }
+      .log-drawer header, .log-controls, .log-footer { padding: 14px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+      .log-drawer header, .log-footer { justify-content: space-between; }
+      .log-drawer header { border-bottom: 1px solid var(--line); }
+      .log-drawer h2 { margin: 0; font-size: 20px; }
+      .log-drawer header small { color: var(--muted); overflow-wrap: anywhere; }
+      .log-controls label { flex: 1 1 180px; min-width: 0; color: var(--muted); }
+      .log-controls input, .log-controls select { display: block; width: 100%; margin-top: 4px; min-height: 42px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--text); }
+      .log-trigger, .log-drawer button { min-height: 44px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--ink); font: inherit; cursor: pointer; }
+      .resource-map .log-trigger { margin-inline-start: auto; }
+      .application-workspaces { flex-wrap: wrap; }
+      .log-footer { font-size: 13px; color: var(--muted); }
+      .log-console { flex: 1; overflow: auto; padding: 12px 20px; background: #162237; color: #edf3ff; font: 13px/1.65 ui-monospace, monospace; }
+      .log-line { padding: 8px 0; border-bottom: 1px solid #344259; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .log-line small { display: block; color: #adc5ea; font: inherit; font-size: 12px; }
     </style>
   </head>
   <body>
@@ -5201,6 +5218,93 @@
           container.append(createElement('span', 'row-link-label', 'Evidence cues'), ...evidenceLinks);
         }
       };
+      const openApplicationLogs = (deploymentName, sources, initialSource) => {
+        if (document.querySelector('.log-drawer[open]')) return;
+        const drawer = createElement('dialog', 'log-drawer');
+        drawer.setAttribute('aria-labelledby', 'log-drawer-title');
+        const header = createElement('header');
+        const heading = createElement('div');
+        const title = createElement('h2', '', 'Resource logs');
+        title.id = 'log-drawer-title';
+        heading.append(createElement('small', '', deploymentName), title);
+        const close = createElement('button', '', 'Close');
+        close.type = 'button';
+        close.onclick = () => drawer.close();
+        header.append(heading, close);
+        const controls = createElement('div', 'log-controls');
+        const sourceLabel = createElement('label', '', 'Resource');
+        const select = createElement('select');
+        sources.forEach((source) => {
+          const option = createElement('option', '', `${resourcePresentation(source.type).label} · ${source.name}`);
+          select.append(option);
+        });
+        select.selectedIndex = Math.max(0, sources.indexOf(initialSource));
+        sourceLabel.append(select);
+        const searchLabel = createElement('label', '', 'Filter logs');
+        const search = createElement('input');
+        search.type = 'search';
+        search.placeholder = 'Message, container or stream';
+        searchLabel.append(search);
+        controls.append(sourceLabel, searchLabel);
+        const output = createElement('div', 'log-console');
+        output.tabIndex = 0;
+        output.setAttribute('role', 'region');
+        output.setAttribute('aria-label', 'Recent log output');
+        const footer = createElement('div', 'log-footer');
+        const status = createElement('span');
+        status.setAttribute('role', 'status');
+        const refresh = createElement('button', '', 'Refresh logs');
+        refresh.type = 'button';
+        footer.append(status, refresh);
+        drawer.append(header, controls, output, footer);
+        document.body.append(drawer);
+        drawer.addEventListener('close', () => drawer.remove(), { once: true });
+        drawer.showModal();
+
+        let entries = [];
+        let request = 0;
+        const renderLines = () => {
+          const query = search.value.trim().toLowerCase();
+          const visible = entries.filter((entry) => [entry.message, entry.containerName, entry.instanceId, entry.stream].some((value) => String(value || '').toLowerCase().includes(query)));
+          output.replaceChildren(...visible.map((entry) => {
+            const line = createElement('div', 'log-line');
+            line.append(createElement('small', '', [entry.timestamp, entry.containerName || entry.instanceId || entry.stream].filter(Boolean).join(' · ')), document.createTextNode(entry.message || ''));
+            return line;
+          }));
+          if (!visible.length) output.textContent = entries.length ? 'No matching entries. Try another filter.' : 'No recent log entries.';
+          status.textContent = `${visible.length} of ${entries.length} entries`;
+        };
+        const load = async () => {
+          const current = ++request;
+          const resource = sources[select.selectedIndex];
+          entries = [];
+          search.disabled = refresh.disabled = true;
+          output.textContent = '';
+          status.textContent = 'Loading recent logs…';
+          try {
+            const result = await fetchResourceLogs(deploymentName, resource, 100);
+            if (request !== current || !drawer.open) return;
+            if (!result.available) {
+              status.textContent = 'Logs unavailable';
+              output.textContent = resourceLogsUnavailableReasonText(result.unavailableReason) || 'No log source is available for this resource.';
+              return;
+            }
+            entries = result.entries || [];
+            search.disabled = !entries.length;
+            renderLines();
+          } catch (error) {
+            if (request !== current || !drawer.open) return;
+            status.textContent = 'Could not load logs';
+            output.textContent = operatorReadFailureHeading(error) || error.message;
+          } finally {
+            if (request === current) refresh.disabled = false;
+          }
+        };
+        select.onchange = load;
+        search.oninput = renderLines;
+        refresh.onclick = load;
+        load();
+      };
       const renderApplicationDetailPage = (detail, applicationState = null, focusState = null) => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
@@ -5249,7 +5353,17 @@
         const heading = createElement('div', 'compact-heading');
         const headingText = createElement('div');
         headingText.append(createElement('h2', 'account-name', deploymentName), createElement('div', 'account-meta', [detail.accountName, detail.environmentRef, detail.region].filter(Boolean).join(' · ')));
+        const logSources = allResourceGroups.flatMap((group) => group.resources).filter(resourceSupportsRecentLogs);
+        const logsButton = (source) => {
+          const button = createElement('button', 'log-trigger', 'Logs');
+          button.type = 'button';
+          button.setAttribute('aria-label', source ? `View logs for ${source.name}` : 'View application resource logs');
+          button.setAttribute('aria-haspopup', 'dialog');
+          button.onclick = () => openApplicationLogs(deploymentName, logSources, source);
+          return button;
+        };
         const workspaceActions = createElement('div', 'application-workspaces');
+        if (logSources.length) workspaceActions.append(logsButton());
         workspaceActions.append(createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self'), createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self'), createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self'));
         heading.append(headingText, workspaceActions);
         const originalSummary = createElement('div');
@@ -5344,6 +5458,7 @@
             nameLink.setAttribute('aria-label', `Open resource ${resource.name}`);
             titleWrap.append(createElement('div', 'resource-kind', presentation.label), nameLink);
             top.append(createResourceIcon(presentation), titleWrap);
+            if (resourceSupportsRecentLogs(resource)) top.append(logsButton(resource));
             const detailLinks = createElement('div', 'row-links row-links-shell');
             const relatedEventsCueSlot = createElement('div', 'application-resource-related-events-slot');
             relatedEventsCueSlot.dataset.relatedEventsCueSlot = 'true';
