@@ -4315,6 +4315,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const ecsServiceRow = resourceRows.find((node) => collectText(node).join(' | ').includes('payments-api-staging ECS Service'));
   const codeDeployApplicationRow = resourceRows.find((node) => collectText(node).join(' | ').includes('payments-api-staging CodeDeploy App'));
   if (!ecsServiceRow) throw new Error('expected ECS service resource row');
+  const applicationLogs = collectNodes(document.getElementById('summary'), (node) => node.getAttribute('aria-label') === 'View application resource logs')[0];
+  const serviceLogs = collectNodes(ecsServiceRow, (node) => node.getAttribute('aria-label') === 'View logs for payments-api-staging ECS Service')[0];
+  if (!applicationLogs || !serviceLogs || serviceLogs.getAttribute('aria-haspopup') !== 'dialog') throw new Error('expected log viewer actions on the application and its service');
+  if (fetchCalls.some((url) => url.includes('/resource-logs?'))) throw new Error('rendering resource cards must not fetch logs');
   if (!codeDeployApplicationRow) throw new Error('expected CodeDeploy application resource row');
   const ecsServiceLiveInspectionLink = collectNodes(ecsServiceRow, (node) => node.tagName === 'A' && node.textContent === 'Live evidence available')[0];
   const ecsServiceRecentLogsLink = collectNodes(ecsServiceRow, (node) => node.tagName === 'A' && node.textContent === 'Recent logs supported')[0];
